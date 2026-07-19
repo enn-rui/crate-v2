@@ -81,17 +81,17 @@ CmdlineArgs::CmdlineArgs()
           // documents directory rather than the default app data directory. Specifically
           // we use
           //
-          //     <sandbox home>/Documents/Library/Application Support/Mixxx
+          //     <sandbox home>/Documents/Library/Application Support/Crate
           //
           // instead of the default (and hidden)
           //
-          //     <sandbox home>/Library/Application Support/Mixxx
+          //     <sandbox home>/Library/Application Support/Crate
           //
           // This lets the user back up their mixxxdb, add custom controller mappings,
           // potentially diagnose issues by accessing logs etc. via the native iOS files app.
           m_settingsPath(
                   QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
-                          .append("/Library/Application Support/Mixxx"))
+                          .append("/Library/Application Support/Crate"))
 #else
 
           // TODO(XXX) Trailing slash not needed anymore as we switches from String::append

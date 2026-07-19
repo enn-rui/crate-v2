@@ -35,7 +35,7 @@ DlgAbout::DlgAbout()
     }
 
     QString s_devTeam =
-            tr("Mixxx %1.%2 Development Team")
+            tr("Crate %1.%2 Development Team")
                     .arg(QString::number(
                                  VersionStore::versionNumber().majorVersion()),
                             QString::number(VersionStore::versionNumber()

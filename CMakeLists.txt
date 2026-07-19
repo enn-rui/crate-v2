@@ -2072,7 +2072,7 @@ target_include_directories(
 )
 if(UNIX AND NOT APPLE)
   target_sources(mixxx-lib PRIVATE src/util/rlimit.cpp)
-  set(MIXXX_SETTINGS_PATH ".mixxx/")
+  set(MIXXX_SETTINGS_PATH ".crate/")
 endif()
 
 if(APPLE)
@@ -5422,16 +5422,16 @@ configure_file(
 )
 
 # Packaging
-set(CPACK_PACKAGE_NAME "Mixxx")
-set(CPACK_PACKAGE_VENDOR "Mixxx Project")
+set(CPACK_PACKAGE_NAME "Crate")
+set(CPACK_PACKAGE_VENDOR "Crate Project")
 set(CPACK_PACKAGE_CONTACT "RJ Skerry-Ryan <rryan@mixxx.org>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Digital DJ Application")
 set(
   CPACK_PACKAGE_DESCRIPTION_FILE
   "${CMAKE_CURRENT_SOURCE_DIR}/packaging/CPackPackageDescription.txt"
 )
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "Mixxx")
-set(CPACK_PACKAGE_EXECUTABLES "mixxx;Mixxx")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Crate")
+set(CPACK_PACKAGE_EXECUTABLES "mixxx;Crate")
 set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}/res/images/mixxx_install_logo.bmp")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://www.mixxx.org/")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")

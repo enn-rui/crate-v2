@@ -14,7 +14,9 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 
 ## Upstream files edited (keep current!)
 
-(none yet)
+- identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,
+  src/dialog/dlgaboutdlg.ui, src/mixxx.rc, src/util/cmdlineargs.cpp,
+  src/util/versionstore.cpp
 
 ## Repo-side (non-file) divergences
 
