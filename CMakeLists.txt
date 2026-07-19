@@ -2893,6 +2893,7 @@ if(BUILD_TESTING)
     src/test/coverartcache_test.cpp
     src/test/coverartutils_test.cpp
     src/test/cratestorage_test.cpp
+    src/test/crate_galaxy_ui_test.cpp
     src/test/crate_golden_test.cpp
     src/test/cue_test.cpp
     src/test/cuecontrol_test.cpp
