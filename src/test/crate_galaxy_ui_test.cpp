@@ -16,8 +16,10 @@
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QVector>
 
 #include <memory>
 
@@ -463,6 +465,102 @@ TEST_F(CrateGalaxyUiTest, WalkAndHalosNeverUseGhostedNodes) {
             EXPECT_FALSE(m_pGalaxy->testNodeHasHalo(i));
         }
     }
+}
+
+TEST(CrateGalaxyPickDeck, NextPrepDeckRuleCoversStateTable) {
+    using crate::WCrateGalaxy;
+    // Nothing playing -> deck 1.
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{false, false}, -1), 1);
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
+                      QVector<bool>{false, false, false, false}, -1),
+            1);
+    // Deck 1 playing -> deck 2 (opposite side).
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{true, false}, 0), 2);
+    // Deck 2 playing -> deck 1 (opposite side).
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{false, true}, 1), 1);
+    // Decks 1+2 playing, 3/4 stopped -> the opposite side of the last-started.
+    // Last-started deck 2 (right) -> opposite left -> deck 3.
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
+                      QVector<bool>{true, true, false, false}, 1),
+            3);
+    // Last-started deck 1 (left) -> opposite right -> deck 4.
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
+                      QVector<bool>{true, true, false, false}, 0),
+            4);
+    // All playing -> no-load sentinel (never steal).
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{true, true}, 0), 0);
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
+                      QVector<bool>{true, true, true, true}, 2),
+            0);
+    // Unknown last-started falls back to the lowest playing deck as reference.
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{true, false}, -1), 2);
+    // Opposite side full -> fall back to the lowest-numbered stopped deck.
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
+                      QVector<bool>{true, false, true, true}, 3),
+            2);
+    // Empty / no decks -> sentinel.
+    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{}, -1), 0);
+}
+
+TEST_F(CrateGalaxyUiTest, GhostedNodeOffersNoDeckLoadMenu) {
+    ControlObject deck1Play(ConfigKey("[Channel1]", "play"));
+    ControlObject deck2Play(ConfigKey("[Channel2]", "play"));
+    ControlObject deck3Play(ConfigKey("[Channel3]", "play"));
+    ControlObject deck4Play(ConfigKey("[Channel4]", "play"));
+    deck1Play.set(0.0);
+    deck2Play.set(0.0);
+    deck3Play.set(0.0);
+    deck4Play.set(0.0);
+
+    const int count = m_pGalaxy->testNodeCount();
+    ASSERT_GT(count, 4);
+    // Ghost node 0 by making the subset every OTHER node.
+    QSet<QString> subset;
+    for (int i = 1; i < count; ++i) {
+        subset.insert(m_pGalaxy->testNodeRelpath(i));
+    }
+    m_pGalaxy->testApplySubsetByRelpaths(subset);
+    ASSERT_TRUE(m_pGalaxy->testNodeGhosted(0));
+
+    // Ghosted node -> no deck-load entries at all.
+    EXPECT_TRUE(m_pGalaxy->testDeckLoadLabels(0).isEmpty());
+    // A live node -> one entry per existing deck.
+    ASSERT_FALSE(m_pGalaxy->testNodeGhosted(1));
+    EXPECT_EQ(m_pGalaxy->testDeckLoadLabels(1).size(), 4);
+
+    // A playing deck's entry is annotated (and disabled -> not loadable).
+    deck1Play.set(1.0);
+    const QStringList labels = m_pGalaxy->testDeckLoadLabels(1);
+    ASSERT_EQ(labels.size(), 4);
+    EXPECT_TRUE(labels.at(0).contains(QStringLiteral("playing")));
+    EXPECT_FALSE(labels.at(1).contains(QStringLiteral("playing")));
+}
+
+TEST_F(CrateGalaxyUiTest, MapLoadRequestsTableJumpToLoadedTrack) {
+    ControlObject deck1Play(ConfigKey("[Channel1]", "play"));
+    ControlObject deck2Play(ConfigKey("[Channel2]", "play"));
+    ControlPushButton deck1Load(ConfigKey("[Channel1]", "LoadSelectedTrack"));
+    ControlPushButton deck2Load(ConfigKey("[Channel2]", "LoadSelectedTrack"));
+    deck1Play.set(1.0); // deck 1 busy -> next-prep = deck 2
+    deck2Play.set(0.0);
+
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 0);
+    setKnobFocusMap();
+    pokeKnob(1.0); // seed a cursor (does not itself request a table jump)
+    const int cursor = m_pGalaxy->testCursorNode();
+    ASSERT_GE(cursor, 0);
+
+    const int before = m_pGalaxy->testTableJumpRequests();
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_load"), 1.0);
+    QApplication::processEvents();
+
+    // The load asked the table to jump to exactly the loaded track...
+    EXPECT_EQ(m_pGalaxy->testTableJumpRequests(), before + 1);
+    EXPECT_EQ(m_pGalaxy->testLastTableJumpRelpath(),
+            m_pGalaxy->testNodeRelpath(cursor));
+    // ...and targeted the stopped deck, sparing the playing one (never-steal).
+    EXPECT_EQ(ControlObject::get(ConfigKey("[Channel2]", "LoadSelectedTrack")), 1.0);
+    EXPECT_EQ(ControlObject::get(ConfigKey("[Channel1]", "LoadSelectedTrack")), 0.0);
 }
 
 } // namespace

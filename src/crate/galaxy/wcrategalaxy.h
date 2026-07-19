@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QPointF>
 #include <QSet>
+#include <QStringList>
 #include <QVector>
 
 #include <memory>
@@ -19,6 +20,7 @@ class ControlObject;
 class ControlProxy;
 class ControlPushButton;
 class QContextMenuEvent;
+class QMenu;
 class QGraphicsScene;
 class QPainter;
 class QGraphicsEllipseItem;
@@ -40,6 +42,16 @@ class WCrateGalaxy : public QGraphicsView {
             UserSettingsPointer pConfig,
             Library* pLibrary = nullptr);
     ~WCrateGalaxy() override;
+
+    // Pure, engine-free rule for the "natural next-prep deck" (spec wave-5 S3).
+    // `playing[i]` is the play state of 0-based deck i; `lastStartedIndex` is the
+    // 0-based index of the most-recently-started playing deck (-1 if unknown /
+    // none). Returns a 1-based deck number to prep, or 0 = do nothing (never
+    // steal a playing deck). Rule: nothing playing -> deck 1; all playing -> 0;
+    // otherwise the lowest-numbered stopped deck on the side (1/3 vs 2/4)
+    // opposite the reference playing deck, falling back to the lowest-numbered
+    // stopped deck anywhere.
+    static int pickNextPrepDeck(const QVector<bool>& playing, int lastStartedIndex);
 
     // Test-only introspection. Cheap const accessors, no behavior; let the
     // widget test recompute the walk metric independently and assert against it.
@@ -63,6 +75,16 @@ class WCrateGalaxy : public QGraphicsView {
     bool test3dMode() const { return m_3dMode; }
     bool testHalosEnabled() const { return m_halosEnabled; }
     bool testKnobFocusMap() const { return m_knobFocusMap; }
+    // Deck-load context-menu labels for a node (empty if the node is not
+    // selectable / ghosted). Playing decks are annotated "(playing)".
+    QStringList testDeckLoadLabels(int nodeIndex) const;
+    int testNextPrepDeck() const { return nextPrepDeck(); }
+    // Table-jump observation seam (see requestTableJumpToCursor): every
+    // map-initiated load bumps this counter and records the track's relpath,
+    // so a widget test can assert the load asked the table to jump even without
+    // a live Library fixture.
+    int testTableJumpRequests() const { return m_tableJumpRequests; }
+    QString testLastTableJumpRelpath() const { return m_lastTableJumpRelpath; }
 
   protected:
     bool eventFilter(QObject* pObj, QEvent* pEvent) override;
@@ -140,9 +162,20 @@ class WCrateGalaxy : public QGraphicsView {
     void resetWalk();
     void updateCursorVisual();
     void syncSelectionToCursor();
-    void loadCursorToFirstStoppedDeck();
+    void requestTableJumpToCursor();
+    void loadCursorToNextPrepDeck();
     void loadCursorIntoDeck(int deckIndex);
-    QString firstStoppedDeckGroup() const;
+    QVector<bool> deckPlayingStates() const;
+    int nextPrepDeck() const;
+    // Deck-load context-menu integration (spec wave-5 S3, item 1).
+    struct DeckLoadEntry {
+        int deck = 0;      // 1-based deck number
+        QString label;     // menu label, annotated when the deck is playing
+        bool enabled = false; // false = deck playing, load disabled
+    };
+    QVector<DeckLoadEntry> deckLoadEntries(int nodeIndex) const;
+    void addDeckLoadActions(QMenu* pMenu, int nodeIndex);
+    int nodeAtViewportPos(const QPoint& viewportPos) const;
 
     PlayerManager* m_pPlayerManager;
     Library* m_pLibrary;
@@ -178,6 +211,10 @@ class WCrateGalaxy : public QGraphicsView {
     QSet<int> m_subsetNodes;
     bool m_subsetActive = false;
     QPointer<QAbstractItemModel> m_pSubsetModel;
+
+    // Table-jump-on-load observation (test seam; see requestTableJumpToCursor).
+    int m_tableJumpRequests = 0;
+    QString m_lastTableJumpRelpath;
 
     // MAP-walk state.
     bool m_knobFocusMap = false;

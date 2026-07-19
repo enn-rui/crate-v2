@@ -259,9 +259,10 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_pHaloProxy->set(m_halosEnabled ? 1.0 : 0.0);
     m_pKnobFocusProxy->set(m_knobFocusMap ? 1.0 : 0.0);
 
-    // galaxy_load: a push control that loads the CURSOR track into the first
-    // stopped deck (never yanks a playing one). Mirrors the double-click load
-    // path but is reachable from a controller / other UI.
+    // galaxy_load: a push control that loads the CURSOR track into the natural
+    // next-prep deck (never yanks a playing one; same never-steal rule as the
+    // double-click load). Mirrors the double-click path but is reachable from a
+    // controller / other UI.
     m_pGalaxyLoadCO = std::make_unique<ControlPushButton>(
             ConfigKey("[Crate]", "galaxy_load"));
     connect(m_pGalaxyLoadCO.get(),
@@ -269,7 +270,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
             this,
             [this](double v) {
                 if (v != 0.0) {
-                    loadCursorToFirstStoppedDeck();
+                    loadCursorToNextPrepDeck();
                 }
             });
 
@@ -821,6 +822,14 @@ void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
 
 void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     QMenu menu(this);
+    // Deck-choice load (spec wave-5 S3): if the right-click landed on a
+    // selectable dot, offer "Load to Deck N" for each deck at the top. Ghosted /
+    // non-selectable nodes get no deck-load entries.
+    const int node = nodeAtViewportPos(pEvent->pos());
+    if (node >= 0) {
+        addDeckLoadActions(&menu, node);
+        menu.addSeparator();
+    }
     QActionGroup group(&menu);
     group.setExclusive(true);
     const auto addMode = [&](const QString& label, ColorMode mode) {
@@ -1461,24 +1470,134 @@ void WCrateGalaxy::syncSelectionToCursor() {
     emit m_pLibrary->selectTrack(ids.first());
 }
 
-QString WCrateGalaxy::firstStoppedDeckGroup() const {
+QVector<bool> WCrateGalaxy::deckPlayingStates() const {
     // Scan decks by their [ChannelN],play control. Deck count is discovered from
     // which play controls exist (works with or without a PlayerManager, so the
-    // load is unit-testable). First deck that is not playing wins.
+    // rule stays unit-testable). Index i (0-based) -> deck i+1.
+    QVector<bool> states;
     const int maxDecks = m_pPlayerManager != nullptr
             ? static_cast<int>(m_pPlayerManager->numberOfDecks())
             : 8;
     for (int i = 0; i < maxDecks; ++i) {
-        const QString group = PlayerManager::groupForDeck(i);
-        const ConfigKey playKey(group, "play");
+        const ConfigKey playKey(PlayerManager::groupForDeck(i), "play");
         if (!ControlObject::exists(playKey)) {
             break;
         }
-        if (ControlObject::get(playKey) == 0.0) {
-            return group;
+        states.append(ControlObject::get(playKey) != 0.0);
+    }
+    return states;
+}
+
+int WCrateGalaxy::pickNextPrepDeck(const QVector<bool>& playing, int lastStartedIndex) {
+    const int n = playing.size();
+    if (n == 0) {
+        return 0;
+    }
+    bool anyPlaying = false;
+    bool anyStopped = false;
+    for (bool p : playing) {
+        anyPlaying = anyPlaying || p;
+        anyStopped = anyStopped || !p;
+    }
+    if (!anyPlaying) {
+        return 1; // fresh session: prep deck 1
+    }
+    if (!anyStopped) {
+        return 0; // every deck busy: never steal
+    }
+    // Reference playing deck = the most-recently-started one when known and still
+    // playing; otherwise the lowest-numbered playing deck.
+    int refIndex = lastStartedIndex;
+    if (refIndex < 0 || refIndex >= n || !playing[refIndex]) {
+        refIndex = -1;
+        for (int i = 0; i < n; ++i) {
+            if (playing[i]) {
+                refIndex = i;
+                break;
+            }
         }
     }
-    return QString();
+    // Sides mirror the physical layout: decks 1/3 (even 0-based index) vs 2/4
+    // (odd 0-based index). Prep the opposite side of the reference deck.
+    const int oppositeSide = 1 - (refIndex % 2);
+    for (int i = 0; i < n; ++i) {
+        if (!playing[i] && (i % 2) == oppositeSide) {
+            return i + 1;
+        }
+    }
+    // Opposite side is full; fall back to the lowest-numbered stopped deck.
+    for (int i = 0; i < n; ++i) {
+        if (!playing[i]) {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+int WCrateGalaxy::nextPrepDeck() const {
+    // Live "most-recently-started" is approximated by PlayerInfo's current
+    // (loudest audible) playing deck; for the standard two-deck battle these
+    // coincide. Verified live (S5): full 4-deck last-started ordering.
+    return pickNextPrepDeck(
+            deckPlayingStates(), PlayerInfo::instance().getCurrentPlayingDeck());
+}
+
+int WCrateGalaxy::nodeAtViewportPos(const QPoint& viewportPos) const {
+    if (m_3dMode) {
+        return projectedNodeAt(viewportPos);
+    }
+    QGraphicsItem* pItem = itemAt(viewportPos);
+    if (pItem != nullptr && pItem->data(0).isValid()) {
+        const int index = pItem->data(0).toInt();
+        return nodeSelectable(index) ? index : -1;
+    }
+    return -1;
+}
+
+QVector<WCrateGalaxy::DeckLoadEntry> WCrateGalaxy::deckLoadEntries(int nodeIndex) const {
+    QVector<DeckLoadEntry> entries;
+    if (!nodeSelectable(nodeIndex)) {
+        return entries; // ghosted / off-map: no deck-load entries
+    }
+    const QVector<bool> playing = deckPlayingStates();
+    entries.reserve(playing.size());
+    for (int i = 0; i < playing.size(); ++i) {
+        DeckLoadEntry entry;
+        entry.deck = i + 1;
+        entry.enabled = !playing[i];
+        entry.label = playing[i]
+                ? tr("Load to Deck %1 (playing)").arg(entry.deck)
+                : tr("Load to Deck %1").arg(entry.deck);
+        entries.append(entry);
+    }
+    return entries;
+}
+
+void WCrateGalaxy::addDeckLoadActions(QMenu* pMenu, int nodeIndex) {
+    const QVector<DeckLoadEntry> entries = deckLoadEntries(nodeIndex);
+    for (const DeckLoadEntry& entry : entries) {
+        QAction* pAction = pMenu->addAction(entry.label);
+        pAction->setEnabled(entry.enabled);
+        if (!entry.enabled) {
+            continue; // playing deck: annotated, not loadable from this menu
+        }
+        const int deck = entry.deck;
+        connect(pAction, &QAction::triggered, this, [this, nodeIndex, deck] {
+            // Re-seed the walk cursor on this node, then load into the chosen
+            // deck; the table-jump seam keeps the library selection in sync.
+            setCursorNode(nodeIndex, /*resetWalk=*/true);
+            requestTableJumpToCursor();
+            loadCursorIntoDeck(deck);
+        });
+    }
+}
+
+QStringList WCrateGalaxy::testDeckLoadLabels(int nodeIndex) const {
+    QStringList labels;
+    for (const DeckLoadEntry& entry : deckLoadEntries(nodeIndex)) {
+        labels.append(entry.label);
+    }
+    return labels;
 }
 
 void WCrateGalaxy::loadCursorIntoDeck(int deckNumber) {
@@ -1497,34 +1616,41 @@ void WCrateGalaxy::loadCursorIntoDeck(int deckNumber) {
     m_pPlayerManager->slotLoadToDeck(path, deckNumber);
 }
 
-void WCrateGalaxy::loadCursorToFirstStoppedDeck() {
+void WCrateGalaxy::requestTableJumpToCursor() {
+    // Single entry point for "map load -> table jumps to the loaded track" (spec
+    // wave-5 S3, item 3). Records the request (observable in widget tests without
+    // a live Library) and drives the real selection seam. The seam
+    // (Library::selectTrack -> WLibrary::slotSelectTrackInActiveTrackView ->
+    // WTrackTableView::selectTrack) scrolls to + selects the track only when it
+    // exists in the CURRENT table view, and never switches the sidebar.
     if (m_cursorNode < 0 || m_cursorNode >= m_nodes.size()) {
         return;
     }
-    // Keep the library selection on the cursor (preferred integration): even the
-    // direct load below benefits, and it keeps every other controller in sync.
+    ++m_tableJumpRequests;
+    m_lastTableJumpRelpath = m_nodes[m_cursorNode].relpath;
     syncSelectionToCursor();
-    const QString group = firstStoppedDeckGroup();
-    if (group.isEmpty()) {
+}
+
+void WCrateGalaxy::loadCursorToNextPrepDeck() {
+    if (m_cursorNode < 0 || m_cursorNode >= m_nodes.size()) {
+        return;
+    }
+    const int deck = nextPrepDeck();
+    if (deck < 1) {
         kLogger.info() << "all decks playing / none present; not loading cursor";
         return;
     }
+    // Table-jump on load: keep the library selection on the cursor track.
+    requestTableJumpToCursor();
     if (m_pPlayerManager != nullptr) {
         // Direct path load: robust for galaxy nodes not imported into the Mixxx
         // library (mirrors the double-click load path).
-        int deckNumber = 0;
-        for (int i = 0; i < 8; ++i) {
-            if (PlayerManager::groupForDeck(i) == group) {
-                deckNumber = i + 1;
-                break;
-            }
-        }
-        loadCursorIntoDeck(deckNumber);
+        loadCursorIntoDeck(deck);
         return;
     }
     // No PlayerManager (controller-only / widget tests): trigger the stock
     // LoadSelectedTrack on the chosen deck, relying on the selection-sync above.
-    const ConfigKey loadKey(group, "LoadSelectedTrack");
+    const ConfigKey loadKey(PlayerManager::groupForDeck(deck - 1), "LoadSelectedTrack");
     if (ControlObject::exists(loadKey)) {
         ControlObject::set(loadKey, 1.0);
     }
@@ -1605,23 +1731,17 @@ void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
     // Re-seed the MAP-walk cursor here: a click on a node resets the walk with
     // this node as the new origin (spec: cursor re-seeded by a mouse click).
     setCursorNode(idx.toInt(), /*resetWalk=*/true);
-    const GalaxyNode& node = m_nodes[idx.toInt()];
-    const QString path = resolveMusicPath(node.relpath);
-    if (path.isEmpty()) {
-        kLogger.warning() << "no music_root; cannot load" << node.relpath;
+    // Smarter target (spec wave-5 S3, item 2): the natural next-prep deck, never
+    // stealing a playing one. Plain double-click no longer forces first-stopped.
+    const int deck = nextPrepDeck();
+    if (deck < 1) {
+        kLogger.info() << "all decks playing; not loading"
+                       << m_nodes[idx.toInt()].relpath;
         return;
     }
-    // Load into the first stopped deck; never yank a playing one.
-    const int deckCount = static_cast<int>(m_pPlayerManager->numberOfDecks());
-    for (int i = 1; i <= deckCount; ++i) {
-        const QString group = PlayerManager::groupForDeck(i - 1);
-        if (ControlObject::get(ConfigKey(group, "play")) == 0.0) {
-            kLogger.info() << "loading" << path << "into deck" << i;
-            m_pPlayerManager->slotLoadToDeck(path, i);
-            return;
-        }
-    }
-    kLogger.info() << "all decks playing; not loading" << path;
+    // Table-jump on load, then load into the chosen deck.
+    requestTableJumpToCursor();
+    loadCursorIntoDeck(deck);
 }
 
 void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
