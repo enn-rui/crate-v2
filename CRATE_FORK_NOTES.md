@@ -20,6 +20,11 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 - Crate splash/packaged logo: res/images/mixxx_logo.svg (flat #05060a field with
   monochrome CRATE wordmark; intentionally replaces upstream Mixxx branding)
 
+## Known issues
+- Skin manifest <attribute> DEFAULTS not applied on a virgin profile (sections default
+  visible until their [Skin] config keys exist; explicit config honored correctly).
+  Affects first-run UX only; investigate in a later slice (LegacySkinParser attribute path).
+
 ## Repo-side (non-file) divergences
 
 - 2026-07-18: GitHub Actions upstream workflows disabled via repo settings/API (no file edits);
