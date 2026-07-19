@@ -1,0 +1,135 @@
+# Cross-platform portability signal for the Crate fork (wave 6, user-approved "try it").
+# Ubuntu builds+tests on every push to main (1x-billed minutes, concurrency-cancelled).
+# macOS is behind a manual dispatch flag - macOS runners bill at 10x on private repos.
+# Trimmed from upstream build.yml (workflow_call-only there, with signing/publish we don't want).
+# WARNINGS_FATAL=OFF deliberately: the crate/ code has only ever met MSVC; first goal is
+# real errors, not a wall of gcc/clang warning fatalities. Tighten later.
+name: crate-crossplatform
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: "Also build macOS x64 (10x billed minutes)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: crossplatform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Ubuntu 24.04 build+test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up build environment
+        run: tools/debian_buildenv.sh setup
+        env:
+          BUILDENV_BASEPATH: /home/runner/buildenv
+      - name: Set up ccache cache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/ccache
+          key: ccache-linux-${{ github.sha }}
+          restore-keys: ccache-linux-
+      - name: Create build directory
+        run: mkdir build
+      - name: Configure
+        run: >-
+          cmake ..
+          -DQT6=ON
+          -DQML=ON
+          -DBULK=ON
+          -DFFMPEG=ON
+          -DLOCALECOMPARE=ON
+          -DMAD=ON
+          -DMODPLUG=ON
+          -DWAVPACK=ON
+          -DINSTALL_USER_UDEV_RULES=OFF
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+          -DWARNINGS_FATAL=OFF
+          -DDEBUG_ASSERTIONS_FATAL=OFF
+          -DBATTERY=ON
+          -DBROADCAST=ON
+          -DHID=ON
+          -DKEYFINDER=ON
+          -DLILV=ON
+        working-directory: build
+      - name: Build
+        run: cmake --build . --config RelWithDebInfo -j 4
+        working-directory: build
+        env:
+          CCACHE_NOCOMPRESS: true
+      - name: Test
+        run: ctest --timeout 45
+        working-directory: build
+        env:
+          GTEST_COLOR: 1
+          CTEST_PARALLEL_LEVEL: 1
+          CTEST_OUTPUT_ON_FAILURE: 1
+
+  macos:
+    name: macOS 15 x64 build+test (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.macos
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install ccache and make
+        run: brew install ccache makedepend
+      - name: Set up build environment
+        run: tools/macos_release_buildenv.sh setup
+        env:
+          BUILDENV_BASEPATH: /Users/runner/buildenv
+      - name: Set up ccache cache
+        uses: actions/cache@v4
+        with:
+          path: /Users/runner/Library/Caches/ccache
+          key: ccache-macos-${{ github.sha }}
+          restore-keys: ccache-macos-
+      - name: Create build directory
+        run: mkdir build
+      - name: Configure
+        run: >-
+          cmake ..
+          -DBULK=ON
+          -DCOREAUDIO=ON
+          -DHSS1394=ON
+          -DMACOS_BUNDLE=ON
+          -DMODPLUG=ON
+          -DQT6=ON
+          -DQML=OFF
+          -DWAVPACK=ON
+          -DVCPKG_TARGET_TRIPLET=x64-osx-min1100-release
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+          -DWARNINGS_FATAL=OFF
+          -DDEBUG_ASSERTIONS_FATAL=OFF
+          -DBATTERY=ON
+          -DBROADCAST=ON
+          -DHID=ON
+          -DKEYFINDER=ON
+          -DLILV=ON
+        working-directory: build
+      - name: Build
+        run: cmake --build . --config RelWithDebInfo -j 4
+        working-directory: build
+        env:
+          CCACHE_NOCOMPRESS: true
+      - name: Test
+        run: ctest --timeout 45 --exclude-regex DirectoryDAOTest.relocateDirectory
+        working-directory: build
+        env:
+          GTEST_COLOR: 1
+          CTEST_PARALLEL_LEVEL: 1
+          CTEST_OUTPUT_ON_FAILURE: 1
