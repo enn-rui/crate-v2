@@ -13,6 +13,9 @@ struct GalaxyNode {
     QString relpath;
     QString title;
     QString artist;
+    double artistX = 0.0;
+    double artistY = 0.0;
+    bool hasArtistPosition = false;
     double x = 0.0;
     double y = 0.0;
     double x3d = 0.0;

@@ -13,6 +13,8 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QVariantAnimation>
+#include <QRandomGenerator>
 #include <QtMath>
 #include <QWheelEvent>
 
@@ -121,7 +123,8 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
         : QGraphicsView(pParent),
           m_pPlayerManager(pPlayerManager),
           m_pConfig(pConfig),
-          m_pScene(new QGraphicsScene(this)) {
+          m_pScene(new QGraphicsScene(this)),
+          m_pLayoutAnimation(new QVariantAnimation(this)) {
     setScene(m_pScene);
     setBackgroundBrush(QColor(0x05, 0x06, 0x0a));
     setFrameShape(QFrame::NoFrame);
@@ -158,6 +161,17 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
         m_colorMode = ColorMode::Tempo;
     } else if (savedMode == QStringLiteral("energy")) {
         m_colorMode = ColorMode::Energy;
+    }
+    const QString savedLayout = m_pConfig->getValue(
+            ConfigKey("[Crate]", "galaxy_layout"), QStringLiteral("scatter"))
+                                        .trimmed()
+                                        .toLower();
+    if (savedLayout == QStringLiteral("key")) {
+        m_layoutMode = LayoutMode::KeyWheel;
+    } else if (savedLayout == QStringLiteral("bpm")) {
+        m_layoutMode = LayoutMode::BpmSerpentine;
+    } else if (savedLayout == QStringLiteral("artist")) {
+        m_layoutMode = LayoutMode::Artist;
     }
     populate();
 }
@@ -222,6 +236,7 @@ void WCrateGalaxy::populate() {
         auto* pDot = new QGraphicsEllipseItem(
                 -kDotRadius, -kDotRadius, kDotRadius * 2, kDotRadius * 2);
         pDot->setPos(sx, sy);
+        m_scatterPositions.append(QPointF(sx, sy));
         pDot->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
         pDot->setPen(Qt::NoPen);
         pDot->setBrush(nodeColor(node));
@@ -232,6 +247,8 @@ void WCrateGalaxy::populate() {
     m_pScene->setSceneRect(0.0, 0.0, kSceneSpan, kSceneSpan);
     if (m_3dMode) {
         update3dProjection();
+    } else if (m_layoutMode != LayoutMode::Scatter) {
+        setLayoutMode(m_layoutMode, false);
     }
     kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
 }
@@ -298,6 +315,150 @@ void WCrateGalaxy::setColorMode(ColorMode mode) {
     updateColors();
 }
 
+void WCrateGalaxy::applyPositions(const QVector<QPointF>& positions) {
+    for (int i = 0; i < qMin(positions.size(), m_dots.size()); ++i) {
+        m_dots[i]->setPos(positions[i]);
+    }
+    updatePills();
+    viewport()->update();
+}
+
+QVector<QPointF> WCrateGalaxy::separate(
+        const QVector<QPointF>& positions, double shrink) const {
+    QVector<QPointF> result = positions;
+    constexpr double minimum = 12.0;
+    constexpr double minimumSquared = minimum * minimum;
+    QRandomGenerator rng(7);
+    for (int iteration = 0; iteration < 50; ++iteration) {
+        QHash<QPair<int, int>, QVector<int>> grid;
+        for (int i = 0; i < result.size(); ++i) {
+            grid[qMakePair(qFloor(result[i].x() / minimum),
+                    qFloor(result[i].y() / minimum))]
+                    .append(i);
+        }
+        QVector<QPointF> displacement(result.size());
+        bool pushed = false;
+        for (auto it = grid.constBegin(); it != grid.constEnd(); ++it) {
+            for (int i : it.value()) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        const QVector<int> neighbours = grid.value(
+                                qMakePair(it.key().first + dx, it.key().second + dy));
+                        for (int j : neighbours) {
+                            if (j <= i) continue;
+                            QPointF delta = result[i] - result[j];
+                            double distanceSquared = QPointF::dotProduct(delta, delta);
+                            if (distanceSquared >= minimumSquared) continue;
+                            double distance = std::sqrt(distanceSquared);
+                            if (distanceSquared < 1e-9) {
+                                const double angle = rng.generateDouble() * 2.0 * M_PI;
+                                delta = QPointF(std::cos(angle), std::sin(angle));
+                                distance = 0.0;
+                            } else {
+                                delta /= distance;
+                            }
+                            const QPointF push = delta * ((minimum - distance) * 0.7);
+                            displacement[i] += push;
+                            displacement[j] -= push;
+                            pushed = true;
+                        }
+                    }
+                }
+            }
+        }
+        for (int i = 0; i < result.size(); ++i) result[i] += displacement[i];
+        if (!pushed) break;
+    }
+    if (shrink != 1.0 && !result.isEmpty()) {
+        QPointF center;
+        for (const QPointF& point : std::as_const(result)) center += point;
+        center /= result.size();
+        for (QPointF& point : result) point = center + (point - center) * shrink;
+    }
+    return result;
+}
+
+QVector<QPointF> WCrateGalaxy::layoutTarget(LayoutMode mode) const {
+    if (mode == LayoutMode::Scatter) return m_scatterPositions;
+    QVector<QPointF> target = m_scatterPositions;
+    QRandomGenerator rng(42);
+    const auto normal = [&rng] {
+        const double u1 = qMax(rng.generateDouble(), 1e-12);
+        return std::sqrt(-2.0 * std::log(u1)) *
+                std::cos(2.0 * M_PI * rng.generateDouble());
+    };
+    if (mode == LayoutMode::KeyWheel) {
+        static const QRegularExpression camelot(QStringLiteral("^\\s*(1[0-2]|[1-9])([AB])\\s*$"),
+                QRegularExpression::CaseInsensitiveOption);
+        for (int i = 0; i < m_nodes.size(); ++i) {
+            const auto match = camelot.match(m_nodes[i].keyCamelot);
+            if (!match.hasMatch()) {
+                target[i] = QPointF(0.5 * kSceneSpan, 0.03 * kSceneSpan);
+                continue;
+            }
+            const int number = match.captured(1).toInt();
+            const bool inner = match.captured(2).compare(QStringLiteral("A"), Qt::CaseInsensitive) == 0;
+            const double angle = (number - 1) / 12.0 * 2.0 * M_PI - M_PI / 2.0;
+            const double radius = (inner ? 0.27 : 0.46) * kSceneSpan;
+            target[i] = QPointF(0.5 * kSceneSpan + radius * std::cos(angle) + normal() * 0.008 * kSceneSpan,
+                    0.5 * kSceneSpan + radius * std::sin(angle) + normal() * 0.008 * kSceneSpan);
+        }
+        return separate(target, 0.95);
+    }
+    if (mode == LayoutMode::BpmSerpentine) {
+        QVector<int> order;
+        for (int i = 0; i < m_nodes.size(); ++i) if (m_nodes[i].bpm > 0.0) order.append(i);
+        std::sort(order.begin(), order.end(), [this](int a, int b) { return m_nodes[a].bpm < m_nodes[b].bpm; });
+        for (int rank = 0; rank < order.size(); ++rank) {
+            const double f = rank / qMax(1.0, static_cast<double>(order.size() - 1));
+            const double y = 0.50 * kSceneSpan + 0.24 * kSceneSpan * std::sin(f * 2.0 * M_PI * 1.25) +
+                    0.07 * kSceneSpan * std::sin(f * 2.0 * M_PI * 2.6 + 1.3);
+            target[order[rank]] = QPointF((0.08 + 0.84 * f) * kSceneSpan, y);
+        }
+        for (int i = 0; i < m_nodes.size(); ++i) if (!(m_nodes[i].bpm > 0.0)) target[i] = QPointF(0.5 * kSceneSpan, 0.97 * kSceneSpan);
+        return separate(target, 0.97);
+    }
+    int hits = 0;
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        if (m_nodes[i].hasArtistPosition) {
+            target[i] = QPointF((m_nodes[i].artistX + normal() * 0.018) * kSceneSpan,
+                    (m_nodes[i].artistY + normal() * 0.018) * kSceneSpan);
+            ++hits;
+        } else {
+            target[i] = QPointF((0.04 + normal() * 0.02) * kSceneSpan,
+                    (0.96 + normal() * 0.02) * kSceneSpan);
+        }
+    }
+    return hits >= qMax(3, m_nodes.size() / 4) ? separate(target, 0.95) : m_scatterPositions;
+}
+
+void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
+    if (m_3dMode) return;
+    m_layoutMode = mode;
+    QString value = QStringLiteral("scatter");
+    if (mode == LayoutMode::KeyWheel) value = QStringLiteral("key");
+    else if (mode == LayoutMode::BpmSerpentine) value = QStringLiteral("bpm");
+    else if (mode == LayoutMode::Artist) value = QStringLiteral("artist");
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_layout"), value);
+    const QVector<QPointF> start = [&] { QVector<QPointF> p; for (auto* dot : m_dots) p.append(dot->pos()); return p; }();
+    const QVector<QPointF> target = layoutTarget(mode);
+    m_pLayoutAnimation->stop();
+    disconnect(m_pLayoutAnimation, nullptr, this, nullptr);
+    if (!animate) { applyPositions(target); return; }
+    m_pLayoutAnimation->setDuration(600);
+    m_pLayoutAnimation->setStartValue(0.0);
+    m_pLayoutAnimation->setEndValue(1.0);
+    m_pLayoutAnimation->setEasingCurve(QEasingCurve::InOutCubic);
+    connect(m_pLayoutAnimation, &QVariantAnimation::valueChanged, this,
+            [this, start, target](const QVariant& value) {
+                const double f = value.toDouble();
+                QVector<QPointF> positions; positions.reserve(target.size());
+                for (int i = 0; i < target.size(); ++i) positions.append(start[i] + (target[i] - start[i]) * f);
+                applyPositions(positions);
+            });
+    m_pLayoutAnimation->start();
+}
+
 void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     QMenu menu(this);
     QActionGroup group(&menu);
@@ -315,6 +476,22 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     addMode(tr("Color by Key"), ColorMode::Key);
     addMode(tr("Color by Tempo"), ColorMode::Tempo);
     addMode(tr("Color by Energy"), ColorMode::Energy);
+    menu.addSeparator();
+    QMenu* pLayout = menu.addMenu(tr("Layout"));
+    pLayout->setEnabled(!m_3dMode);
+    QActionGroup* pLayoutGroup = new QActionGroup(pLayout);
+    pLayoutGroup->setExclusive(true);
+    const auto addLayout = [&](const QString& label, LayoutMode mode) {
+        QAction* action = pLayout->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(m_layoutMode == mode);
+        pLayoutGroup->addAction(action);
+        connect(action, &QAction::triggered, this, [this, mode] { setLayoutMode(mode); });
+    };
+    addLayout(tr("Scatter"), LayoutMode::Scatter);
+    addLayout(tr("Key wheel"), LayoutMode::KeyWheel);
+    addLayout(tr("BPM serpentine"), LayoutMode::BpmSerpentine);
+    addLayout(tr("Artist"), LayoutMode::Artist);
     menu.addSeparator();
     QAction* p3d = menu.addAction(tr("3D view"));
     p3d->setCheckable(true);
@@ -422,25 +599,14 @@ void WCrateGalaxy::set3dMode(bool enabled) {
     if (enabled) {
         update3dProjection();
     } else if (!m_nodes.isEmpty()) {
-        double minX = m_nodes[0].x, maxX = m_nodes[0].x;
-        double minY = m_nodes[0].y, maxY = m_nodes[0].y;
-        for (const GalaxyNode& node : std::as_const(m_nodes)) {
-            minX = qMin(minX, node.x);
-            maxX = qMax(maxX, node.x);
-            minY = qMin(minY, node.y);
-            maxY = qMax(maxY, node.y);
-        }
-        const double spanX = qMax(maxX - minX, 1e-9);
-        const double spanY = qMax(maxY - minY, 1e-9);
         for (int i = 0; i < m_dots.size(); ++i) {
             QGraphicsEllipseItem* pDot = m_dots[i];
             pDot->setVisible(true);
             pDot->setRect(-kDotRadius, -kDotRadius, 2 * kDotRadius, 2 * kDotRadius);
-            pDot->setPos((m_nodes[i].x - minX) / spanX * kSceneSpan,
-                    (m_nodes[i].y - minY) / spanY * kSceneSpan);
             pDot->setZValue(0.0);
             pDot->setBrush(nodeColor(m_nodes[i]));
         }
+        applyPositions(layoutTarget(m_layoutMode));
     }
     updatePills();
     viewport()->update();

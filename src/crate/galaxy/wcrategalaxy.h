@@ -2,6 +2,7 @@
 
 #include <QGraphicsView>
 #include <QHash>
+#include <QPointF>
 
 #include "crate/data/cratesidecars.h"
 #include "preferences/usersettings.h"
@@ -11,6 +12,7 @@ class QContextMenuEvent;
 class QGraphicsScene;
 class QPainter;
 class QGraphicsEllipseItem;
+class QVariantAnimation;
 
 namespace crate {
 
@@ -47,6 +49,13 @@ class WCrateGalaxy : public QGraphicsView {
         Energy,
     };
 
+    enum class LayoutMode {
+        Scatter,
+        KeyWheel,
+        BpmSerpentine,
+        Artist,
+    };
+
     struct ValueRange {
         double low = 0.0;
         double high = 0.0;
@@ -56,6 +65,10 @@ class WCrateGalaxy : public QGraphicsView {
     void populate();
     void updateColors();
     void setColorMode(ColorMode mode);
+    void setLayoutMode(LayoutMode mode, bool animate = true);
+    QVector<QPointF> layoutTarget(LayoutMode mode) const;
+    QVector<QPointF> separate(const QVector<QPointF>& positions, double shrink) const;
+    void applyPositions(const QVector<QPointF>& positions);
     QColor nodeColor(const GalaxyNode& node) const;
     static ValueRange percentileRange(const QVector<double>& values);
     QString resolveMusicPath(const QString& relpath) const;
@@ -75,6 +88,9 @@ class WCrateGalaxy : public QGraphicsView {
     ColorMode m_colorMode = ColorMode::Cluster;
     ValueRange m_tempoRange;
     ValueRange m_energyRange;
+    QVector<QPointF> m_scatterPositions;
+    LayoutMode m_layoutMode = LayoutMode::Scatter;
+    QVariantAnimation* m_pLayoutAnimation = nullptr;
     bool m_initialFitDone = false;
     bool m_3dMode = false;
     double m_azimuth = 30.0;

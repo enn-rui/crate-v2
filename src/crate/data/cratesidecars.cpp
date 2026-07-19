@@ -146,6 +146,30 @@ bool CrateSidecars::load() {
         closeAndRemove(&features);
     }
 
+    QHash<QString, QPair<double, double>> artistPositions;
+    QSqlDatabase artists = openRo(QDir(m_dir).filePath(QStringLiteral("artist_umap.sqlite")));
+    if (artists.isOpen()) {
+        QSqlQuery q(artists);
+        q.exec(QStringLiteral("SELECT artist, x, y FROM artists"));
+        while (q.next()) {
+            artistPositions.insert(q.value(0).toString().trimmed().toLower(),
+                    qMakePair(q.value(1).toDouble(), q.value(2).toDouble()));
+        }
+        closeAndRemove(&artists);
+    }
+    const QRegularExpression artistSeparator(QStringLiteral(
+            "\\s*(?:;|,|/|&|\\bfeat\\.?\\b|\\bft\\.?\\b|\\bx\\b|\\bvs\\.?\\b)\\s*"),
+            QRegularExpression::CaseInsensitiveOption);
+    for (GalaxyNode& node : m_nodes) {
+        const QString primary = node.artist.split(artistSeparator).value(0).trimmed().toLower();
+        const auto it = artistPositions.constFind(primary);
+        if (it != artistPositions.constEnd()) {
+            node.artistX = it.value().first;
+            node.artistY = it.value().second;
+            node.hasArtistPosition = true;
+        }
+    }
+
     return true;
 }
 
