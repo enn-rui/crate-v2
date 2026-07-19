@@ -88,6 +88,23 @@
         </Children>
       </WidgetGroup>
 
+      <!-- rekordbox placement: transport sits immediately left of the jog. -->
+      <WidgetGroup>
+        <ObjectName>DeckJog</ObjectName>
+        <Layout>horizontal</Layout>
+        <Size>72f,72f</Size>
+        <Children>
+          <Template src="skins:Crate/deck_spinny.xml">
+            <SetVariable name="cover">true</SetVariable>
+            <SetVariable name="Size">72f,72f</SetVariable>
+          </Template>
+        </Children>
+        <Connection>
+          <ConfigKey>[Skin],show_spinnies</ConfigKey>
+          <BindProperty>visible</BindProperty>
+        </Connection>
+      </WidgetGroup>
+
       <WidgetGroup>
         <Size>3min,1min</Size>
         <MaximumSize>12,-1</MaximumSize>

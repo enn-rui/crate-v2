@@ -55,19 +55,19 @@
        gradientUnits="userSpaceOnUse">
       <stop
          id="stop7"
-         stop-color="#0f0"
+         stop-color="#b4d2ff"
          offset="0" />
       <stop
          id="stop9"
-         stop-color="#0f0"
+         stop-color="#b4d2ff"
          offset=".9" />
       <stop
          id="stop11"
-         stop-color="#ff0"
+         stop-color="#ff7878"
          offset=".9" />
       <stop
          id="stop13"
-         stop-color="#ff0"
+         stop-color="#ff7878"
          offset="1" />
     </linearGradient>
     <linearGradient
@@ -78,19 +78,19 @@
        gradientUnits="userSpaceOnUse">
       <stop
          id="stop20"
-         stop-color="#004b00"
+         stop-color="#243044"
          offset="0" />
       <stop
          id="stop21"
-         stop-color="#004b00"
+         stop-color="#243044"
          offset=".9" />
       <stop
          id="stop22"
-         stop-color="#4f4f00"
+         stop-color="#44242a"
          offset=".9" />
       <stop
          id="stop23"
-         stop-color="#4f4f00"
+         stop-color="#44242a"
          offset="1" />
     </linearGradient>
   </defs>

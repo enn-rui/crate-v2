@@ -2737,30 +2737,21 @@ QLineEdit QMenu::item:selected {
   background-color: rgba(180, 210, 255, 51);
 }
 
-/* Semantic state colors: color communicates deck ownership or transport state. */
-#Deck1 #FxAssignmentButton[value="1"],
-#Deck1 #FxAssignmentButton[value="2"],
-#Deck3 #FxAssignmentButton[value="1"],
-#Deck3 #FxAssignmentButton[value="2"] {
-  color: #b4d2ff;
-  background-color: rgba(180, 210, 255, 46);
-  border-color: #b4d2ff;
-}
-
-#Deck2 #FxAssignmentButton[value="1"],
-#Deck2 #FxAssignmentButton[value="2"],
-#Deck4 #FxAssignmentButton[value="1"],
-#Deck4 #FxAssignmentButton[value="2"] {
-  color: #ffb454;
-  background-color: rgba(255, 180, 84, 46);
-  border-color: #ffb454;
+/* FX routing remains neutral; color is reserved for transport semantics. */
+#FxAssignmentButton[value="1"], #FxAssignmentButton[value="2"] {
+  color: #f4f7fb;
+  background-color: rgba(244, 247, 251, 20);
+  border-color: rgba(244, 247, 251, 90);
 }
 
 #PlayToggle[value="1"] {
-  color: #b4d2ff;
-  background-color: rgba(180, 210, 255, 46);
-  border-color: #b4d2ff;
+  color: #5bd97a;
+  background-color: rgba(91, 217, 122, 46);
+  border-color: #5bd97a;
 }
+
+#DeckCue { color: #ffb454; border-color: rgba(255, 180, 84, 140); }
+#BpmKeyEditTriggerLabel, #RateDisplayTopRate, #RateDisplayBottomRate { color: #ffb454; }
 
 #DeckSync[value="1"], #DeckSync[value="2"],
 #BeatsyncButton[value="1"], #BeatsyncButton[value="2"],

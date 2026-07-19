@@ -17,6 +17,8 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 - identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,
   src/dialog/dlgaboutdlg.ui, src/mixxx.rc, src/util/cmdlineargs.cpp,
   src/util/versionstore.cpp
+- Crate splash/packaged logo: res/images/mixxx_logo.svg (flat #05060a field with
+  monochrome CRATE wordmark; intentionally replaces upstream Mixxx branding)
 
 ## Repo-side (non-file) divergences
 
