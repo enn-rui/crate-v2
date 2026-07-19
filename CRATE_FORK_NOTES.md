@@ -16,7 +16,9 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 
 - CrateGalaxy seam: CMakeLists.txt (src/crate/*.cpp in source list),
   src/skin/legacy/legacyskinparser.h (+parseCrateGalaxy decl),
-  src/skin/legacy/legacyskinparser.cpp (+include, +dispatch branch, +parseCrateGalaxy impl),
+  src/skin/legacy/legacyskinparser.cpp (+include, +dispatch branch, +parseCrateGalaxy impl;
+  2026-07-19: parseCrateGalaxy now passes m_pLibrary to WCrateGalaxy so the MAP-walk cursor
+  can selection-sync the library table — the preferred FLX4 browse-knob load integration),
   src/skin/legacy/tooltips.cpp (+show_crate_galaxy tooltip)
 - Crate intelligence seam: CMakeLists.txt (SonicVectors/scores sources and golden test)
 - identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,

@@ -3,12 +3,20 @@
 #include <QGraphicsView>
 #include <QHash>
 #include <QPointF>
+#include <QSet>
+#include <QVector>
+
+#include <memory>
 
 #include "crate/data/cratesidecars.h"
 #include "crate/intelligence/sonicvectors.h"
 #include "preferences/usersettings.h"
 
+class Library;
 class PlayerManager;
+class ControlObject;
+class ControlProxy;
+class ControlPushButton;
 class QContextMenuEvent;
 class QGraphicsScene;
 class QPainter;
@@ -30,7 +38,20 @@ class WCrateGalaxy : public QGraphicsView {
   public:
     WCrateGalaxy(QWidget* pParent,
             PlayerManager* pPlayerManager,
-            UserSettingsPointer pConfig);
+            UserSettingsPointer pConfig,
+            Library* pLibrary = nullptr);
+    ~WCrateGalaxy() override;
+
+    // Test-only introspection. Cheap const accessors, no behavior; let the
+    // widget test recompute the walk metric independently and assert against it.
+    int testCursorNode() const {
+        return m_cursorNode;
+    }
+    int testNodeCount() const {
+        return m_nodes.size();
+    }
+    QPointF testNodeDisplayPos(int index) const;
+    bool testNodeVisible(int index) const;
 
   protected:
     void contextMenuEvent(QContextMenuEvent* pEvent) override;
@@ -89,7 +110,28 @@ class WCrateGalaxy : public QGraphicsView {
     void applyHaloVisuals();
     QString relpathForLocation(const QString& location) const;
 
+    // FLX4 browse-knob MAP navigation (wave 4). The walk mirrors v1
+    // map_view.nearest_unplayed: forward = nearest node not yet visited in the
+    // currently displayed coordinate space (2D layout, or 3D coords in 3D mode);
+    // back = retrace the walk's own history.
+    void setKnobFocusMap(bool mapFocus);
+    void onKnobMove(double delta);
+    void stepCursorForward();
+    void stepCursorBack();
+    int seedNode() const;
+    int nearestUnvisited(int fromNode) const;
+    double displaySqDistance(int a, int b) const;
+    bool nodeSelectable(int index) const;
+    void setCursorNode(int index, bool resetWalk);
+    void resetWalk();
+    void updateCursorVisual();
+    void syncSelectionToCursor();
+    void loadCursorToFirstStoppedDeck();
+    void loadCursorIntoDeck(int deckIndex);
+    QString firstStoppedDeckGroup() const;
+
     PlayerManager* m_pPlayerManager;
+    Library* m_pLibrary;
     UserSettingsPointer m_pConfig;
     QGraphicsScene* m_pScene;
     QVector<GalaxyNode> m_nodes;
@@ -120,8 +162,23 @@ class WCrateGalaxy : public QGraphicsView {
     QButtonGroup* m_pColorButtons = nullptr;
     QAbstractButton* m_p3dButton = nullptr;
     QAbstractButton* m_pHaloButton = nullptr;
+    QAbstractButton* m_pKnobButton = nullptr;
     QString m_playingRelpath;
     QHash<int, double> m_haloScores;
+
+    // MAP-walk state.
+    bool m_knobFocusMap = false;
+    int m_cursorNode = -1;
+    QVector<int> m_walkHistory; // ordered nodes the cursor has occupied
+    QSet<int> m_walkVisited;    // nodes visited this walk (skip on forward)
+    QGraphicsEllipseItem* m_pCursorRing = nullptr;
+
+    // Controls. knob_focus + galaxy_load are owned here (new [Crate] controls);
+    // MoveVertical is a proxy onto the stock [Library] encoder the browse knob
+    // already drives.
+    std::unique_ptr<ControlPushButton> m_pKnobFocusCO;
+    std::unique_ptr<ControlPushButton> m_pGalaxyLoadCO;
+    ControlProxy* m_pMoveVerticalProxy = nullptr;
 };
 
 } // namespace crate

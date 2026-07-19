@@ -16,7 +16,11 @@
 #include <QPainter>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLayout>
+#include <QMargins>
 #include <QPushButton>
+#include <QStyle>
+#include <QWidgetItem>
 #include <QRadialGradient>
 #include <QRegularExpression>
 #include <QVariantAnimation>
@@ -29,10 +33,15 @@
 #include <utility>
 
 #include "control/controlobject.h"
+#include "control/controlproxy.h"
+#include "control/controlpushbutton.h"
 #include "crate/intelligence/scores.h"
+#include "library/library.h"
+#include "library/trackcollectionmanager.h"
 #include "mixer/playerinfo.h"
 #include "mixer/playermanager.h"
 #include "track/track.h"
+#include "track/trackid.h"
 #include "util/logger.h"
 
 namespace {
@@ -42,6 +51,7 @@ const mixxx::Logger kLogger("WCrateGalaxy");
 constexpr double kSceneSpan = 2000.0; // normalized coordinate span
 constexpr double kDotRadius = 3.5;    // px, transform-independent
 constexpr double kHaloRadius = 11.0;  // px, transform-independent
+constexpr double kCursorRingRadius = 8.5; // px, transform-independent
 constexpr double kPillFadeStart = 2.55;
 constexpr double kPillFadeEnd = 3.15;
 constexpr int kPillCellWidth = 180;
@@ -93,6 +103,97 @@ class GalaxyPillItem final : public QGraphicsItem {
     QColor m_accent;
 };
 
+// A wrapping (flow) layout for the galaxy chip bar: on a wide pane the chips
+// stay one row; on a narrow MAP pane they wrap to a second row instead of
+// clipping off the right edge. Standard Qt FlowLayout, trimmed.
+class FlowLayout final : public QLayout {
+  public:
+    FlowLayout(QWidget* pParent, int margin, int hSpacing, int vSpacing)
+            : QLayout(pParent), m_hSpace(hSpacing), m_vSpace(vSpacing) {
+        setContentsMargins(margin, margin, margin, margin);
+    }
+    ~FlowLayout() override {
+        QLayoutItem* pItem = nullptr;
+        while ((pItem = takeAt(0)) != nullptr) {
+            delete pItem;
+        }
+    }
+    void addItem(QLayoutItem* pItem) override {
+        m_items.append(pItem);
+    }
+    int count() const override {
+        return m_items.size();
+    }
+    QLayoutItem* itemAt(int index) const override {
+        return m_items.value(index);
+    }
+    QLayoutItem* takeAt(int index) override {
+        return (index >= 0 && index < m_items.size()) ? m_items.takeAt(index) : nullptr;
+    }
+    Qt::Orientations expandingDirections() const override {
+        return {};
+    }
+    bool hasHeightForWidth() const override {
+        return true;
+    }
+    int heightForWidth(int width) const override {
+        return doLayout(QRect(0, 0, width, 0), true);
+    }
+    void setGeometry(const QRect& rect) override {
+        QLayout::setGeometry(rect);
+        doLayout(rect, false);
+    }
+    QSize sizeHint() const override {
+        // Natural (single-row) width, so wide panes stay one row.
+        int w = 0;
+        int h = 0;
+        for (int i = 0; i < m_items.size(); ++i) {
+            const QSize s = m_items[i]->sizeHint();
+            w += s.width() + (i ? m_hSpace : 0);
+            h = qMax(h, s.height());
+        }
+        const QMargins m = contentsMargins();
+        return QSize(w + m.left() + m.right(), h + m.top() + m.bottom());
+    }
+    QSize minimumSize() const override {
+        QSize size;
+        for (QLayoutItem* pItem : m_items) {
+            size = size.expandedTo(pItem->minimumSize());
+        }
+        const QMargins m = contentsMargins();
+        return size + QSize(m.left() + m.right(), m.top() + m.bottom());
+    }
+
+  private:
+    int doLayout(const QRect& rect, bool testOnly) const {
+        const QMargins m = contentsMargins();
+        const QRect effective = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom());
+        int x = effective.x();
+        int y = effective.y();
+        int lineHeight = 0;
+        for (QLayoutItem* pItem : m_items) {
+            const QSize s = pItem->sizeHint();
+            int nextX = x + s.width() + m_hSpace;
+            if (nextX - m_hSpace > effective.right() + 1 && lineHeight > 0) {
+                x = effective.x();
+                y = y + lineHeight + m_vSpace;
+                nextX = x + s.width() + m_hSpace;
+                lineHeight = 0;
+            }
+            if (!testOnly) {
+                pItem->setGeometry(QRect(QPoint(x, y), s));
+            }
+            x = nextX;
+            lineHeight = qMax(lineHeight, s.height());
+        }
+        return y + lineHeight - rect.y() + m.bottom();
+    }
+
+    QList<QLayoutItem*> m_items;
+    int m_hSpace;
+    int m_vSpace;
+};
+
 // Faithful to Crate v1 map_view._cluster_color: golden-ratio hue walk,
 // noise/unclustered = grey.
 QColor clusterColor(int cid) {
@@ -130,9 +231,11 @@ namespace crate {
 
 WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
         PlayerManager* pPlayerManager,
-        UserSettingsPointer pConfig)
+        UserSettingsPointer pConfig,
+        Library* pLibrary)
         : QGraphicsView(pParent),
           m_pPlayerManager(pPlayerManager),
+          m_pLibrary(pLibrary),
           m_pConfig(pConfig),
           m_pScene(new QGraphicsScene(this)),
           m_pLayoutAnimation(new QVariantAnimation(this)) {
@@ -199,7 +302,62 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
             this,
             [this](int) { updateMixabilityHalos(); });
     updateMixabilityHalos();
+
+    // Cursor highlight: a hollow mono ring, distinct from the now-playing dot
+    // (filled white) and the mixability halos (blue radial glow). Kept above
+    // everything, transform-independent, hidden until the walk seeds a cursor.
+    m_pCursorRing = new QGraphicsEllipseItem(
+            -kCursorRingRadius, -kCursorRingRadius,
+            kCursorRingRadius * 2, kCursorRingRadius * 2);
+    m_pCursorRing->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
+    m_pCursorRing->setPen(QPen(QColor(0xf4, 0xf7, 0xfb), 1.6));
+    m_pCursorRing->setBrush(Qt::NoBrush);
+    m_pCursorRing->setZValue(200.0);
+    m_pCursorRing->setVisible(false);
+    m_pScene->addItem(m_pCursorRing);
+
+    // knob_focus: persisted toggle (default TABLE = stock behavior). Exposed as
+    // a ControlObject so a future FLX4 mapping / other UI can read or flip it.
+    const bool mapFocus = m_pConfig->getValue(
+            ConfigKey("[Crate]", "knob_focus"), 0) != 0;
+    m_pKnobFocusCO = std::make_unique<ControlPushButton>(
+            ConfigKey("[Crate]", "knob_focus"));
+    m_pKnobFocusCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
+    m_pKnobFocusCO->set(mapFocus ? 1.0 : 0.0);
+    m_knobFocusMap = mapFocus;
+    connect(m_pKnobFocusCO.get(),
+            &ControlObject::valueChanged,
+            this,
+            [this](double v) { setKnobFocusMap(v != 0.0); });
+
+    // galaxy_load: a push control that loads the CURSOR track into the first
+    // stopped deck (never yanks a playing one). Mirrors the double-click load
+    // path but is reachable from a controller / other UI.
+    m_pGalaxyLoadCO = std::make_unique<ControlPushButton>(
+            ConfigKey("[Crate]", "galaxy_load"));
+    connect(m_pGalaxyLoadCO.get(),
+            &ControlObject::valueChanged,
+            this,
+            [this](double v) {
+                if (v != 0.0) {
+                    loadCursorToFirstStoppedDeck();
+                }
+            });
+
+    // Browse knob -> [Library],MoveVertical (stock encoder the FLX4 already
+    // drives). When knob focus is MAP we step the galaxy cursor; TABLE leaves
+    // the stock library scroll untouched.
+    m_pMoveVerticalProxy = new ControlProxy(
+            ConfigKey("[Library]", "MoveVertical"), this);
+    if (m_pMoveVerticalProxy->valid()) {
+        m_pMoveVerticalProxy->connectValueChanged(
+                this, &WCrateGalaxy::onKnobMove);
+    }
+
+    syncControlBar();
 }
+
+WCrateGalaxy::~WCrateGalaxy() = default;
 
 void WCrateGalaxy::createControlBar() {
     m_pControlBar = new QFrame(viewport());
@@ -216,9 +374,7 @@ void WCrateGalaxy::createControlBar() {
             "color: rgb(234, 242, 255); }"
             "QPushButton:checked { background: rgba(80, 145, 230, 150); "
             "border-color: rgb(150, 200, 255); color: white; }"));
-    auto* pLayout = new QHBoxLayout(m_pControlBar);
-    pLayout->setContentsMargins(5, 4, 5, 4);
-    pLayout->setSpacing(3);
+    auto* pLayout = new FlowLayout(m_pControlBar, 4, 3, 3);
 
     const auto addLabel = [pLayout, this](const QString& text) {
         pLayout->addWidget(new QLabel(text, m_pControlBar));
@@ -265,16 +421,39 @@ void WCrateGalaxy::createControlBar() {
     connect(m_p3dButton, &QAbstractButton::clicked, this, &WCrateGalaxy::set3dMode);
     m_pHaloButton = addButton(QStringLiteral("HALO"));
     connect(m_pHaloButton, &QAbstractButton::clicked, this, &WCrateGalaxy::setHalosEnabled);
-    m_pControlBar->adjustSize();
+
+    // KNOB focus toggle: routes the browse knob to the galaxy cursor (MAP) or
+    // leaves stock library scroll (TABLE, default). Self-labeling chip; stable
+    // objectName so tests can find it across the MAP/TABLE text swap.
+    m_pKnobButton = addButton(QStringLiteral("KNOB:TABLE"));
+    m_pKnobButton->setObjectName(QStringLiteral("KnobFocusChip"));
+    connect(m_pKnobButton, &QAbstractButton::clicked, this, [this] {
+        // Drive state directly (a ControlObject does not re-emit valueChanged for
+        // its own set), then setKnobFocusMap mirrors the value back into the CO
+        // for controllers/other UI to read.
+        setKnobFocusMap(!m_knobFocusMap);
+    });
+
     positionControlBar();
     m_pControlBar->raise();
 }
 
 void WCrateGalaxy::positionControlBar() {
-    if (m_pControlBar) {
-        m_pControlBar->move(kControlMargin, kControlMargin);
-        m_pControlBar->raise();
+    if (!m_pControlBar) {
+        return;
     }
+    // Clamp the bar to the pane width so the FlowLayout wraps chips to a second
+    // row on a narrow MAP pane instead of clipping them off the right edge.
+    QLayout* pLayout = m_pControlBar->layout();
+    const int natural = m_pControlBar->sizeHint().width();
+    const int available = viewport()->width() - 2 * kControlMargin;
+    int barWidth = (available > 0) ? qMin(natural, available) : natural;
+    barWidth = qMax(barWidth, 140);
+    const int barHeight = (pLayout && pLayout->hasHeightForWidth())
+            ? pLayout->heightForWidth(barWidth)
+            : m_pControlBar->sizeHint().height();
+    m_pControlBar->setGeometry(kControlMargin, kControlMargin, barWidth, barHeight);
+    m_pControlBar->raise();
 }
 
 void WCrateGalaxy::syncControlBar() {
@@ -297,6 +476,12 @@ void WCrateGalaxy::syncControlBar() {
     }
     m_p3dButton->setChecked(m_3dMode);
     m_pHaloButton->setChecked(m_halosEnabled);
+    if (m_pKnobButton) {
+        m_pKnobButton->setChecked(m_knobFocusMap);
+        m_pKnobButton->setText(m_knobFocusMap
+                        ? QStringLiteral("KNOB:MAP")
+                        : QStringLiteral("KNOB:TABLE"));
+    }
     for (QAbstractButton* pButton : m_pLayoutButtons->buttons()) {
         pButton->setEnabled(!m_3dMode);
     }
@@ -596,6 +781,7 @@ void WCrateGalaxy::applyPositions(const QVector<QPointF>& positions) {
         m_dots[i]->setPos(positions[i]);
         m_halos[i]->setPos(positions[i]);
     }
+    updateCursorVisual();
     updatePills();
     viewport()->update();
 }
@@ -711,6 +897,9 @@ QVector<QPointF> WCrateGalaxy::layoutTarget(LayoutMode mode) const {
 
 void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
     if (m_3dMode) return;
+    // The displayed coordinate space changed, so the walk's nearest-neighbor
+    // metric and history no longer apply — reset.
+    resetWalk();
     m_layoutMode = mode;
     QString value = QStringLiteral("scatter");
     if (mode == LayoutMode::KeyWheel) value = QStringLiteral("key");
@@ -879,6 +1068,8 @@ void WCrateGalaxy::set3dMode(bool enabled) {
     m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_3d"), enabled ? 1 : 0);
     setDragMode(enabled ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
     setHoveredNode(-1);
+    // 2D<->3D changes the walk's coordinate space; reset it.
+    resetWalk();
     if (enabled) {
         resetTransform();
         fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
@@ -990,6 +1181,7 @@ void WCrateGalaxy::update3dProjection() {
         pDot->setZValue(depths[i]);
     }
     applyHaloVisuals();
+    updateCursorVisual();
     updatePills();
     viewport()->update();
 }
@@ -1159,6 +1351,278 @@ void WCrateGalaxy::updatePills() {
     }
 }
 
+void WCrateGalaxy::setKnobFocusMap(bool mapFocus) {
+    const bool changed = m_knobFocusMap != mapFocus;
+    m_knobFocusMap = mapFocus;
+    m_pConfig->setValue(ConfigKey("[Crate]", "knob_focus"), mapFocus ? 1 : 0);
+    if (m_pKnobFocusCO && (m_pKnobFocusCO->get() != 0.0) != mapFocus) {
+        m_pKnobFocusCO->set(mapFocus ? 1.0 : 0.0);
+    }
+    syncControlBar();
+    Q_UNUSED(changed);
+}
+
+void WCrateGalaxy::onKnobMove(double delta) {
+    // Consume the browse encoder only when knob focus is MAP; TABLE leaves the
+    // stock library scroll untouched. Each tick is a relative step; interpret
+    // its sign/magnitude (encoders normally send +/-1 per detent).
+    if (!m_knobFocusMap || m_nodes.isEmpty()) {
+        return;
+    }
+    int steps = static_cast<int>(std::lround(delta));
+    if (steps == 0) {
+        steps = delta > 0.0 ? 1 : (delta < 0.0 ? -1 : 0);
+    }
+    steps = qBound(-16, steps, 16);
+    for (int i = 0; i < steps; ++i) {
+        stepCursorForward();
+    }
+    for (int i = 0; i > steps; --i) {
+        stepCursorBack();
+    }
+}
+
+bool WCrateGalaxy::nodeSelectable(int index) const {
+    if (index < 0 || index >= m_nodes.size() || index >= m_dots.size()) {
+        return false;
+    }
+    if (m_3dMode) {
+        // In 3D the walk follows what you actually see in the orbit: only
+        // projected (has3d) nodes participate.
+        return m_nodes[index].has3d && m_dots[index]->isVisible();
+    }
+    return m_dots[index]->isVisible();
+}
+
+double WCrateGalaxy::displaySqDistance(int a, int b) const {
+    if (m_3dMode) {
+        // Mirror v1's 3D nearest_unplayed: squared-euclidean in coords3d space.
+        const double dx = m_nodes[a].x3d - m_nodes[b].x3d;
+        const double dy = m_nodes[a].y3d - m_nodes[b].y3d;
+        const double dz = m_nodes[a].z - m_nodes[b].z;
+        return dx * dx + dy * dy + dz * dz;
+    }
+    // 2D: squared-euclidean in the CURRENT layout's scene positions (what the
+    // eye sees), mirroring v1's UMAP-space nearest_unplayed.
+    const QPointF delta = m_dots[a]->pos() - m_dots[b]->pos();
+    return QPointF::dotProduct(delta, delta);
+}
+
+int WCrateGalaxy::nearestUnvisited(int fromNode) const {
+    if (fromNode < 0) {
+        return -1;
+    }
+    int best = -1;
+    double bestDistance = 0.0;
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        if (i == fromNode || m_walkVisited.contains(i) || !nodeSelectable(i)) {
+            continue;
+        }
+        const double distance = displaySqDistance(fromNode, i);
+        if (best < 0 || distance < bestDistance) {
+            best = i;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+int WCrateGalaxy::seedNode() const {
+    // Seed at the now-playing node if it is visible, else the visible node
+    // nearest the current view center.
+    if (!m_playingRelpath.isEmpty()) {
+        for (int i = 0; i < m_nodes.size(); ++i) {
+            if (nodeSelectable(i) &&
+                    m_nodes[i].relpath == m_playingRelpath) {
+                return i;
+            }
+        }
+    }
+    const QPointF center = mapToScene(viewport()->rect().center());
+    int best = -1;
+    double bestDistance = 0.0;
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        if (!nodeSelectable(i)) {
+            continue;
+        }
+        const QPointF delta = m_dots[i]->pos() - center;
+        const double distance = QPointF::dotProduct(delta, delta);
+        if (best < 0 || distance < bestDistance) {
+            best = i;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+void WCrateGalaxy::stepCursorForward() {
+    if (m_cursorNode < 0) {
+        setCursorNode(seedNode(), /*resetWalk=*/true);
+        return;
+    }
+    const int next = nearestUnvisited(m_cursorNode);
+    if (next < 0) {
+        return; // exhausted the reachable, unvisited set; hold the cursor
+    }
+    m_cursorNode = next;
+    m_walkVisited.insert(next);
+    m_walkHistory.append(next);
+    updateCursorVisual();
+    syncSelectionToCursor();
+}
+
+void WCrateGalaxy::stepCursorBack() {
+    if (m_walkHistory.size() <= 1) {
+        return; // at the seed; nothing to retrace
+    }
+    const int leaving = m_walkHistory.takeLast();
+    m_walkVisited.remove(leaving); // un-mark so it can be revisited going forward
+    m_cursorNode = m_walkHistory.last();
+    updateCursorVisual();
+    syncSelectionToCursor();
+}
+
+void WCrateGalaxy::setCursorNode(int index, bool resetWalk) {
+    if (index < 0) {
+        return;
+    }
+    if (resetWalk) {
+        m_walkVisited.clear();
+        m_walkHistory.clear();
+    }
+    m_cursorNode = index;
+    m_walkVisited.insert(index);
+    if (m_walkHistory.isEmpty() || m_walkHistory.last() != index) {
+        m_walkHistory.append(index);
+    }
+    updateCursorVisual();
+    syncSelectionToCursor();
+}
+
+void WCrateGalaxy::resetWalk() {
+    m_cursorNode = -1;
+    m_walkVisited.clear();
+    m_walkHistory.clear();
+    updateCursorVisual();
+}
+
+void WCrateGalaxy::updateCursorVisual() {
+    if (!m_pCursorRing) {
+        return;
+    }
+    const bool show = m_cursorNode >= 0 && m_cursorNode < m_dots.size() &&
+            m_dots[m_cursorNode]->isVisible();
+    if (show) {
+        m_pCursorRing->setPos(m_dots[m_cursorNode]->pos());
+        m_pCursorRing->setData(0, m_cursorNode);
+    }
+    m_pCursorRing->setVisible(show);
+    viewport()->update();
+}
+
+void WCrateGalaxy::syncSelectionToCursor() {
+    // PREFERRED load integration (selection-sync): mirror the cursor into the
+    // library table selection, so the stock deck LOAD buttons and every other
+    // controller load the cursor track with zero interception. No-op without a
+    // Library (e.g. widget tests) or when the track is not in the collection.
+    if (m_pLibrary == nullptr || m_cursorNode < 0 || m_cursorNode >= m_nodes.size()) {
+        return;
+    }
+    const QString location = resolveMusicPath(m_nodes[m_cursorNode].relpath);
+    if (location.isEmpty()) {
+        return;
+    }
+    TrackCollectionManager* pTcm = m_pLibrary->trackCollectionManager();
+    if (pTcm == nullptr) {
+        return;
+    }
+    const QList<TrackId> ids = pTcm->resolveTrackIdsFromLocations({location});
+    if (ids.isEmpty() || !ids.first().isValid()) {
+        return;
+    }
+    emit m_pLibrary->selectTrack(ids.first());
+}
+
+QString WCrateGalaxy::firstStoppedDeckGroup() const {
+    // Scan decks by their [ChannelN],play control. Deck count is discovered from
+    // which play controls exist (works with or without a PlayerManager, so the
+    // load is unit-testable). First deck that is not playing wins.
+    const int maxDecks = m_pPlayerManager != nullptr
+            ? static_cast<int>(m_pPlayerManager->numberOfDecks())
+            : 8;
+    for (int i = 0; i < maxDecks; ++i) {
+        const QString group = PlayerManager::groupForDeck(i);
+        const ConfigKey playKey(group, "play");
+        if (!ControlObject::exists(playKey)) {
+            break;
+        }
+        if (ControlObject::get(playKey) == 0.0) {
+            return group;
+        }
+    }
+    return QString();
+}
+
+void WCrateGalaxy::loadCursorIntoDeck(int deckNumber) {
+    // deckNumber is 1-based (matches PlayerManager::slotLoadToDeck).
+    if (m_cursorNode < 0 || m_cursorNode >= m_nodes.size() ||
+            m_pPlayerManager == nullptr || deckNumber < 1) {
+        return;
+    }
+    const QString path = resolveMusicPath(m_nodes[m_cursorNode].relpath);
+    if (path.isEmpty()) {
+        kLogger.warning() << "no music_root; cannot load"
+                          << m_nodes[m_cursorNode].relpath;
+        return;
+    }
+    kLogger.info() << "loading" << path << "into deck" << deckNumber;
+    m_pPlayerManager->slotLoadToDeck(path, deckNumber);
+}
+
+void WCrateGalaxy::loadCursorToFirstStoppedDeck() {
+    if (m_cursorNode < 0 || m_cursorNode >= m_nodes.size()) {
+        return;
+    }
+    // Keep the library selection on the cursor (preferred integration): even the
+    // direct load below benefits, and it keeps every other controller in sync.
+    syncSelectionToCursor();
+    const QString group = firstStoppedDeckGroup();
+    if (group.isEmpty()) {
+        kLogger.info() << "all decks playing / none present; not loading cursor";
+        return;
+    }
+    if (m_pPlayerManager != nullptr) {
+        // Direct path load: robust for galaxy nodes not imported into the Mixxx
+        // library (mirrors the double-click load path).
+        int deckNumber = 0;
+        for (int i = 0; i < 8; ++i) {
+            if (PlayerManager::groupForDeck(i) == group) {
+                deckNumber = i + 1;
+                break;
+            }
+        }
+        loadCursorIntoDeck(deckNumber);
+        return;
+    }
+    // No PlayerManager (controller-only / widget tests): trigger the stock
+    // LoadSelectedTrack on the chosen deck, relying on the selection-sync above.
+    const ConfigKey loadKey(group, "LoadSelectedTrack");
+    if (ControlObject::exists(loadKey)) {
+        ControlObject::set(loadKey, 1.0);
+    }
+}
+
+QPointF WCrateGalaxy::testNodeDisplayPos(int index) const {
+    if (index < 0 || index >= m_dots.size()) {
+        return QPointF();
+    }
+    return m_dots[index]->pos();
+}
+
+bool WCrateGalaxy::testNodeVisible(int index) const {
+    return nodeSelectable(index);
+}
+
 void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
     QGraphicsItem* pItem = itemAt(pEvent->pos());
     const int projectedIndex = m_3dMode ? projectedNodeAt(pEvent->pos()) : -1;
@@ -1170,6 +1634,9 @@ void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
     if (!idx.isValid()) {
         return;
     }
+    // Re-seed the MAP-walk cursor here: a click on a node resets the walk with
+    // this node as the new origin (spec: cursor re-seeded by a mouse click).
+    setCursorNode(idx.toInt(), /*resetWalk=*/true);
     const GalaxyNode& node = m_nodes[idx.toInt()];
     const QString path = resolveMusicPath(node.relpath);
     if (path.isEmpty()) {
@@ -1200,6 +1667,17 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
             scale(debugZoom, debugZoom);
         }
         m_initialFitDone = true;
+        // Proof/debug hook (matches the other galaxy_debug_* keys): when knob
+        // focus is MAP, seed a cursor on show so the highlight is visible in a
+        // static screenshot. No effect on normal runs (key defaults off).
+        if (m_knobFocusMap && m_cursorNode < 0 &&
+                m_pConfig->getValue(
+                        ConfigKey("[Crate]", "galaxy_debug_cursor"), 0) != 0) {
+            setCursorNode(seedNode(), /*resetWalk=*/true);
+            // Take a couple of forward steps so the walk history is non-trivial.
+            stepCursorForward();
+            stepCursorForward();
+        }
         updatePills();
     }
 }

@@ -1672,7 +1672,8 @@ void LegacySkinParser::parseSingletonDefinition(const QDomElement& node) {
 }
 
 QWidget* LegacySkinParser::parseCrateGalaxy(const QDomElement& node) {
-    auto* pGalaxy = new crate::WCrateGalaxy(m_pParent, m_pPlayerManager, m_pConfig);
+    auto* pGalaxy = new crate::WCrateGalaxy(
+            m_pParent, m_pPlayerManager, m_pConfig, m_pLibrary);
     setupWidget(node, pGalaxy);
     pGalaxy->installEventFilter(m_pKeyboard);
     return pGalaxy;

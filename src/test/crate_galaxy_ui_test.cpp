@@ -10,12 +10,19 @@
 #include <QFile>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QPointF>
 #include <QPushButton>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <memory>
+
+#include "control/controlencoder.h"
+#include "control/controlobject.h"
+#include "control/controlpushbutton.h"
 #include "crate/galaxy/wcrategalaxy.h"
 #include "preferences/usersettings.h"
 
@@ -37,11 +44,51 @@ class CrateGalaxyUiTest : public ::testing::Test {
         m_pConfig = UserSettingsPointer(
                 new UserSettings(m_tmp.filePath(QStringLiteral("test.cfg"))));
         m_pConfig->setValue(ConfigKey("[Crate]", "sidecar_dir"), goldenSidecarDir());
+        // The browse knob drives the stock [Library],MoveVertical encoder
+        // (ignoreNops=false, exactly like LibraryControl), so repeated +1 ticks
+        // each emit. Create it BEFORE the galaxy so its ControlProxy binds.
+        m_pMoveVertical = std::make_unique<ControlEncoder>(
+                ConfigKey("[Library]", "MoveVertical"), false);
         m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
                 nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
         m_pGalaxy->resize(900, 700);
         m_pGalaxy->show();
         QApplication::processEvents();
+    }
+
+    // Independently recompute the walk's forward metric: nearest node to `from`
+    // in the displayed 2D space, excluding self, visited, and hidden nodes.
+    int expectedNearest(int from, const QSet<int>& visited) const {
+        int best = -1;
+        double bestDistance = 0.0;
+        for (int i = 0; i < m_pGalaxy->testNodeCount(); ++i) {
+            if (i == from || visited.contains(i) || !m_pGalaxy->testNodeVisible(i)) {
+                continue;
+            }
+            const QPointF delta = m_pGalaxy->testNodeDisplayPos(i) -
+                    m_pGalaxy->testNodeDisplayPos(from);
+            const double distance = QPointF::dotProduct(delta, delta);
+            if (best < 0 || distance < bestDistance) {
+                best = i;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    void pokeKnob(double delta) {
+        ControlObject::set(ConfigKey("[Library]", "MoveVertical"), delta);
+        QApplication::processEvents();
+    }
+
+    void setKnobFocusMap() {
+        QPushButton* pKnob = m_pGalaxy->findChild<QPushButton*>(
+                QStringLiteral("KnobFocusChip"));
+        ASSERT_NE(pKnob, nullptr);
+        if (!pKnob->isChecked()) {
+            QTest::mouseClick(pKnob, Qt::LeftButton);
+            QApplication::processEvents();
+        }
     }
 
     QPushButton* chip(const QString& text) {
@@ -104,6 +151,7 @@ class CrateGalaxyUiTest : public ::testing::Test {
 
     QTemporaryDir m_tmp;
     UserSettingsPointer m_pConfig;
+    std::unique_ptr<ControlEncoder> m_pMoveVertical;
     std::unique_ptr<crate::WCrateGalaxy> m_pGalaxy;
 };
 
@@ -207,6 +255,114 @@ TEST_F(CrateGalaxyUiTest, HoverAndOrbitKeep3dPillOnProjectedDot) {
     QApplication::processEvents();
     EXPECT_NE(pDot->pos(), oldPosition);
     EXPECT_EQ(pPill->pos(), pDot->pos());
+}
+
+TEST_F(CrateGalaxyUiTest, KnobChipDefaultsTableAndToggles) {
+    QPushButton* pKnob = m_pGalaxy->findChild<QPushButton*>(
+            QStringLiteral("KnobFocusChip"));
+    ASSERT_NE(pKnob, nullptr);
+    // Default TABLE = stock behavior (least surprise).
+    EXPECT_FALSE(pKnob->isChecked());
+    EXPECT_EQ(pKnob->text(), QStringLiteral("KNOB:TABLE"));
+    EXPECT_EQ(ControlObject::get(ConfigKey("[Crate]", "knob_focus")), 0.0);
+
+    QTest::mouseClick(pKnob, Qt::LeftButton);
+    QApplication::processEvents();
+    EXPECT_TRUE(pKnob->isChecked());
+    EXPECT_EQ(pKnob->text(), QStringLiteral("KNOB:MAP"));
+    EXPECT_EQ(ControlObject::get(ConfigKey("[Crate]", "knob_focus")), 1.0);
+}
+
+TEST_F(CrateGalaxyUiTest, KnobForwardWalksNearestUnvisited) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 3);
+    setKnobFocusMap();
+
+    // First tick seeds the cursor; the next two must each land on the
+    // nearest-unvisited node by the port's own metric.
+    pokeKnob(1.0);
+    const int c1 = m_pGalaxy->testCursorNode();
+    ASSERT_GE(c1, 0);
+
+    pokeKnob(1.0);
+    const int c2 = m_pGalaxy->testCursorNode();
+    pokeKnob(1.0);
+    const int c3 = m_pGalaxy->testCursorNode();
+
+    // Three distinct nodes.
+    EXPECT_NE(c1, c2);
+    EXPECT_NE(c2, c3);
+    EXPECT_NE(c1, c3);
+
+    // Each forward step is the nearest unvisited node, not merely "changed".
+    QSet<int> visited;
+    visited.insert(c1);
+    EXPECT_EQ(c2, expectedNearest(c1, visited));
+    visited.insert(c2);
+    EXPECT_EQ(c3, expectedNearest(c2, visited));
+}
+
+TEST_F(CrateGalaxyUiTest, KnobBackRetracesHistory) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 3);
+    setKnobFocusMap();
+    pokeKnob(1.0);
+    const int c1 = m_pGalaxy->testCursorNode();
+    pokeKnob(1.0);
+    const int c2 = m_pGalaxy->testCursorNode();
+    pokeKnob(1.0);
+    const int c3 = m_pGalaxy->testCursorNode();
+    ASSERT_NE(c1, c2);
+    ASSERT_NE(c2, c3);
+
+    // Back = pop history (return where you came from), NOT nearest-neighbor.
+    pokeKnob(-1.0);
+    EXPECT_EQ(m_pGalaxy->testCursorNode(), c2);
+    pokeKnob(-1.0);
+    EXPECT_EQ(m_pGalaxy->testCursorNode(), c1);
+    // At the seed, further back is a no-op (cursor holds).
+    pokeKnob(-1.0);
+    EXPECT_EQ(m_pGalaxy->testCursorNode(), c1);
+}
+
+TEST_F(CrateGalaxyUiTest, GalaxyLoadTargetsFirstStoppedDeck) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 0);
+    // Deck 1 playing, deck 2 stopped -> load must target deck 2.
+    ControlObject deck1Play(ConfigKey("[Channel1]", "play"));
+    ControlObject deck2Play(ConfigKey("[Channel2]", "play"));
+    ControlPushButton deck1Load(ConfigKey("[Channel1]", "LoadSelectedTrack"));
+    ControlPushButton deck2Load(ConfigKey("[Channel2]", "LoadSelectedTrack"));
+    deck1Play.set(1.0);
+    deck2Play.set(0.0);
+
+    setKnobFocusMap();
+    pokeKnob(1.0); // seed a cursor
+    ASSERT_GE(m_pGalaxy->testCursorNode(), 0);
+
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_load"), 1.0);
+    QApplication::processEvents();
+
+    // The stopped deck (2) received the load; the playing deck (1) was spared.
+    EXPECT_EQ(ControlObject::get(ConfigKey("[Channel2]", "LoadSelectedTrack")), 1.0);
+    EXPECT_EQ(ControlObject::get(ConfigKey("[Channel1]", "LoadSelectedTrack")), 0.0);
+}
+
+TEST_F(CrateGalaxyUiTest, TableFocusIgnoresKnob) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 3);
+    setKnobFocusMap();
+    pokeKnob(1.0);
+    const int seeded = m_pGalaxy->testCursorNode();
+    ASSERT_GE(seeded, 0);
+
+    // Toggle back to TABLE; the galaxy cursor must stop responding to the knob.
+    QPushButton* pKnob = m_pGalaxy->findChild<QPushButton*>(
+            QStringLiteral("KnobFocusChip"));
+    ASSERT_NE(pKnob, nullptr);
+    QTest::mouseClick(pKnob, Qt::LeftButton);
+    QApplication::processEvents();
+    ASSERT_FALSE(pKnob->isChecked());
+
+    pokeKnob(1.0);
+    pokeKnob(1.0);
+    EXPECT_EQ(m_pGalaxy->testCursorNode(), seeded);
 }
 
 } // namespace
