@@ -21,6 +21,15 @@ listed here. This list is the entire merge-conflict surface for future `upstream
   can selection-sync the library table — the preferred FLX4 browse-knob load integration),
   src/skin/legacy/tooltips.cpp (+show_crate_galaxy tooltip)
 - Crate intelligence seam: CMakeLists.txt (SonicVectors/scores sources and golden test)
+- FX out-of-box default seam (2026-07-19): src/effects/effectsmanager.h (+decl
+  loadCrateDefaultStandardEffects), src/effects/effectsmanager.cpp (+include
+  effectpreset.h; readEffectsXml now seeds a default effect into standard units 1 & 2
+  -- Echo, Reverb -- whenever NO effect is loaded in ANY standard unit slot. This
+  covers both a virgin profile (empty preset list) AND a saved profile whose slots
+  are all empty (FX never used). Any single loaded effect anywhere disables the seed,
+  so a real setup is never clobbered; the fix self-heals on next launch. Routing
+  (unit N -> deck N) is unchanged upstream behaviour from StandardEffectChain's ctor.
+  Small, additive; low merge risk.
 - identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,
   src/dialog/dlgaboutdlg.ui, src/mixxx.rc, src/util/cmdlineargs.cpp,
   src/util/versionstore.cpp

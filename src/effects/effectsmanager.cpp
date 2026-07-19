@@ -1,5 +1,6 @@
 #include "effects/effectsmanager.h"
 
+#include <QDebug>
 #include <QDir>
 #include <QMetaType>
 
@@ -10,6 +11,7 @@
 #include "effects/effectslot.h"
 #include "effects/effectsmessenger.h"
 #include "effects/presets/effectchainpreset.h"
+#include "effects/presets/effectpreset.h"
 #include "effects/presets/effectpresetmanager.h"
 #include "effects/presets/effectxmlelements.h"
 #include "effects/visibleeffectslist.h"
@@ -248,6 +250,34 @@ void EffectsManager::readEffectsXml() {
         m_standardEffectChains.value(i)->loadChainPreset(data.standardEffectChainPresets.at(i));
     }
 
+    // Crate fork: seed default effects when the standard effect rack has never
+    // been used, so the EFFECTS units are not empty out-of-box (twisting a knob
+    // on an empty unit does nothing and FX feel dead). One test covers two cases:
+    //   1. a virgin profile (no effects.xml -> empty preset list), and
+    //   2. a profile that saved effects.xml but left every slot in every standard
+    //      unit empty (FX literally never loaded -- e.g. the user who filed the
+    //      "fx are not working" report; her saved profile self-heals on next launch).
+    // As soon as even one effect is loaded anywhere in the standard rack we do
+    // NOT reseed, so a real setup can never be clobbered. Routing is untouched.
+    bool anyStandardEffectLoaded = false;
+    for (const auto& pChainPreset : std::as_const(data.standardEffectChainPresets)) {
+        if (!pChainPreset) {
+            continue;
+        }
+        for (const auto& pEffectPreset : pChainPreset->effectPresets()) {
+            if (pEffectPreset && !pEffectPreset->id().isEmpty()) {
+                anyStandardEffectLoaded = true;
+                break;
+            }
+        }
+        if (anyStandardEffectLoaded) {
+            break;
+        }
+    }
+    if (!anyStandardEffectLoaded) {
+        loadCrateDefaultStandardEffects();
+    }
+
     if (!data.outputChainPreset.isNull()) {
         m_outputEffectChain->loadChainPreset(data.outputChainPreset);
     }
@@ -284,6 +314,50 @@ void EffectsManager::readEffectsXml() {
     }
 
     m_pVisibleEffectsList->readEffectsXml(doc, m_pBackendManager);
+}
+
+void EffectsManager::loadCrateDefaultStandardEffects() {
+    // Crate fork default. Called when no effect is loaded in any standard unit
+    // (a virgin profile, or a saved profile that never used FX -- see readEffectsXml).
+    qDebug() << "Crate: standard effect rack is empty, seeding default effects "
+                "(Echo -> unit 1, Reverb -> unit 2)";
+    // Stock Mixxx already routes standard effect unit N to deck N (see
+    // StandardEffectChain's constructor, which enables group_[ChannelN]_enable
+    // for the matching deck) and the dry/wet (mix) knob works -- but no effect
+    // is loaded into the units, so the rack is silent no matter how she twists.
+    // Load an obvious, single-knob-audible effect into the first two units so
+    // that turning the dry/wet knob up immediately does something on decks 1/2.
+    // We intentionally avoid Filter here: its centre metaknob is neutral, so the
+    // dry/wet knob alone would be inaudible, and the mixer already has a per-deck
+    // Filter (QuickEffect) knob. Echo and Reverb are audible from the dry/wet
+    // knob alone at the default super value.
+    struct CrateDefaultEffect {
+        int unitIndex;
+        const char* effectId;
+    };
+    constexpr CrateDefaultEffect kDefaults[] = {
+            {0, "org.mixxx.effects.echo"},
+            {1, "org.mixxx.effects.reverb"},
+    };
+    for (const auto& def : kDefaults) {
+        if (def.unitIndex >= m_standardEffectChains.size()) {
+            continue;
+        }
+        auto pChain = m_standardEffectChains.at(def.unitIndex);
+        VERIFY_OR_DEBUG_ASSERT(pChain) {
+            continue;
+        }
+        auto pSlot = pChain->getEffectSlot(0);
+        VERIFY_OR_DEBUG_ASSERT(pSlot) {
+            continue;
+        }
+        auto pManifest = m_pBackendManager->getManifest(
+                QString::fromLatin1(def.effectId), EffectBackendType::BuiltIn);
+        VERIFY_OR_DEBUG_ASSERT(pManifest) {
+            continue;
+        }
+        pSlot->loadEffectWithDefaults(pManifest);
+    }
 }
 
 void EffectsManager::readEffectsXmlSingleDeck(const QString& deckGroup) {

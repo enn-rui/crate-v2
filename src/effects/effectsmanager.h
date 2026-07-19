@@ -89,6 +89,9 @@ class EffectsManager {
     void addQuickEffectChain(const ChannelHandleAndGroup& deckHandleGroup);
 
     void readEffectsXml();
+    // Crate fork: seed a sensible effect into the first standard units on a
+    // virgin profile so the EFFECTS rack is alive out-of-box. See impl.
+    void loadCrateDefaultStandardEffects();
     void readEffectsXmlSingleDeck(const QString& deckGroup);
     void readEffectsXmlSingleDeckStem(const QString& deckStemGroup);
     void saveEffectsXml();
