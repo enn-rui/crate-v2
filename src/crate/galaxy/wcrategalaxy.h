@@ -77,6 +77,9 @@ class WCrateGalaxy : public QGraphicsView {
     QString testRelpathForLocation(const QString& location) const {
         return relpathForLocation(location);
     }
+    int testNodeAtViewportPos(const QPoint& viewportPos) const {
+        return nodeAtViewportPos(viewportPos);
+    }
     bool testNodeVisible(int index) const;
     bool testNodeGhosted(int index) const;
     bool testNodeHasHalo(int index) const;

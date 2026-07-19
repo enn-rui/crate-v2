@@ -428,6 +428,82 @@ TEST_F(CrateGalaxyUiTest, SubsetGhostsOnlyExcludedNodesWithoutMovingOrRebuilding
     }
 }
 
+TEST_F(CrateGalaxyUiTest, WheelZoomIsClampedBothDirections) {
+    // Regression: unclamped wheel zoom ran the view transform to extremes —
+    // "sometimes it will get to a point where i just see a blank page".
+    const auto zoomRatio = [this] {
+        return m_pGalaxy->transform().m11();
+    };
+    const double fitScale = zoomRatio();
+    ASSERT_GT(fitScale, 0.0);
+    const auto sendWheel = [this](int delta) {
+        QWheelEvent event(QPointF(m_pGalaxy->viewport()->rect().center()),
+                QPointF(),
+                QPoint(),
+                QPoint(0, delta),
+                Qt::NoButton,
+                Qt::NoModifier,
+                Qt::NoScrollPhase,
+                false);
+        QApplication::sendEvent(m_pGalaxy->viewport(), &event);
+    };
+    for (int i = 0; i < 60; ++i) {
+        sendWheel(-120);
+    }
+    EXPECT_GE(zoomRatio() / fitScale, 0.5 - 1e-6)
+            << "zoom-out escaped the floor";
+    for (int i = 0; i < 200; ++i) {
+        sendWheel(+120);
+    }
+    EXPECT_LE(zoomRatio() / fitScale, 40.0 + 1e-6)
+            << "zoom-in escaped the ceiling";
+    for (int i = 0; i < 200; ++i) {
+        sendWheel(-120);
+    }
+    EXPECT_GE(zoomRatio() / fitScale, 0.5 - 1e-6);
+}
+
+TEST_F(CrateGalaxyUiTest, PickResolvesDotsEvenWhenPillsOverlap) {
+    // Regression: hover pills are large screen-anchored QGraphicsItems above
+    // the dots; the old itemAt() pick returned the pill instead of the dot
+    // beneath the cursor, so with a pill up, double-click load / right-click
+    // menus resolved the wrong node or none ("hitbox gets really funky when
+    // the pill shows up"). The pick is geometric now — pills must be invisible
+    // to it.
+    const int count = m_pGalaxy->testNodeCount();
+    ASSERT_GT(count, 3);
+    // Hover node 0 to spawn its pill.
+    const QPoint hoverPos =
+            m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(0));
+    QTest::mouseMove(m_pGalaxy->viewport(), hoverPos);
+    QApplication::processEvents();
+    // Picking at a node's own viewport position must resolve to that node —
+    // or, if dots crowd inside the pick radius, to one at least as close
+    // (nearest-wins is the contract; the pill must never divert the pick).
+    for (int i = 0; i < qMin(count, 8); ++i) {
+        const QPoint pos =
+                m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(i));
+        if (!m_pGalaxy->viewport()->rect().contains(pos)) {
+            continue;
+        }
+        const int picked = m_pGalaxy->testNodeAtViewportPos(pos);
+        ASSERT_GE(picked, 0) << "no pick at node " << i;
+        const QPoint pickedPos = m_pGalaxy->mapFromScene(
+                m_pGalaxy->testNodeDisplayPos(picked));
+        const auto d2 = [&pos](const QPoint& p) {
+            const QPoint d = p - pos;
+            return d.x() * d.x() + d.y() * d.y();
+        };
+        // The click sits exactly on node i, so the picked node must render at
+        // (or within integer-rounding of) the click point — anything farther
+        // means the pick was diverted (the old pill-shadow failure mode).
+        EXPECT_LE(d2(pickedPos), 4)
+                << "pick diverted away from node " << i << " to " << picked;
+    }
+    // Far away from any dot: no pick.
+    EXPECT_EQ(m_pGalaxy->testNodeAtViewportPos(QPoint(-500, -500)), -1);
+}
+
 TEST_F(CrateGalaxyUiTest, LocationResolvesUnderAnyRootSpelling) {
     // Regression: her real profile stored music_root as the UNC share while the
     // Mixxx library held Z:/ locations — the old music_root prefix strip

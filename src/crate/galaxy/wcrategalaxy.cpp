@@ -833,6 +833,17 @@ void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
 
 void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     QMenu menu(this);
+    // A code-created QMenu pops up as a native-styled (white) top-level window
+    // — the skin stylesheet never reaches it. Style it ink explicitly.
+    menu.setStyleSheet(QStringLiteral(
+            "QMenu { background-color: #0d1017; color: #f4f7fb;"
+            "  border: 1px solid rgba(244, 247, 251, 51); padding: 4px; }"
+            "QMenu::item { padding: 4px 20px 4px 24px; background: transparent; }"
+            "QMenu::item:selected { background-color: #b4d2ff; color: #05060a; }"
+            "QMenu::item:disabled { color: rgba(244, 247, 251, 90); }"
+            "QMenu::separator { height: 1px;"
+            "  background: rgba(244, 247, 251, 51); margin: 4px 6px; }"
+            "QMenu::indicator { width: 12px; height: 12px; margin-left: 6px; }"));
     // Deck-choice load (spec wave-5 S3): if the right-click landed on a
     // selectable dot, offer "Load to Deck N" for each deck at the top. Ghosted /
     // non-selectable nodes get no deck-load entries.
@@ -957,12 +968,25 @@ QString WCrateGalaxy::resolveMusicPath(const QString& relpath) const {
 }
 
 void WCrateGalaxy::wheelEvent(QWheelEvent* pEvent) {
+    // Clamp cumulative zoom relative to the fitted scale. Unclamped wheel zoom
+    // could run the transform to extremes — a few notches past the content and
+    // the view showed "a blank page, no points or pills" with no obvious way
+    // back. The 0.5x floor guarantees zooming out always returns the whole
+    // galaxy to the viewport; 40x is deep enough to isolate a single dot.
+    constexpr double kMinZoomRatio = 0.5;
+    constexpr double kMaxZoomRatio = 40.0;
     const double factor = (pEvent->angleDelta().y() > 0) ? 1.15 : (1.0 / 1.15);
-    scale(factor, factor);
-    if (m_3dMode) {
-        update3dProjection();
+    const double current =
+            m_fitScale > 0.0 ? transform().m11() / m_fitScale : 1.0;
+    const double target = qBound(kMinZoomRatio, current * factor, kMaxZoomRatio);
+    const double apply = current > 0.0 ? target / current : 1.0;
+    if (!qFuzzyCompare(apply, 1.0)) {
+        scale(apply, apply);
+        if (m_3dMode) {
+            update3dProjection();
+        }
+        updatePills();
     }
-    updatePills();
     pEvent->accept();
 }
 
@@ -1184,11 +1208,7 @@ void WCrateGalaxy::mouseMoveEvent(QMouseEvent* pEvent) {
         return;
     }
     QGraphicsView::mouseMoveEvent(pEvent);
-    QGraphicsItem* pItem = itemAt(pEvent->pos());
-    setHoveredNode(m_3dMode ? projectedNodeAt(pEvent->pos())
-                           : (pItem != nullptr && pItem->data(0).isValid()
-                    ? pItem->data(0).toInt()
-                    : -1));
+    setHoveredNode(nodeAtViewportPos(pEvent->pos()));
 }
 
 void WCrateGalaxy::leaveEvent(QEvent* pEvent) {
@@ -1573,12 +1593,27 @@ int WCrateGalaxy::nodeAtViewportPos(const QPoint& viewportPos) const {
     if (m_3dMode) {
         return projectedNodeAt(viewportPos);
     }
-    QGraphicsItem* pItem = itemAt(viewportPos);
-    if (pItem != nullptr && pItem->data(0).isValid()) {
-        const int index = pItem->data(0).toInt();
-        return nodeSelectable(index) ? index : -1;
+    // Geometric pick in VIEWPORT space, mirroring projectedNodeAt. itemAt()
+    // returned whatever was topmost — hover pills are 172x50 screen-anchored
+    // rects above the dots, so once a pill showed, clicks over a wide area
+    // resolved to the pill's node (or nothing) instead of the dot under the
+    // cursor ("the hitbox gets really funky when the pill shows up").
+    int nearest = -1;
+    double bestDistance = 14.0 * 14.0;
+    for (int i = 0; i < m_dots.size(); ++i) {
+        if (!nodeSelectable(i)) {
+            continue;
+        }
+        const QPointF center = mapFromScene(m_dots[i]->pos());
+        const double dx = center.x() - viewportPos.x();
+        const double dy = center.y() - viewportPos.y();
+        const double distance = dx * dx + dy * dy;
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            nearest = i;
+        }
     }
-    return -1;
+    return nearest;
 }
 
 QVector<WCrateGalaxy::DeckLoadEntry> WCrateGalaxy::deckLoadEntries(int nodeIndex) const {
@@ -1745,25 +1780,20 @@ QString WCrateGalaxy::testColorMode() const {
 }
 
 void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
-    QGraphicsItem* pItem = itemAt(pEvent->pos());
-    const int projectedIndex = m_3dMode ? projectedNodeAt(pEvent->pos()) : -1;
-    if ((m_3dMode ? projectedIndex < 0 : pItem == nullptr) || m_pPlayerManager == nullptr) {
+    const int node = nodeAtViewportPos(pEvent->pos());
+    if (node < 0 || m_pPlayerManager == nullptr) {
         QGraphicsView::mouseDoubleClickEvent(pEvent);
-        return;
-    }
-    const QVariant idx = m_3dMode ? QVariant(projectedIndex) : pItem->data(0);
-    if (!idx.isValid() || !nodeSelectable(idx.toInt())) {
         return;
     }
     // Re-seed the MAP-walk cursor here: a click on a node resets the walk with
     // this node as the new origin (spec: cursor re-seeded by a mouse click).
-    setCursorNode(idx.toInt(), /*resetWalk=*/true);
+    setCursorNode(node, /*resetWalk=*/true);
     // Smarter target (spec wave-5 S3, item 2): the natural next-prep deck, never
     // stealing a playing one. Plain double-click no longer forces first-stopped.
     const int deck = nextPrepDeck();
     if (deck < 1) {
         kLogger.info() << "all decks playing; not loading"
-                       << m_nodes[idx.toInt()].relpath;
+                       << m_nodes[node].relpath;
         return;
     }
     // Table-jump on load, then load into the chosen deck.
