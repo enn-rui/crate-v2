@@ -10,8 +10,10 @@
 #include <QFontMetrics>
 #include <QLinearGradient>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QtMath>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -129,6 +131,23 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     setRenderHint(QPainter::Antialiasing, true);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_3dMode = m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_3d"), 0) != 0;
+    const QString debugOrbit = m_pConfig->getValue(
+            ConfigKey("[Crate]", "galaxy_debug_orbit"), QString());
+    const QStringList orbitParts = debugOrbit.split(',');
+    if (m_3dMode && orbitParts.size() == 2) {
+        bool azOk = false;
+        bool elOk = false;
+        const double az = orbitParts[0].trimmed().toDouble(&azOk);
+        const double el = orbitParts[1].trimmed().toDouble(&elOk);
+        if (azOk && elOk) {
+            m_azimuth = az;
+            m_elevation = qBound(-85.0, el, 85.0);
+        }
+    }
+    if (m_3dMode) {
+        setDragMode(QGraphicsView::NoDrag);
+    }
     const QString savedMode = m_pConfig->getValue(
             ConfigKey("[Crate]", "galaxy_color_mode"), QStringLiteral("cluster"))
                                       .trimmed()
@@ -210,6 +229,10 @@ void WCrateGalaxy::populate() {
         m_pScene->addItem(pDot);
         m_dots.append(pDot);
     }
+    m_pScene->setSceneRect(0.0, 0.0, kSceneSpan, kSceneSpan);
+    if (m_3dMode) {
+        update3dProjection();
+    }
     kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
 }
 
@@ -249,15 +272,11 @@ QColor WCrateGalaxy::nodeColor(const GalaxyNode& node) const {
 }
 
 void WCrateGalaxy::updateColors() {
-    for (QGraphicsItem* pItem : m_pScene->items()) {
-        auto* pDot = qgraphicsitem_cast<QGraphicsEllipseItem*>(pItem);
-        if (pDot == nullptr || !pDot->data(0).isValid()) {
-            continue;
-        }
-        const int index = pDot->data(0).toInt();
-        if (index >= 0 && index < m_nodes.size()) {
-            pDot->setBrush(nodeColor(m_nodes[index]));
-        }
+    for (int i = 0; i < m_dots.size(); ++i) {
+        m_dots[i]->setBrush(nodeColor(m_nodes[i]));
+    }
+    if (m_3dMode) {
+        update3dProjection();
     }
     viewport()->update();
 }
@@ -296,6 +315,11 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     addMode(tr("Color by Key"), ColorMode::Key);
     addMode(tr("Color by Tempo"), ColorMode::Tempo);
     addMode(tr("Color by Energy"), ColorMode::Energy);
+    menu.addSeparator();
+    QAction* p3d = menu.addAction(tr("3D view"));
+    p3d->setCheckable(true);
+    p3d->setChecked(m_3dMode);
+    connect(p3d, &QAction::toggled, this, &WCrateGalaxy::set3dMode);
     menu.exec(pEvent->globalPos());
     pEvent->accept();
 }
@@ -373,6 +397,9 @@ QString WCrateGalaxy::resolveMusicPath(const QString& relpath) const {
 void WCrateGalaxy::wheelEvent(QWheelEvent* pEvent) {
     const double factor = (pEvent->angleDelta().y() > 0) ? 1.15 : (1.0 / 1.15);
     scale(factor, factor);
+    if (m_3dMode) {
+        update3dProjection();
+    }
     updatePills();
     pEvent->accept();
 }
@@ -384,12 +411,179 @@ void WCrateGalaxy::setHoveredNode(int index) {
     }
 }
 
+void WCrateGalaxy::set3dMode(bool enabled) {
+    if (m_3dMode == enabled) {
+        return;
+    }
+    m_3dMode = enabled;
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_3d"), enabled ? 1 : 0);
+    setDragMode(enabled ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
+    setHoveredNode(-1);
+    if (enabled) {
+        update3dProjection();
+    } else if (!m_nodes.isEmpty()) {
+        double minX = m_nodes[0].x, maxX = m_nodes[0].x;
+        double minY = m_nodes[0].y, maxY = m_nodes[0].y;
+        for (const GalaxyNode& node : std::as_const(m_nodes)) {
+            minX = qMin(minX, node.x);
+            maxX = qMax(maxX, node.x);
+            minY = qMin(minY, node.y);
+            maxY = qMax(maxY, node.y);
+        }
+        const double spanX = qMax(maxX - minX, 1e-9);
+        const double spanY = qMax(maxY - minY, 1e-9);
+        for (int i = 0; i < m_dots.size(); ++i) {
+            QGraphicsEllipseItem* pDot = m_dots[i];
+            pDot->setVisible(true);
+            pDot->setRect(-kDotRadius, -kDotRadius, 2 * kDotRadius, 2 * kDotRadius);
+            pDot->setPos((m_nodes[i].x - minX) / spanX * kSceneSpan,
+                    (m_nodes[i].y - minY) / spanY * kSceneSpan);
+            pDot->setZValue(0.0);
+            pDot->setBrush(nodeColor(m_nodes[i]));
+        }
+    }
+    updatePills();
+    viewport()->update();
+}
+
+void WCrateGalaxy::update3dProjection() {
+    if (!m_3dMode || m_nodes.isEmpty()) {
+        return;
+    }
+    double cx = 0.0, cy = 0.0, cz = 0.0;
+    int count = 0;
+    for (const GalaxyNode& node : std::as_const(m_nodes)) {
+        if (node.has3d) {
+            cx += node.x3d;
+            cy += node.y3d;
+            cz += node.z;
+            ++count;
+        }
+    }
+    if (count == 0) {
+        for (QGraphicsEllipseItem* pDot : std::as_const(m_dots)) {
+            pDot->setVisible(false);
+        }
+        return;
+    }
+    cx /= count;
+    cy /= count;
+    cz /= count;
+    double extent = 0.0;
+    for (const GalaxyNode& node : std::as_const(m_nodes)) {
+        if (node.has3d) {
+            extent = qMax(extent, std::abs(node.x3d - cx));
+            extent = qMax(extent, std::abs(node.y3d - cy));
+            extent = qMax(extent, std::abs(node.z - cz));
+        }
+    }
+    extent = qMax(extent, 1e-9);
+    const double az = qDegreesToRadians(m_azimuth);
+    const double el = qDegreesToRadians(m_elevation);
+    const double ca = std::cos(az), sa = std::sin(az);
+    const double ce = std::cos(el), se = std::sin(el);
+    QVector<double> depths(m_nodes.size(), 0.0);
+    double minDepth = 0.0, maxDepth = 0.0;
+    bool first = true;
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        const GalaxyNode& node = m_nodes[i];
+        if (!node.has3d) {
+            m_dots[i]->setVisible(false);
+            continue;
+        }
+        const double x = (node.x3d - cx) / extent;
+        const double y = (node.y3d - cy) / extent;
+        const double z = (node.z - cz) / extent;
+        const double rx = ca * x + sa * z;
+        const double rz = -sa * x + ca * z;
+        const double ry = ce * y - se * rz;
+        const double depth = se * y + ce * rz;
+        depths[i] = depth;
+        minDepth = first ? depth : qMin(minDepth, depth);
+        maxDepth = first ? depth : qMax(maxDepth, depth);
+        first = false;
+        m_dots[i]->setPos(kSceneSpan * 0.5 + rx * kSceneSpan * 0.38,
+                kSceneSpan * 0.5 - ry * kSceneSpan * 0.38);
+    }
+    const double depthSpan = qMax(maxDepth - minDepth, 1e-9);
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        if (!m_nodes[i].has3d) {
+            continue;
+        }
+        const double d = (depths[i] - minDepth) / depthSpan;
+        const double radius = kDotRadius * (0.55 + 0.9 * d);
+        QColor color = nodeColor(m_nodes[i]);
+        color.setAlpha(qRound(70.0 + 170.0 * d));
+        QGraphicsEllipseItem* pDot = m_dots[i];
+        pDot->setVisible(true);
+        pDot->setRect(-radius, -radius, 2 * radius, 2 * radius);
+        pDot->setBrush(color);
+        pDot->setZValue(depths[i]);
+    }
+    updatePills();
+    viewport()->update();
+}
+
+int WCrateGalaxy::projectedNodeAt(const QPoint& viewportPos) const {
+    int nearest = -1;
+    double bestDistance = 18.0 * 18.0;
+    for (int i = 0; i < m_dots.size(); ++i) {
+        if (!m_dots[i]->isVisible() || !m_nodes[i].has3d) {
+            continue;
+        }
+        const QPointF center = mapFromScene(m_dots[i]->pos());
+        const double dx = center.x() - viewportPos.x();
+        const double dy = center.y() - viewportPos.y();
+        const double distance = dx * dx + dy * dy;
+        if (distance <= bestDistance) {
+            bestDistance = distance;
+            nearest = i;
+        }
+    }
+    return nearest;
+}
+
+void WCrateGalaxy::mousePressEvent(QMouseEvent* pEvent) {
+    if (m_3dMode && pEvent->button() == Qt::LeftButton) {
+        m_orbiting = true;
+        m_orbitMoved = false;
+        m_orbitLast = pEvent->pos();
+        pEvent->accept();
+        return;
+    }
+    QGraphicsView::mousePressEvent(pEvent);
+}
+
+void WCrateGalaxy::mouseReleaseEvent(QMouseEvent* pEvent) {
+    if (m_3dMode && pEvent->button() == Qt::LeftButton && m_orbiting) {
+        m_orbiting = false;
+        pEvent->accept();
+        return;
+    }
+    QGraphicsView::mouseReleaseEvent(pEvent);
+}
+
 void WCrateGalaxy::mouseMoveEvent(QMouseEvent* pEvent) {
+    if (m_3dMode && m_orbiting) {
+        const QPoint delta = pEvent->pos() - m_orbitLast;
+        if (delta.manhattanLength() > 0) {
+            m_orbitMoved = m_orbitMoved || delta.manhattanLength() > 2;
+            m_azimuth += delta.x() * 360.0 / qMax(1, viewport()->width());
+            m_elevation = qBound(-85.0,
+                    m_elevation + delta.y() * 360.0 / qMax(1, viewport()->width()),
+                    85.0);
+            m_orbitLast = pEvent->pos();
+            update3dProjection();
+        }
+        pEvent->accept();
+        return;
+    }
     QGraphicsView::mouseMoveEvent(pEvent);
     QGraphicsItem* pItem = itemAt(pEvent->pos());
-    setHoveredNode(pItem != nullptr && pItem->data(0).isValid()
+    setHoveredNode(m_3dMode ? projectedNodeAt(pEvent->pos())
+                           : (pItem != nullptr && pItem->data(0).isValid()
                     ? pItem->data(0).toInt()
-                    : -1);
+                    : -1));
 }
 
 void WCrateGalaxy::leaveEvent(QEvent* pEvent) {
@@ -399,6 +593,9 @@ void WCrateGalaxy::leaveEvent(QEvent* pEvent) {
 
 void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
     QGraphicsView::resizeEvent(pEvent);
+    if (m_3dMode) {
+        update3dProjection();
+    }
     updatePills();
 }
 
@@ -418,7 +615,7 @@ void WCrateGalaxy::updatePills() {
     const double margin = 190.0 / qMax(transform().m11(), 0.001);
     const QRectF nearby = visible.adjusted(-margin, -margin, margin, margin);
     QVector<int> candidates;
-    if (lodOpacity > 0.0) {
+    if (!m_3dMode && lodOpacity > 0.0) {
         for (int i = 0; i < m_dots.size(); ++i) {
             if (nearby.contains(m_dots[i]->pos())) {
                 candidates.append(i);
@@ -453,11 +650,13 @@ void WCrateGalaxy::updatePills() {
         occupiedCells.insert(cell);
         occupiedRects.append(pillRect);
     };
-    if (m_hoveredNode >= 0) {
+    if (m_hoveredNode >= 0 && (!m_3dMode || m_nodes[m_hoveredNode].has3d)) {
         tryAdd(m_hoveredNode);
     }
-    for (int index : std::as_const(candidates)) {
-        tryAdd(index);
+    if (!m_3dMode) {
+        for (int index : std::as_const(candidates)) {
+            tryAdd(index);
+        }
     }
     for (auto it = m_pills.begin(); it != m_pills.end();) {
         if (!wanted.contains(it.key())) {
@@ -484,11 +683,12 @@ void WCrateGalaxy::updatePills() {
 
 void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
     QGraphicsItem* pItem = itemAt(pEvent->pos());
-    if (pItem == nullptr || m_pPlayerManager == nullptr) {
+    const int projectedIndex = m_3dMode ? projectedNodeAt(pEvent->pos()) : -1;
+    if ((m_3dMode ? projectedIndex < 0 : pItem == nullptr) || m_pPlayerManager == nullptr) {
         QGraphicsView::mouseDoubleClickEvent(pEvent);
         return;
     }
-    const QVariant idx = pItem->data(0);
+    const QVariant idx = m_3dMode ? QVariant(projectedIndex) : pItem->data(0);
     if (!idx.isValid()) {
         return;
     }
@@ -514,7 +714,7 @@ void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
 void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
     QGraphicsView::showEvent(pEvent);
     if (!m_initialFitDone && !m_pScene->items().isEmpty()) {
-        fitInView(m_pScene->itemsBoundingRect(), Qt::KeepAspectRatio);
+        fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
         m_fitScale = transform().m11();
         const double debugZoom = m_pConfig->getValue(
                 ConfigKey("[Crate]", "galaxy_debug_zoom"), 0.0);

@@ -15,6 +15,10 @@ struct GalaxyNode {
     QString artist;
     double x = 0.0;
     double y = 0.0;
+    double x3d = 0.0;
+    double y3d = 0.0;
+    double z = 0.0;
+    bool has3d = false;
     int clusterId = -1; // -1 = noise per HDBSCAN convention
     double bpm = 0.0;
     QString keyCamelot;

@@ -101,6 +101,20 @@ bool CrateSidecars::load() {
             m_nodes.append(node);
         }
     }
+    {
+        QSqlQuery q(umap);
+        q.exec(QStringLiteral("SELECT relpath, x, y, z FROM coords3d"));
+        while (q.next()) {
+            const auto it = indexByRelpath.constFind(q.value(0).toString());
+            if (it != indexByRelpath.constEnd()) {
+                GalaxyNode& node = m_nodes[it.value()];
+                node.x3d = q.value(1).toDouble();
+                node.y3d = q.value(2).toDouble();
+                node.z = q.value(3).toDouble();
+                node.has3d = true;
+            }
+        }
+    }
     closeAndRemove(&umap);
 
     QSqlDatabase clusters = openRo(QDir(m_dir).filePath(QStringLiteral("clusters.sqlite")));

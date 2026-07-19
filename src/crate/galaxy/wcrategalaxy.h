@@ -31,6 +31,8 @@ class WCrateGalaxy : public QGraphicsView {
     void drawForeground(QPainter* pPainter, const QRectF& rect) override;
     void wheelEvent(QWheelEvent* pEvent) override;
     void mouseDoubleClickEvent(QMouseEvent* pEvent) override;
+    void mousePressEvent(QMouseEvent* pEvent) override;
+    void mouseReleaseEvent(QMouseEvent* pEvent) override;
     void mouseMoveEvent(QMouseEvent* pEvent) override;
     void leaveEvent(QEvent* pEvent) override;
     void resizeEvent(QResizeEvent* pEvent) override;
@@ -59,6 +61,9 @@ class WCrateGalaxy : public QGraphicsView {
     QString resolveMusicPath(const QString& relpath) const;
     void updatePills();
     void setHoveredNode(int index);
+    void set3dMode(bool enabled);
+    void update3dProjection();
+    int projectedNodeAt(const QPoint& viewportPos) const;
 
     PlayerManager* m_pPlayerManager;
     UserSettingsPointer m_pConfig;
@@ -71,6 +76,12 @@ class WCrateGalaxy : public QGraphicsView {
     ValueRange m_tempoRange;
     ValueRange m_energyRange;
     bool m_initialFitDone = false;
+    bool m_3dMode = false;
+    double m_azimuth = 30.0;
+    double m_elevation = 18.0;
+    QPoint m_orbitLast;
+    bool m_orbiting = false;
+    bool m_orbitMoved = false;
     double m_fitScale = 1.0;
     int m_hoveredNode = -1;
 };
