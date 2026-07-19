@@ -502,6 +502,44 @@ TEST(CrateGalaxyPickDeck, NextPrepDeckRuleCoversStateTable) {
     EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{}, -1), 0);
 }
 
+TEST(CrateGalaxyOrbitSensitivity, ScreenMotionConstantAcrossZoom) {
+    using crate::WCrateGalaxy;
+    const int extent = 800; // viewport width in px
+    const int pixels = 40;  // a mouse drag of 40px
+
+    // At the fitted scale (zoomRatio 1.0) a full-width drag sweeps 360 degrees.
+    const double atFit = WCrateGalaxy::orbitAngleDelta(extent, extent, 1.0);
+    EXPECT_NEAR(atFit, 360.0, 1e-9);
+
+    // Zooming in must SHRINK the angle per pixel by exactly the zoom ratio, so
+    // the on-screen (scaled) motion of a node is identical. This is the fix for
+    // "way too high when zoomed in".
+    const double d1 = WCrateGalaxy::orbitAngleDelta(pixels, extent, 1.0);
+    const double d8 = WCrateGalaxy::orbitAngleDelta(pixels, extent, 8.0);
+    EXPECT_GT(d1, 0.0);
+    EXPECT_NEAR(d1 / d8, 8.0, 1e-9); // 8x zoom -> 1/8 the angle
+    // Screen-pixel motion = angle * zoom must match at both levels.
+    EXPECT_NEAR(d1 * 1.0, d8 * 8.0, 1e-9);
+
+    // A mid zoom scales proportionally too.
+    const double d4 = WCrateGalaxy::orbitAngleDelta(pixels, extent, 4.0);
+    EXPECT_NEAR(d1 / d4, 4.0, 1e-9);
+
+    // Sign is preserved (dragging the other way orbits the other way).
+    EXPECT_NEAR(WCrateGalaxy::orbitAngleDelta(-pixels, extent, 2.0),
+            -WCrateGalaxy::orbitAngleDelta(pixels, extent, 2.0),
+            1e-9);
+
+    // Degenerate guards: zero/negative extent and non-positive zoom never crash
+    // and never explode (treated as extent>=1, ratio 1.0).
+    EXPECT_NEAR(WCrateGalaxy::orbitAngleDelta(pixels, 0, 1.0),
+            pixels * 360.0, 1e-9);
+    EXPECT_NEAR(WCrateGalaxy::orbitAngleDelta(pixels, extent, 0.0),
+            WCrateGalaxy::orbitAngleDelta(pixels, extent, 1.0), 1e-9);
+    EXPECT_NEAR(WCrateGalaxy::orbitAngleDelta(pixels, extent, -3.0),
+            WCrateGalaxy::orbitAngleDelta(pixels, extent, 1.0), 1e-9);
+}
+
 TEST_F(CrateGalaxyUiTest, GhostedNodeOffersNoDeckLoadMenu) {
     ControlObject deck1Play(ConfigKey("[Channel1]", "play"));
     ControlObject deck2Play(ConfigKey("[Channel2]", "play"));

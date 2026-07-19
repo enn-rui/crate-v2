@@ -53,6 +53,17 @@ class WCrateGalaxy : public QGraphicsView {
     // stopped deck anywhere.
     static int pickNextPrepDeck(const QVector<bool>& playing, int lastStartedIndex);
 
+    // Pure, engine-free sensitivity mapping for the 3D orbit (spec wave-5 S4).
+    // Returns the orbit angle change in DEGREES for a mouse motion of
+    // `pixelDelta` pixels, scaled so a pixel of mouse motion moves the scene the
+    // same number of SCREEN pixels at every zoom. `viewportExtent` is the
+    // viewport span (px) a full 360-degree sweep maps to at the fitted scale;
+    // `zoomRatio` is the current view scale over the fit scale (1.0 at fit, >1
+    // zoomed in). Larger zoom -> smaller angle per pixel, so on-screen motion
+    // stays constant. Her report: orbit "way too high when zoomed in" because
+    // the old mapping ignored zoom entirely.
+    static double orbitAngleDelta(int pixelDelta, int viewportExtent, double zoomRatio);
+
     // Test-only introspection. Cheap const accessors, no behavior; let the
     // widget test recompute the walk metric independently and assert against it.
     int testCursorNode() const {

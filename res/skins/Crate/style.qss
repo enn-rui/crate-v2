@@ -1452,8 +1452,7 @@ WEffectChainPresetButton::menu-indicator {
   qproperty-layoutSpacing: 2;
   padding: 0px 0px 1px 0px;
   qproperty-layoutAlignment: 'AlignHCenter | AlignTop';
-  background-color: #333; /*
-  background-color: #664971;  */
+  background-color: #0d1017; /* wave-5: was #333 stock-grey; Crate panel ink */
 }
 
 #EffectUnitHead {
@@ -1677,7 +1676,7 @@ WStarRating {
 }
 
 #MicAuxRack {
-  background-color: #222;
+  background-color: #0d1017; /* wave-5: was #222 stock-grey; Crate panel ink */
   margin-bottom: 4px;
   qproperty-layoutSpacing: 3;
 }
@@ -1689,7 +1688,7 @@ WStarRating {
 
 #MicAuxContainer, #MicDuckingContainer {
   margin: 0px;
-  background-color: #333;
+  background-color: #05060a; /* wave-5: was #333 stock-grey; Crate inset ink */
 }
 
 #MicAuxContainer {
@@ -2868,4 +2867,113 @@ QLineEdit QMenu::item:selected {
 #HotcueButton[displayValue="1"],
 #HotcueButton[displayValue="2"] {
   border-color: rgba(244, 247, 251, 122);
+}
+
+/*******************************************************************************
+ ** Crate v2 wave-5: dropdown + FX/mic ink pass ********************************
+ *******************************************************************************
+ * Two recurring bugs across QComboBox flavors, fixed repo-wide here:
+ *   (1) IBM Plex Mono (wave-4 font) is wider than the paddings the stock Deere
+ *       combos were tuned for, so the drop-down arrow overlapped the text. Fix:
+ *       a DEFAULT padding-right >= the drop-down button width for every combo.
+ *   (2) Some combo popups (QComboBox QAbstractItemView) rendered native-white or
+ *       stock-grey with unreadable text, because the popup view does not inherit
+ *       the combo's own colors on Windows. Fix: explicit dark ink popups for
+ *       every flavor. Palette reused verbatim from the wave-4 identity pass:
+ *       ink #f4f7fb, panel #0d1017, deep #05060a, border rgba(244,247,251,51),
+ *       cold-blue accent #b4d2ff. No new greys, no VU/font changes.            */
+
+/* (1)+(2) Generic combos: preferences dialogs, library, and any stock QComboBox
+   (WComboBox etc.). WEffectSelector-family and #CrateMapControls override below/
+   above with their own more-specific rules. */
+QComboBox {
+  /* drop-down is 18px + 1px border; keep text clear of it under Plex Mono. */
+  padding-right: 22px;
+}
+QComboBox::drop-down {
+  subcontrol-origin: padding;
+  subcontrol-position: top right;
+  width: 18px;
+  border-left: 1px solid rgba(244, 247, 251, 51);
+}
+QComboBox::down-arrow {
+  image: url(skin:/image/style_branch_closed.svg);
+  width: 8px;
+  height: 8px;
+}
+QComboBox QAbstractItemView {
+  color: #f4f7fb;
+  background-color: #05060a;
+  border: 1px solid rgba(244, 247, 251, 51);
+  selection-color: #05060a;
+  selection-background-color: #b4d2ff;
+  outline: none;
+}
+
+/* (2) De-grey the FX / search / AutoDJ combo popups. These were stock warm-grey
+   (#201f1f bg, #c1cabe text, #aaa border, #565353 selection) which is exactly
+   the "grey has come back ... in drop downs" report. Move them to Crate ink.
+   Selectors mirror the earlier grey rules and appear later, so they win. */
+WEffectSelector::item:!selected,
+WEffectSelector QAbstractScrollArea,
+WEffectChainPresetSelector::item:!selected,
+WEffectChainPresetSelector QAbstractScrollArea,
+WSearchLineEdit::item:!selected,
+WSearchLineEdit QAbstractScrollArea,
+#fadeModeCombobox::item:!selected,
+#fadeModeCombobox QAbstractScrollArea {
+  color: #f4f7fb;
+  background-color: #05060a;
+}
+WEffectSelector QAbstractScrollArea,
+WEffectChainPresetSelector QAbstractScrollArea,
+WSearchLineEdit QAbstractScrollArea,
+#fadeModeCombobox QAbstractScrollArea {
+  border-color: rgba(244, 247, 251, 51);
+}
+WEffectSelector::item:selected,
+WEffectSelector::indicator:unchecked:selected,
+WEffectChainPresetSelector::item:selected,
+WEffectChainPresetSelector::indicator:unchecked:selected,
+WSearchLineEdit::item:selected,
+WSearchLineEdit::indicator:unchecked:selected,
+#fadeModeCombobox::item:selected,
+#fadeModeCombobox::indicator:unchecked:selected {
+  color: #f4f7fb;
+  background-color: rgba(180, 210, 255, 82);
+}
+/* Windows: the popup view does not inherit the combo's styles, so set it too. */
+WEffectSelector QAbstractItemView,
+WEffectChainPresetSelector QAbstractItemView,
+WSearchLineEdit QAbstractItemView,
+#fadeModeCombobox QAbstractItemView {
+  color: #f4f7fb;
+  background-color: #05060a;
+  selection-color: #f4f7fb;
+  selection-background-color: rgba(180, 210, 255, 82);
+  border: 1px solid rgba(244, 247, 251, 51);
+  outline: none;
+}
+/* Closed (collapsed) FX combos: de-grey the box body, border and hover accent. */
+WEffectSelector:!editable,
+WEffectChainPresetSelector:!editable,
+#fadeModeCombobox:!editable {
+  color: #f4f7fb;
+  border-color: rgba(244, 247, 251, 51);
+}
+WEffectSelector:!editable,
+WEffectSelector:!editable:on,
+WEffectChainPresetSelector:!editable,
+WEffectChainPresetSelector:!editable:on {
+  background-color: rgba(244, 247, 251, 13);
+}
+WEffectSelector:!editable:hover,
+WEffectChainPresetSelector:!editable:hover,
+#fadeModeCombobox:!editable:hover {
+  border: 1px solid #b4d2ff;
+}
+WEffectSelector::checked,
+WEffectChainPresetSelector::checked,
+#fadeModeCombobox::checked {
+  color: #b4d2ff;
 }

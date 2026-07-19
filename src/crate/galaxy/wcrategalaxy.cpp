@@ -1156,9 +1156,15 @@ void WCrateGalaxy::mouseMoveEvent(QMouseEvent* pEvent) {
         const QPoint delta = pEvent->pos() - m_orbitLast;
         if (delta.manhattanLength() > 0) {
             m_orbitMoved = m_orbitMoved || delta.manhattanLength() > 2;
-            m_azimuth += delta.x() * 360.0 / qMax(1, viewport()->width());
+            // Scale orbit by the current zoom so a screen pixel of mouse motion
+            // moves the scene the same number of screen pixels at every zoom
+            // (her report: sensitivity "way too high when zoomed in").
+            const double zoomRatio =
+                    m_fitScale > 0.0 ? transform().m11() / m_fitScale : 1.0;
+            const int extent = viewport()->width();
+            m_azimuth += orbitAngleDelta(delta.x(), extent, zoomRatio);
             m_elevation = qBound(-85.0,
-                    m_elevation + delta.y() * 360.0 / qMax(1, viewport()->width()),
+                    m_elevation + orbitAngleDelta(delta.y(), extent, zoomRatio),
                     85.0);
             m_orbitLast = pEvent->pos();
             update3dProjection();
@@ -1486,6 +1492,16 @@ QVector<bool> WCrateGalaxy::deckPlayingStates() const {
         states.append(ControlObject::get(playKey) != 0.0);
     }
     return states;
+}
+
+double WCrateGalaxy::orbitAngleDelta(int pixelDelta, int viewportExtent, double zoomRatio) {
+    const double extent = static_cast<double>(qMax(1, viewportExtent));
+    const double ratio = zoomRatio > 0.0 ? zoomRatio : 1.0;
+    // Base mapping: a full viewport-width drag = 360 degrees at the fitted scale.
+    // Dividing by the zoom ratio keeps the *screen-pixel* motion of a node
+    // constant, because the view transform already scales scene motion by that
+    // same ratio.
+    return static_cast<double>(pixelDelta) * 360.0 / extent / ratio;
 }
 
 int WCrateGalaxy::pickNextPrepDeck(const QVector<bool>& playing, int lastStartedIndex) {
