@@ -40,6 +40,25 @@ listed here. This list is the entire merge-conflict surface for future `upstream
   #565e6d/#2b3140, flat #979797/#b3b3b3 -> #7f8694, flat orange -> #b4d2ff) and
   cover_default.svg dimmed to ink (#2e3442/#4a5262). These are qrc-embedded — visual
   changes require a rebuild.
+- Full identity pass (2026-07-19, "Crate mixed with rekordbox"): res/skins/Crate only,
+  all disk-loaded (NO rebuild needed). (a) FONT: both font-family decls in style.qss now
+  "IBM Plex Mono","Cascadia Mono","Consolas" (was Open Sans at l.935); IBM Plex Mono TTFs
+  auto-load from res/fonts. (b) DE-DEERE: every url() in style.qss repointed from
+  skin:/../Deere/ to skin-local copies (grep "Deere/" style.qss now empty); the 52
+  Deere-referenced icons/images already existed as byte-identical Crate copies and were
+  recolored in place. Recolor map: active-state orange #f60/#ff6600 -> cold-blue #b4d2ff
+  (checkbox-checked, bpm-locked, preview-pause, mainmenu-check, checkmark, sort arrows,
+  lib-clear-search focus, AutoDJ crossfader); neutral-fg greys #d2d2d2/#bfbfbf/#b3b3b3/etc
+  -> ink #f4f7fb; off/disabled greys -> dim slate #5b626e; other-blues #4495f4/#00a7f8
+  -> #b4d2ff. (c) KNOWN OFFENDERS: mixer GREEN knob rings (knob_bg_green*.svg,
+  knob_small_green.svg) #5bd97a -> neutral translucent ink (green reserved for
+  play/sync transport); FX mix-mode purple #c143ff (ic_fx_mixmode_d±w) -> cold-blue;
+  library sort-indicator orange (image/style_sort_*.svg, rewritten clean minimal
+  cold-blue). (d) QSS leaks: orange :focus/:hover/edit borders #FF6600 and rgba(255,102,0)
+  and purple #711ada (repeating-sampler) -> cold-blue. (e) NEW files: 2 indeterminate
+  checkmark svgs (were dangling refs, missing in both Crate and Deere). Deck blue/amber
+  handle pairing (#b4d2ff / #ffb454) left intact per steer; amber #ffb454 + carmine
+  #ff7878 + red kill/inversion left as reserved warm/destructive.
 
 ## Known issues
 - Skin manifest <attribute> DEFAULTS not applied on a virgin profile (sections default

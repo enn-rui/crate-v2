@@ -1,4 +1,4 @@
 <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
   <circle cx="10" cy="10" r="8" fill="#05060a" stroke="#f4f7fb" stroke-opacity=".35"/>
-  <path d="M10 10V2" stroke="#5bd97a" stroke-width="1.5"/>
+  <path d="M10 10V2" stroke="#f4f7fb" stroke-width="1.5"/>
 </svg>
