@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QRegularExpression>
 #include <QUuid>
 
 namespace {
@@ -43,6 +44,30 @@ CrateSidecars::CrateSidecars(const QString& dir)
         : m_dir(dir) {
 }
 
+void CrateSidecars::parseTrackName(
+        const QString& relpath, QString* pTitle, QString* pArtist) {
+    const QString stem = QFileInfo(relpath).completeBaseName().trimmed();
+    QString cleaned = stem;
+    cleaned.remove(QRegularExpression(QStringLiteral("^\\d+[.]\\s*")));
+    QStringList parts = cleaned.split(
+            QRegularExpression(QStringLiteral("\\s+-\\s+")), Qt::KeepEmptyParts);
+    const bool numbered = QRegularExpression(QStringLiteral("^\\d+[.]?$")).match(
+            parts.first().trimmed()).hasMatch();
+    if (parts.size() >= 3 && numbered) {
+        parts.removeFirst();
+    }
+    if (parts.size() == 2 && numbered) {
+        *pArtist = QString();
+        *pTitle = parts.last().trimmed();
+    } else if (parts.size() >= 2) {
+        *pArtist = parts.takeFirst().trimmed();
+        *pTitle = parts.join(QStringLiteral(" - ")).trimmed();
+    } else {
+        *pArtist = QString();
+        *pTitle = cleaned;
+    }
+}
+
 bool CrateSidecars::load() {
     m_nodes.clear();
 
@@ -59,6 +84,7 @@ bool CrateSidecars::load() {
         while (q.next()) {
             GalaxyNode node;
             node.relpath = q.value(0).toString();
+            parseTrackName(node.relpath, &node.title, &node.artist);
             node.x = q.value(1).toDouble();
             node.y = q.value(2).toDouble();
             indexByRelpath.insert(node.relpath, m_nodes.size());

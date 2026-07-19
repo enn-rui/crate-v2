@@ -11,6 +11,8 @@ namespace crate {
 // unchanged Python analysis pipeline — read-only here, never written.
 struct GalaxyNode {
     QString relpath;
+    QString title;
+    QString artist;
     double x = 0.0;
     double y = 0.0;
     int clusterId = -1; // -1 = noise per HDBSCAN convention
@@ -27,6 +29,8 @@ class CrateSidecars {
     // Loads a joined in-memory snapshot. Returns false if umap.sqlite is
     // missing/unreadable (the galaxy then renders an empty-state hint).
     bool load();
+    static void parseTrackName(
+            const QString& relpath, QString* pTitle, QString* pArtist);
 
     const QVector<GalaxyNode>& nodes() const {
         return m_nodes;

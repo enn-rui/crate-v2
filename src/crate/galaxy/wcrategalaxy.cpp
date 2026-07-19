@@ -7,6 +7,7 @@
 #include <QGraphicsEllipseItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
+#include <QFontMetrics>
 #include <QLinearGradient>
 #include <QMenu>
 #include <QPainter>
@@ -27,6 +28,48 @@ const mixxx::Logger kLogger("WCrateGalaxy");
 
 constexpr double kSceneSpan = 2000.0; // normalized coordinate span
 constexpr double kDotRadius = 3.5;    // px, transform-independent
+constexpr double kPillFadeStart = 2.55;
+constexpr double kPillFadeEnd = 3.15;
+
+class GalaxyPillItem final : public QGraphicsItem {
+  public:
+    GalaxyPillItem(const crate::GalaxyNode& node, const QColor& accent, int index)
+            : m_node(node), m_accent(accent) {
+        setFlag(ItemIgnoresTransformations, true);
+        setData(0, index);
+        setZValue(10.0);
+    }
+    QRectF boundingRect() const override {
+        return QRectF(7.0, -25.0, 172.0, 50.0);
+    }
+    void paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidget*) override {
+        const QRectF box = boundingRect();
+        p->setRenderHint(QPainter::Antialiasing, true);
+        p->setPen(QPen(QColor(244, 247, 251, 46), 1.0));
+        p->setBrush(QColor(5, 6, 10, 235));
+        p->drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 4.0, 4.0);
+        QFont font(QStringLiteral("monospace"));
+        font.setStyleHint(QFont::Monospace);
+        font.setPixelSize(10);
+        p->setFont(font);
+        const QFontMetrics fm(font);
+        const auto elide = [&fm](const QString& text) {
+            return fm.elidedText(text, Qt::ElideRight, 158);
+        };
+        p->setPen(QColor(244, 247, 251));
+        p->drawText(QPointF(14.0, -10.0), elide(m_node.title));
+        p->drawText(QPointF(14.0, 3.0), elide(m_node.artist));
+        p->setPen(m_accent.lighter(120));
+        const QString key = m_node.keyCamelot.isEmpty() ? QStringLiteral("--") : m_node.keyCamelot;
+        const QString bpm = m_node.bpm > 0.0
+                ? QString::number(m_node.bpm, 'f', 1)
+                : QStringLiteral("--");
+        p->drawText(QPointF(14.0, 17.0), key + QStringLiteral("  \u00b7  ") + bpm);
+    }
+  private:
+    crate::GalaxyNode m_node;
+    QColor m_accent;
+};
 
 // Faithful to Crate v1 map_view._cluster_color: golden-ratio hue walk,
 // noise/unclustered = grey.
@@ -75,6 +118,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     setFrameShape(QFrame::NoFrame);
     setDragMode(QGraphicsView::ScrollHandDrag);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+    setMouseTracking(true);
     setRenderHint(QPainter::Antialiasing, true);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -156,12 +200,8 @@ void WCrateGalaxy::populate() {
         pDot->setPen(Qt::NoPen);
         pDot->setBrush(nodeColor(node));
         pDot->setData(0, i);
-        const QString stem = QFileInfo(node.relpath).completeBaseName();
-        pDot->setToolTip(QStringLiteral("%1\n%2 BPM · %3")
-                        .arg(stem,
-                                QString::number(node.bpm, 'f', 1),
-                                node.keyCamelot));
         m_pScene->addItem(pDot);
+        m_dots.append(pDot);
     }
     kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
 }
@@ -326,7 +366,82 @@ QString WCrateGalaxy::resolveMusicPath(const QString& relpath) const {
 void WCrateGalaxy::wheelEvent(QWheelEvent* pEvent) {
     const double factor = (pEvent->angleDelta().y() > 0) ? 1.15 : (1.0 / 1.15);
     scale(factor, factor);
+    updatePills();
     pEvent->accept();
+}
+
+void WCrateGalaxy::setHoveredNode(int index) {
+    if (m_hoveredNode != index) {
+        m_hoveredNode = index;
+        updatePills();
+    }
+}
+
+void WCrateGalaxy::mouseMoveEvent(QMouseEvent* pEvent) {
+    QGraphicsView::mouseMoveEvent(pEvent);
+    QGraphicsItem* pItem = itemAt(pEvent->pos());
+    setHoveredNode(pItem != nullptr && pItem->data(0).isValid()
+                    ? pItem->data(0).toInt()
+                    : -1);
+}
+
+void WCrateGalaxy::leaveEvent(QEvent* pEvent) {
+    setHoveredNode(-1);
+    QGraphicsView::leaveEvent(pEvent);
+}
+
+void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
+    QGraphicsView::resizeEvent(pEvent);
+    updatePills();
+}
+
+void WCrateGalaxy::scrollContentsBy(int dx, int dy) {
+    QGraphicsView::scrollContentsBy(dx, dy);
+    updatePills();
+}
+
+void WCrateGalaxy::updatePills() {
+    if (m_nodes.isEmpty() || m_dots.size() != m_nodes.size()) {
+        return;
+    }
+    const double zoom = m_fitScale > 0.0 ? transform().m11() / m_fitScale : 0.0;
+    const double lodOpacity = qBound(0.0,
+            (zoom - kPillFadeStart) / (kPillFadeEnd - kPillFadeStart), 1.0);
+    const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
+    const double margin = 190.0 / qMax(transform().m11(), 0.001);
+    const QRectF nearby = visible.adjusted(-margin, -margin, margin, margin);
+    QSet<int> wanted;
+    if (lodOpacity > 0.0) {
+        for (int i = 0; i < m_dots.size(); ++i) {
+            if (nearby.contains(m_dots[i]->pos())) {
+                wanted.insert(i);
+            }
+        }
+    }
+    if (m_hoveredNode >= 0) {
+        wanted.insert(m_hoveredNode);
+    }
+    for (auto it = m_pills.begin(); it != m_pills.end();) {
+        if (!wanted.contains(it.key())) {
+            delete it.value();
+            it = m_pills.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (int index : std::as_const(wanted)) {
+        QGraphicsItem* pPill = m_pills.value(index, nullptr);
+        if (pPill == nullptr) {
+            pPill = new GalaxyPillItem(m_nodes[index], nodeColor(m_nodes[index]), index);
+            pPill->setPos(m_dots[index]->pos());
+            m_pScene->addItem(pPill);
+            m_pills.insert(index, pPill);
+        }
+        pPill->setOpacity(index == m_hoveredNode ? 1.0 : lodOpacity);
+    }
+    for (int i = 0; i < m_dots.size(); ++i) {
+        m_dots[i]->setOpacity(i == m_hoveredNode ? 0.0 : 1.0 - lodOpacity);
+    }
 }
 
 void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
@@ -362,7 +477,14 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
     QGraphicsView::showEvent(pEvent);
     if (!m_initialFitDone && !m_pScene->items().isEmpty()) {
         fitInView(m_pScene->itemsBoundingRect(), Qt::KeepAspectRatio);
+        m_fitScale = transform().m11();
+        const double debugZoom = m_pConfig->getValue(
+                ConfigKey("[Crate]", "galaxy_debug_zoom"), 0.0);
+        if (debugZoom > 0.0) {
+            scale(debugZoom, debugZoom);
+        }
         m_initialFitDone = true;
+        updatePills();
     }
 }
 

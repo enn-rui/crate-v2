@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QGraphicsView>
+#include <QHash>
 
 #include "crate/data/cratesidecars.h"
 #include "preferences/usersettings.h"
@@ -9,6 +10,7 @@ class PlayerManager;
 class QContextMenuEvent;
 class QGraphicsScene;
 class QPainter;
+class QGraphicsEllipseItem;
 
 namespace crate {
 
@@ -29,6 +31,10 @@ class WCrateGalaxy : public QGraphicsView {
     void drawForeground(QPainter* pPainter, const QRectF& rect) override;
     void wheelEvent(QWheelEvent* pEvent) override;
     void mouseDoubleClickEvent(QMouseEvent* pEvent) override;
+    void mouseMoveEvent(QMouseEvent* pEvent) override;
+    void leaveEvent(QEvent* pEvent) override;
+    void resizeEvent(QResizeEvent* pEvent) override;
+    void scrollContentsBy(int dx, int dy) override;
     void showEvent(QShowEvent* pEvent) override;
 
   private:
@@ -51,16 +57,22 @@ class WCrateGalaxy : public QGraphicsView {
     QColor nodeColor(const GalaxyNode& node) const;
     static ValueRange percentileRange(const QVector<double>& values);
     QString resolveMusicPath(const QString& relpath) const;
+    void updatePills();
+    void setHoveredNode(int index);
 
     PlayerManager* m_pPlayerManager;
     UserSettingsPointer m_pConfig;
     QGraphicsScene* m_pScene;
     QVector<GalaxyNode> m_nodes;
+    QVector<QGraphicsEllipseItem*> m_dots;
+    QHash<int, QGraphicsItem*> m_pills;
     QString m_musicRoot;
     ColorMode m_colorMode = ColorMode::Cluster;
     ValueRange m_tempoRange;
     ValueRange m_energyRange;
     bool m_initialFitDone = false;
+    double m_fitScale = 1.0;
+    int m_hoveredNode = -1;
 };
 
 } // namespace crate
