@@ -81,8 +81,8 @@
   </manifest>
 
   <ObjectName>Mixxx</ObjectName>
-  <Style src="skins:Deere/style.qss"
-         src-mac="skins:Deere/style-mac.qss"
+  <Style src="skin:style.qss"
+         src-mac="skin:style-mac.qss"
          src-linux="skins:default-menu-styles-linux.qss"
          src-windows="skins:default-menu-styles-windows.qss"/>
   <Size>1008me,550me</Size>
@@ -138,7 +138,7 @@
     <SetVariable name="VerticalStretchButtonSizePolicy">f,me</SetVariable>
 
     <!-- Signal color for waveform overview in preview deck, samplers and library -->
-    <SetVariable name="SignalColor">#FF8000</SetVariable>
+    <SetVariable name="SignalColor">#B4D2FF</SetVariable>
 
     <!-- The waveforms (zoomed and overview) use a lot of memory. They appear in multiple places in
     main_decks.xml, left_deck.xml, and right_deck.xml, so define them in singletons. This makes
@@ -147,32 +147,32 @@
     <Template src="skins:Deere/deck_singletons.xml">
       <SetVariable name="i">1</SetVariable>
       <!-- Traditional Blue -->
-      <SetVariable name="DeckSignalColor">#007BCD</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#343940</SetVariable>
+      <SetVariable name="DeckSignalColor">#B4D2FF</SetVariable>
+      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
     <Template src="skins:Deere/deck_singletons.xml">
       <SetVariable name="i">2</SetVariable>
       <!-- Traditional Orange -->
-      <SetVariable name="DeckSignalColor">#E67A00</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#403c34</SetVariable>
+      <SetVariable name="DeckSignalColor">#F4F7FB</SetVariable>
+      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
     <Template src="skins:Deere/deck_singletons.xml">
       <SetVariable name="i">3</SetVariable>
       <!-- Violet -->
-      <SetVariable name="DeckSignalColor">#B500B5</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#403440</SetVariable>
+      <SetVariable name="DeckSignalColor">#5BD97A</SetVariable>
+      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
     <Template src="skins:Deere/deck_singletons.xml">
       <SetVariable name="i">4</SetVariable>
       <!-- Lime -->
-      <SetVariable name="DeckSignalColor">#AABD00</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#3d4034</SetVariable>
+      <SetVariable name="DeckSignalColor">#FF9F43</SetVariable>
+      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 

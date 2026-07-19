@@ -426,7 +426,7 @@ WSearchLineEdit {
   margin: 0px 2px 0px 0px;
   padding: 2px;
   border: 1px solid #4B4B4B;
-  background-color: #1e1e1e;
+  background-color: #05060a;
   color: #d2d2d2;
   }
   WSearchLineEdit:focus {
@@ -2526,4 +2526,213 @@ WRateRange {
 }
 #RateDisplayBottomRate {
     qproperty-alignment: 'AlignRight | AlignBottom';
+}
+
+/*******************************************************************************
+ ** CRATE TERMINAL IDENTITY ****************************************************
+ ** Flat ink-on-black pass. Keep this final so it deliberately supersedes the
+ ** inherited Deere geometry without duplicating its mature layout rules.
+ *******************************************************************************/
+
+QWidget {
+  color: #f4f7fb;
+  font-family: "IBM Plex Mono", "Cascadia Mono", "Consolas";
+  font-size: 12px;
+  selection-color: #f4f7fb;
+  selection-background-color: rgba(180, 210, 255, 140);
+}
+
+QMainWindow,
+#MainWindow,
+#MainWidget,
+#CentralWidget,
+#MainDecks,
+#MainDeckContainer,
+#Deck1, #Deck2, #Deck3, #Deck4,
+#DeckRows,
+#DeckSmall,
+#DeckControls,
+#DeckControlsGrid,
+#Mixer,
+#DeckMixer,
+#MixerBorder,
+#MainControls,
+#HeadphoneControls,
+#LibraryContainer,
+#LibrarySplitter,
+#SkinSettings,
+#SkinSettingsTop {
+  background-color: #05060a;
+  color: #f4f7fb;
+}
+
+#Deck1, #Deck2, #Deck3, #Deck4,
+#DeckTextRowSmall,
+#ArtistKeyBpmGutter,
+#VisualRow,
+#OverviewRow,
+#ControlsRow,
+#DeckRateSliderColumn,
+#Sampler,
+#SamplerMiddleSpacer,
+#SamplerRow1, #SamplerRow2, #SamplerRow3, #SamplerRow4,
+#SamplerRow5, #SamplerRow6, #SamplerRow7, #SamplerRow8 {
+  border-color: rgba(244, 247, 251, 36);
+}
+
+#MixerBorder,
+#Spacer22,
+#Spacer33 {
+  background-color: rgba(244, 247, 251, 26);
+}
+
+WLabel,
+QLabel,
+#Deck1 WLabel, #Deck2 WLabel, #Deck3 WLabel, #Deck4 WLabel {
+  color: #f4f7fb;
+}
+
+WLibraryTextBrowser,
+WTrackTableView,
+WLibrarySidebar {
+  color: #f4f7fb;
+  background-color: #05060a;
+  alternate-background-color: rgba(244, 247, 251, 8);
+  border: 1px solid rgba(244, 247, 251, 36);
+  gridline-color: rgba(244, 247, 251, 20);
+  selection-color: #f4f7fb;
+  /* Precomposited 24% cold blue on #05060a: Mixxx delegates discard alpha. */
+  selection-background-color: #2f3745;
+  outline: 0;
+}
+
+#DlgMissing WTrackTableView { qproperty-trackMissingColor: #f4f7fb; }
+
+WTrackTableView::item:selected,
+WLibrarySidebar::item:selected,
+#LibraryBPMButton::item:selected,
+#LibraryPlayedCheckbox::item:selected {
+  color: #f4f7fb;
+  background-color: #2f3745;
+}
+
+WTrackTableView::item:!selected:focus,
+WLibrarySidebar::item:!selected:focus,
+WLibrarySidebar[dragHover="true"]::item:hover {
+  background-color: rgba(180, 210, 255, 26);
+  border: 1px solid rgba(180, 210, 255, 122);
+}
+
+WTrackTableViewHeader,
+WTrackTableViewHeader::section {
+  color: rgba(244, 247, 251, 179);
+  background-color: #05060a;
+  border-color: rgba(244, 247, 251, 36);
+}
+
+WLibrary QLineEdit,
+WLibrary QPlainTextEdit,
+QLineEdit,
+QComboBox,
+QSpinBox,
+#LibraryBPMSpinBox,
+#CueLabelEdit {
+  color: #f4f7fb;
+  background-color: rgba(244, 247, 251, 13);
+  border: 1px solid rgba(244, 247, 251, 51);
+  selection-color: #f4f7fb;
+  selection-background-color: rgba(180, 210, 255, 82);
+}
+
+WPushButton,
+QPushButton,
+#LibraryFeatureControls QPushButton,
+#SkinSettingsButton,
+#SkinSettingsCategoryButton {
+  color: rgba(244, 247, 251, 224);
+  background-color: rgba(244, 247, 251, 15);
+  border: 1px solid rgba(244, 247, 251, 46);
+  border-radius: 0;
+}
+
+WPushButton:hover,
+QPushButton:hover,
+#LibraryFeatureControls QPushButton:hover,
+#SkinSettingsButton:hover,
+#SkinSettingsCategoryButton:hover {
+  color: #f4f7fb;
+  background-color: rgba(180, 210, 255, 26);
+  border-color: rgba(180, 210, 255, 140);
+}
+
+WPushButton[value="1"],
+WPushButton[value="2"],
+QPushButton:checked {
+  color: #f4f7fb;
+  background-color: rgba(180, 210, 255, 46);
+  border-color: rgba(180, 210, 255, 179);
+}
+
+WPushButton#SyncLeader[value="1"],
+WPushButton#SyncLeader[value="2"] {
+  color: #eafff0;
+  background-color: rgba(91, 217, 122, 61);
+  border-color: #5bd97a;
+}
+
+#CueDeleteButton {
+  color: #ffecec;
+  background-color: rgba(255, 120, 120, 36);
+  border: 1px solid rgba(255, 120, 120, 140);
+}
+
+#CueStandardButton,
+#CueSavedLoopButton,
+#CueSavedJumpButton {
+  color: #fff0df;
+  background-color: rgba(255, 159, 67, 31);
+  border: 1px solid rgba(255, 159, 67, 122);
+}
+
+#CueDeleteButton:checked,
+#CueStandardButton:checked,
+#CueSavedLoopButton:checked,
+#CueSavedJumpButton:checked {
+  background-color: rgba(255, 159, 67, 71);
+  border-color: #ff9f43;
+}
+
+#LibraryContainer QScrollBar:horizontal,
+#LibraryContainer QScrollBar:vertical,
+QScrollBar:horizontal,
+QScrollBar:vertical { background: #05060a; }
+
+#LibraryContainer QScrollBar::handle:horizontal,
+#LibraryContainer QScrollBar::handle:vertical,
+QScrollBar::handle:horizontal,
+QScrollBar::handle:vertical {
+  background: rgba(244, 247, 251, 51);
+  border: 0;
+}
+
+QToolTip,
+#MainMenu,
+#MainMenu QMenu,
+WLibrarySidebar QMenu,
+WTrackTableViewHeader QMenu,
+WLibraryTextBrowser QMenu,
+QLineEdit QMenu {
+  color: #f4f7fb;
+  background-color: #05060a;
+  border-color: rgba(244, 247, 251, 51);
+}
+
+#MainMenu::item:selected,
+#MainMenu QMenu::item:selected,
+WLibrarySidebar QMenu::item:selected,
+WTrackTableViewHeader QMenu::item:selected,
+WLibraryTextBrowser QMenu::item:selected,
+QLineEdit QMenu::item:selected {
+  color: #f4f7fb;
+  background-color: rgba(180, 210, 255, 51);
 }
