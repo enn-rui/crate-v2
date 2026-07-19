@@ -27,12 +27,17 @@ jobs:
           arch: x64
 
       - name: Get build environment name
+        shell: cmd
         run: tools\windows_buildenv.bat name
+        env:
+          BUILDENV_RELEASE: TRUE
 
       - name: Set up build environment
+        shell: cmd
         run: tools\windows_buildenv.bat setup
         env:
           BUILDENV_BASEPATH: C:\buildenv
+          BUILDENV_RELEASE: TRUE
 
       - name: Create build directory
         run: mkdir build
