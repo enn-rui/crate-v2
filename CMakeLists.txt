@@ -1496,6 +1496,8 @@ add_library(
   src/library/trackset/crate/cratetablemodel.cpp
   src/library/trackset/playlistfeature.cpp
   src/library/trackset/setlogfeature.cpp
+  src/library/trackset/smartcrate/smartcratespec.cpp
+  src/library/trackset/smartcrate/smartcratestorage.cpp
   src/library/trackset/tracksettablemodel.cpp
   src/library/traktor/traktorfeature.cpp
   src/library/treeitem.cpp
@@ -2896,6 +2898,7 @@ if(BUILD_TESTING)
     src/test/cratestorage_test.cpp
     src/test/crate_galaxy_ui_test.cpp
     src/test/crate_golden_test.cpp
+    src/test/crate_smart_test.cpp
     src/test/cue_test.cpp
     src/test/cuecontrol_test.cpp
     src/test/dbconnectionpool_test.cpp
