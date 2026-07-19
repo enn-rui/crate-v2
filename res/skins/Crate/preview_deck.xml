@@ -97,9 +97,9 @@
                     <SignalHighColor>#FFE300</SignalHighColor>
                     <SignalMidColor>#0099FF</SignalMidColor>
                     <SignalLowColor>#FF0035</SignalLowColor>
-                    <SignalRGBHighColor></SignalRGBHighColor>
-                    <SignalRGBMidColor></SignalRGBMidColor>
-                    <SignalRGBLowColor></SignalRGBLowColor>
+                    <SignalRGBHighColor>#F4F7FB</SignalRGBHighColor>
+                    <SignalRGBMidColor>#FFB454</SignalRGBMidColor>
+                    <SignalRGBLowColor>#244A7C</SignalRGBLowColor>
                     <SignalColor><Variable name="SignalColor"/></SignalColor>
                     <PlayPosColor>#00FF00</PlayPosColor>
                     <ShowCueTimes>false</ShowCueTimes>

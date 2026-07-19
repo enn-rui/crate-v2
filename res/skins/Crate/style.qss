@@ -2736,3 +2736,63 @@ QLineEdit QMenu::item:selected {
   color: #f4f7fb;
   background-color: rgba(180, 210, 255, 51);
 }
+
+/* Semantic state colors: color communicates deck ownership or transport state. */
+#Deck1 #FxAssignmentButton[value="1"],
+#Deck1 #FxAssignmentButton[value="2"],
+#Deck3 #FxAssignmentButton[value="1"],
+#Deck3 #FxAssignmentButton[value="2"] {
+  color: #b4d2ff;
+  background-color: rgba(180, 210, 255, 46);
+  border-color: #b4d2ff;
+}
+
+#Deck2 #FxAssignmentButton[value="1"],
+#Deck2 #FxAssignmentButton[value="2"],
+#Deck4 #FxAssignmentButton[value="1"],
+#Deck4 #FxAssignmentButton[value="2"] {
+  color: #ffb454;
+  background-color: rgba(255, 180, 84, 46);
+  border-color: #ffb454;
+}
+
+#PlayToggle[value="1"] {
+  color: #b4d2ff;
+  background-color: rgba(180, 210, 255, 46);
+  border-color: #b4d2ff;
+}
+
+#DeckSync[value="1"], #DeckSync[value="2"],
+#BeatsyncButton[value="1"], #BeatsyncButton[value="2"],
+#SyncLeader[value="1"], #SyncLeader[value="2"],
+#BeatloopActivate[value="1"], #BeatloopActivate[value="2"],
+#LoopIn[value="1"], #LoopOut[value="1"], #LoopAnchor[value="1"] {
+  color: #5bd97a;
+  background-color: rgba(91, 217, 122, 46);
+  border-color: #5bd97a;
+}
+
+#SlipButton[value="1"], #SlipButton[value="2"],
+#ReverseButton[value="1"], #ReverseButton[value="2"],
+#CueDeleteButton:checked {
+  color: #ff7878;
+  background-color: rgba(255, 120, 120, 46);
+  border-color: #ff7878;
+}
+
+/* Dynamic cue colors are supplied by Mixxx. Do not paint a gray chip over them. */
+#HotcueButton {
+  border: 1px solid rgba(244, 247, 251, 46);
+  border-radius: 0;
+}
+
+#HotcueButton[displayValue="0"] {
+  color: rgba(244, 247, 251, 179);
+  background-color: #05060a;
+  border-color: rgba(244, 247, 251, 36);
+}
+
+#HotcueButton[displayValue="1"],
+#HotcueButton[displayValue="2"] {
+  border-color: rgba(244, 247, 251, 122);
+}

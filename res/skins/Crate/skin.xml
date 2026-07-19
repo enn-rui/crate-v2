@@ -9,7 +9,7 @@
     <license>Creative Commons Attribution, Share-Alike 3.0 Unported</license>
     <attributes>
       <!-- Set skin defaults. -->
-      <attribute config_key="[App],num_decks">4</attribute>
+      <attribute config_key="[App],num_decks">2</attribute>
       <attribute config_key="[App],num_samplers">16</attribute>
       <attribute config_key="[App],num_preview_decks">1</attribute>
       <attribute persist="true" config_key="[Deere],show_parallel_waveforms">1</attribute>
@@ -18,7 +18,7 @@
       <attribute persist="true" config_key="[Skin],show_8_hotcues">1</attribute>
       <attribute persist="true" config_key="[Skin],show_intro_outro_cues">1</attribute>
       <attribute persist="true" config_key="[Skin],show_coverart">1</attribute>
-      <attribute persist="true" config_key="[Skin],show_spinnies">1</attribute>
+      <attribute persist="true" config_key="[Skin],show_spinnies">0</attribute>
       <attribute persist="true" config_key="[Skin],show_starrating">1</attribute>
       <attribute persist="true" config_key="[Deere],show_track_info">1</attribute>
       <attribute persist="true" config_key="[Deere],show_bpm_info">1</attribute>
@@ -37,7 +37,7 @@
       <attribute persist="true" config_key="[Skin],show_4effectunits">0</attribute>
       <attribute persist="true" config_key="[Skin],show_superknobs">0</attribute>
       <!-- Samplers -->
-      <attribute persist="true" config_key="[Skin],show_samplers">1</attribute>
+      <attribute persist="true" config_key="[Skin],show_samplers">0</attribute>
       <!-- item index in skin_settings_sampler_rows.xml, '1' enables 2 sampler rows -->
       <attribute persist="true" config_key="[Skin],sampler_rows">1</attribute>
       <attribute persist="true" config_key="[Skin],sampler_row_1_expanded">0</attribute>
@@ -144,7 +144,7 @@
     main_decks.xml, left_deck.xml, and right_deck.xml, so define them in singletons. This makes
     toggling between 2/4 decks and stacked/split waveforms slower, but it makes Mixxx startup
     and shutdown much faster and saves a lot of memory.-->
-    <Template src="skins:Deere/deck_singletons.xml">
+    <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">1</SetVariable>
       <!-- Traditional Blue -->
       <SetVariable name="DeckSignalColor">#B4D2FF</SetVariable>
@@ -152,26 +152,26 @@
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
-    <Template src="skins:Deere/deck_singletons.xml">
+    <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">2</SetVariable>
       <!-- Traditional Orange -->
-      <SetVariable name="DeckSignalColor">#F4F7FB</SetVariable>
+      <SetVariable name="DeckSignalColor">#FFB454</SetVariable>
       <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
-    <Template src="skins:Deere/deck_singletons.xml">
+    <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">3</SetVariable>
       <!-- Violet -->
-      <SetVariable name="DeckSignalColor">#5BD97A</SetVariable>
+      <SetVariable name="DeckSignalColor">#B4D2FF</SetVariable>
       <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
-    <Template src="skins:Deere/deck_singletons.xml">
+    <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">4</SetVariable>
       <!-- Lime -->
-      <SetVariable name="DeckSignalColor">#FF9F43</SetVariable>
+      <SetVariable name="DeckSignalColor">#FFB454</SetVariable>
       <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
@@ -179,14 +179,14 @@
     <SingletonDefinition>
       <ObjectName>Library</ObjectName>
       <Children>
-        <Template src="skins:Deere/library.xml"/>
+        <Template src="skins:Crate/library.xml"/>
       </Children>
     </SingletonDefinition>
 
     <SingletonDefinition>
       <ObjectName>SamplerSettingsSingleton</ObjectName>
       <Children>
-        <Template src="skins:Deere/skinsettings_sampler_buttons.xml"/>
+        <Template src="skins:Crate/skinsettings_sampler_buttons.xml"/>
       </Children>
     </SingletonDefinition>
 
@@ -195,7 +195,7 @@
       <SizePolicy>me,me</SizePolicy>
       <Layout>vertical</Layout>
       <Children>
-        <Template src="skins:Deere/tool_bar.xml"/>
+        <Template src="skins:Crate/tool_bar.xml"/>
 
         <!-- regular or maximized library -->
         <WidgetStack currentpage="[Skin],show_maximized_library">
@@ -212,7 +212,7 @@
 
                 <!-- Waveforms & spinnies are shown here as stack or
                   separately in each deck -->
-                <Template src="skins:Deere/parallel_waveforms.xml"/>
+                <Template src="skins:Crate/parallel_waveforms.xml"/>
 
                 <WidgetGroup>
                   <Layout>vertical</Layout>
@@ -222,10 +222,10 @@
                       <Layout>vertical</Layout>
                       <SizePolicy>min,max</SizePolicy>
                       <Children>
-                        <Template src="skins:Deere/main_decks.xml"/>
-                        <Template src="skins:Deere/effect_rack.xml"/>
-                        <Template src="skins:Deere/sample_decks.xml"/>
-                        <Template src="skins:Deere/microphone_rack.xml"/>
+                        <Template src="skins:Crate/main_decks.xml"/>
+                        <Template src="skins:Crate/effect_rack.xml"/>
+                        <Template src="skins:Crate/sample_decks.xml"/>
+                        <Template src="skins:Crate/microphone_rack.xml"/>
                       </Children>
                     </WidgetGroup><!-- /Main section -->
                     <SingletonContainer>
@@ -242,7 +242,7 @@
               <Layout>vertical</Layout>
               <SizePolicy>me,me</SizePolicy>
               <Children>
-                <Template src="skins:Deere/decks_small.xml"/>
+                <Template src="skins:Crate/decks_small.xml"/>
                 <SingletonContainer>
                   <ObjectName>Library</ObjectName>
                 </SingletonContainer>
@@ -263,7 +263,7 @@
         <BindProperty>visible</BindProperty>
       </Connection>
       <Children>
-        <Template src="skins:Deere/skin_settings.xml"/>
+        <Template src="skins:Crate/skin_settings.xml"/>
       </Children>
     </WidgetGroup>
   </Children>

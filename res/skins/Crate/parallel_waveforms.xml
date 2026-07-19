@@ -13,12 +13,12 @@
       <WidgetGroup>
         <Layout>horizontal</Layout>
         <Children>
-          <Template src="skins:Deere/stem_control.xml">
+          <Template src="skins:Crate/stem_control.xml">
             <SetVariable name="cover">true</SetVariable>
             <SetVariable name="Size">55f,55f</SetVariable>
             <SetVariable name="ChanNum">3</SetVariable>
           </Template>
-          <Template src="skins:Deere/deck_spinny.xml">
+          <Template src="skins:Crate/deck_spinny.xml">
             <SetVariable name="cover">true</SetVariable>
             <SetVariable name="Size">55f,55f</SetVariable>
             <SetVariable name="i">3</SetVariable>
@@ -39,12 +39,12 @@
           <WidgetGroup>
             <Layout>horizontal</Layout>
             <Children>
-              <Template src="skins:Deere/stem_control.xml">
+              <Template src="skins:Crate/stem_control.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">55f,55f</SetVariable>
                 <SetVariable name="ChanNum">1</SetVariable>
               </Template>
-              <Template src="skins:Deere/deck_spinny.xml">
+              <Template src="skins:Crate/deck_spinny.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">55f,55f</SetVariable>
                 <SetVariable name="i">1</SetVariable>
@@ -58,12 +58,12 @@
           <WidgetGroup>
             <Layout>horizontal</Layout>
             <Children>
-              <Template src="skins:Deere/stem_control.xml">
+              <Template src="skins:Crate/stem_control.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">55f,55f</SetVariable>
                 <SetVariable name="ChanNum">1</SetVariable>
               </Template>
-              <Template src="skins:Deere/deck_spinny.xml">
+              <Template src="skins:Crate/deck_spinny.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">75f,75f</SetVariable>
                 <SetVariable name="i">1</SetVariable>
@@ -87,12 +87,12 @@
           <WidgetGroup>
             <Layout>horizontal</Layout>
             <Children>
-              <Template src="skins:Deere/stem_control.xml">
+              <Template src="skins:Crate/stem_control.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">55f,55f</SetVariable>
                 <SetVariable name="ChanNum">2</SetVariable>
               </Template>
-              <Template src="skins:Deere/deck_spinny.xml">
+              <Template src="skins:Crate/deck_spinny.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">55f,55f</SetVariable>
                 <SetVariable name="i">2</SetVariable>
@@ -106,12 +106,12 @@
           <WidgetGroup>
             <Layout>horizontal</Layout>
             <Children>
-              <Template src="skins:Deere/stem_control.xml">
+              <Template src="skins:Crate/stem_control.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">55f,55f</SetVariable>
                 <SetVariable name="ChanNum">2</SetVariable>
               </Template>
-              <Template src="skins:Deere/deck_spinny.xml">
+              <Template src="skins:Crate/deck_spinny.xml">
                 <SetVariable name="cover">true</SetVariable>
                 <SetVariable name="Size">75f,75f</SetVariable>
                 <SetVariable name="i">2</SetVariable>
@@ -132,12 +132,12 @@
       <WidgetGroup>
         <Layout>horizontal</Layout>
         <Children>
-          <Template src="skins:Deere/stem_control.xml">
+          <Template src="skins:Crate/stem_control.xml">
             <SetVariable name="cover">true</SetVariable>
             <SetVariable name="Size">55f,55f</SetVariable>
             <SetVariable name="ChanNum">4</SetVariable>
           </Template>
-          <Template src="skins:Deere/deck_spinny.xml">
+          <Template src="skins:Crate/deck_spinny.xml">
             <SetVariable name="cover">true</SetVariable>
             <SetVariable name="Size">55f,55f</SetVariable>
             <SetVariable name="i">4</SetVariable>
