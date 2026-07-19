@@ -236,21 +236,21 @@
                         </SingletonContainer>
                         <Splitter>
                           <ObjectName>CrateGalaxySplitter</ObjectName>
-                          <Orientation>vertical</Orientation>
-                          <SplitSizesConfigKey>[Skin],crateGalaxySplit_splitSize</SplitSizesConfigKey>
-                          <SplitSizes>650,350</SplitSizes>
-                          <Collapsible>0,0</Collapsible>
+                          <Orientation>horizontal</Orientation>
+                          <SplitSizesConfigKey>[Skin],crateGalaxySplitLR_splitSize</SplitSizesConfigKey>
+                          <SplitSizes>760,920</SplitSizes>
+                          <Collapsible>1,1</Collapsible>
                           <SizePolicy>me,me</SizePolicy>
                           <Children>
-                            <CrateGalaxy>
-                              <ObjectName>CrateGalaxy</ObjectName>
-                              <SizePolicy>me,i</SizePolicy>
-                            </CrateGalaxy>
                             <SingletonContainer>
                               <ObjectName>Library</ObjectName>
                               <SizePolicy>me,me</SizePolicy>
                               <MinimumSize>100,180</MinimumSize>
                             </SingletonContainer>
+                            <CrateGalaxy>
+                              <ObjectName>CrateGalaxy</ObjectName>
+                              <SizePolicy>e,me</SizePolicy>
+                            </CrateGalaxy>
                           </Children>
                         </Splitter>
                       </Children>
