@@ -472,10 +472,17 @@ TEST_F(CrateGalaxyUiTest, PickResolvesDotsEvenWhenPillsOverlap) {
     // to it.
     const int count = m_pGalaxy->testNodeCount();
     ASSERT_GT(count, 3);
-    // Hover node 0 to spawn its pill.
+    // Hover node 0 to spawn its pill (synthesized directly — QTest::mouseMove
+    // produces no event when the OS cursor is already at the target).
     const QPoint hoverPos =
             m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(0));
-    QTest::mouseMove(m_pGalaxy->viewport(), hoverPos);
+    QMouseEvent hover(QEvent::MouseMove,
+            QPointF(hoverPos),
+            m_pGalaxy->viewport()->mapToGlobal(hoverPos),
+            Qt::NoButton,
+            Qt::NoButton,
+            Qt::NoModifier);
+    QApplication::sendEvent(m_pGalaxy->viewport(), &hover);
     QApplication::processEvents();
     // Picking at a node's own viewport position must resolve to that node —
     // or, if dots crowd inside the pick radius, to one at least as close
@@ -502,6 +509,52 @@ TEST_F(CrateGalaxyUiTest, PickResolvesDotsEvenWhenPillsOverlap) {
     }
     // Far away from any dot: no pick.
     EXPECT_EQ(m_pGalaxy->testNodeAtViewportPos(QPoint(-500, -500)), -1);
+}
+
+TEST_F(CrateGalaxyUiTest, PillIsAnAliasOfItsDotAndDotStaysVisible) {
+    // Interview 2026-07-19 round 2: "pill = the dot, everywhere" and "always
+    // show both". Clicking anywhere on a pill's body must resolve to its node
+    // (unless a real dot is nearer — dots take precedence), and the dot must
+    // stay fully visible while its pill shows.
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 0);
+    const QPoint anchor =
+            m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(0));
+    // Synthesize the hover directly — QTest::mouseMove silently produces no
+    // move event when the OS cursor already sits at the target position.
+    QMouseEvent hover(QEvent::MouseMove,
+            QPointF(anchor),
+            m_pGalaxy->viewport()->mapToGlobal(anchor),
+            Qt::NoButton,
+            Qt::NoButton,
+            Qt::NoModifier);
+    QApplication::sendEvent(m_pGalaxy->viewport(), &hover);
+    QApplication::processEvents();
+
+    // The hovered node's dot is still visible at full opacity.
+    QGraphicsItem* pDot = nullptr;
+    for (QGraphicsItem* pItem : m_pGalaxy->scene()->items()) {
+        if (pItem->data(0).isValid() && pItem->data(0).toInt() == 0 &&
+                !qFuzzyCompare(pItem->zValue(), 10.0)) {
+            pDot = pItem;
+            break;
+        }
+    }
+    ASSERT_NE(pDot, nullptr);
+    EXPECT_TRUE(pDot->isVisible());
+    EXPECT_DOUBLE_EQ(pDot->opacity(), 1.0);
+
+    // A point on the pill body (right of the dot, outside the 14px dot radius)
+    // resolves to node 0 — or to a strictly nearer real dot, never to nothing.
+    const QPoint onPill = anchor + QPoint(60, 0);
+    const int picked = m_pGalaxy->testNodeAtViewportPos(onPill);
+    ASSERT_GE(picked, 0) << "click on the pill body resolved to nothing";
+    if (picked != 0) {
+        const QPoint pickedPos = m_pGalaxy->mapFromScene(
+                m_pGalaxy->testNodeDisplayPos(picked));
+        const QPoint d = pickedPos - onPill;
+        EXPECT_LE(d.x() * d.x() + d.y() * d.y(), 14 * 14)
+                << "pill click diverted to a non-adjacent node " << picked;
+    }
 }
 
 TEST_F(CrateGalaxyUiTest, LocationResolvesUnderAnyRootSpelling) {
@@ -571,39 +624,35 @@ TEST_F(CrateGalaxyUiTest, WalkAndHalosNeverUseGhostedNodes) {
     }
 }
 
-TEST(CrateGalaxyPickDeck, NextPrepDeckRuleCoversStateTable) {
+TEST(CrateGalaxyPickDeck, NextPrepDeckFillsEmptyDecksFirst) {
     using crate::WCrateGalaxy;
-    // Nothing playing -> deck 1.
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{false, false}, -1), 1);
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
-                      QVector<bool>{false, false, false, false}, -1),
-            1);
-    // Deck 1 playing -> deck 2 (opposite side).
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{true, false}, 0), 2);
-    // Deck 2 playing -> deck 1 (opposite side).
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{false, true}, 1), 1);
-    // Decks 1+2 playing, 3/4 stopped -> the opposite side of the last-started.
-    // Last-started deck 2 (right) -> opposite left -> deck 3.
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
-                      QVector<bool>{true, true, false, false}, 1),
-            3);
-    // Last-started deck 1 (left) -> opposite right -> deck 4.
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
-                      QVector<bool>{true, true, false, false}, 0),
-            4);
+    const auto pick = [](std::initializer_list<bool> playing,
+                              std::initializer_list<bool> loaded) {
+        return WCrateGalaxy::pickNextPrepDeck(
+                QVector<bool>(playing), QVector<bool>(loaded));
+    };
+    // Her rule: loaded-or-playing = taken. Fill empty decks in order; when all
+    // are loaded, replace the lowest-numbered STOPPED deck; never steal a
+    // playing one.
+    // All empty -> deck 1.
+    EXPECT_EQ(pick({false, false}, {false, false}), 1);
+    // Deck 1 loaded (stopped) -> deck 2, NOT overwrite deck 1 (her live bug:
+    // "clicking always puts something on deck 1").
+    EXPECT_EQ(pick({false, false}, {true, false}), 2);
+    // Decks 1+2 loaded, 4-deck rig -> deck 3, then 4.
+    EXPECT_EQ(pick({false, false, false, false}, {true, true, false, false}), 3);
+    EXPECT_EQ(pick({false, false, false, false}, {true, true, true, false}), 4);
+    // Everything loaded, nothing playing -> replace deck 1.
+    EXPECT_EQ(pick({false, false}, {true, true}), 1);
+    // Everything loaded, deck 1 playing -> replace deck 2.
+    EXPECT_EQ(pick({true, false}, {true, true}), 2);
+    // Deck 1 playing but EMPTY... cannot happen live, but playing wins: skip it.
+    EXPECT_EQ(pick({true, false}, {false, false}), 2);
     // All playing -> no-load sentinel (never steal).
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{true, true}, 0), 0);
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
-                      QVector<bool>{true, true, true, true}, 2),
-            0);
-    // Unknown last-started falls back to the lowest playing deck as reference.
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{true, false}, -1), 2);
-    // Opposite side full -> fall back to the lowest-numbered stopped deck.
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(
-                      QVector<bool>{true, false, true, true}, 3),
-            2);
+    EXPECT_EQ(pick({true, true}, {true, true}), 0);
+    EXPECT_EQ(pick({true, true, true, true}, {true, true, true, true}), 0);
     // Empty / no decks -> sentinel.
-    EXPECT_EQ(WCrateGalaxy::pickNextPrepDeck(QVector<bool>{}, -1), 0);
+    EXPECT_EQ(pick({}, {}), 0);
 }
 
 TEST(CrateGalaxyOrbitSensitivity, ScreenMotionConstantAcrossZoom) {

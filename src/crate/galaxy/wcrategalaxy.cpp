@@ -1306,10 +1306,11 @@ void WCrateGalaxy::updatePills() {
         pPill->setPos(m_dots[index]->pos());
         pPill->setOpacity(index == m_hoveredNode ? 1.0 : lodOpacity);
     }
+    // Dots stay visible alongside their pills (interview 2026-07-19: "always
+    // show both" — hiding the dot broke the map's geometry and read
+    // inconsistently because the playing track kept its dot).
     for (int i = 0; i < m_dots.size(); ++i) {
-        const bool playing = nodeInSubset(i) && !m_playingRelpath.isEmpty() &&
-                m_nodes[i].relpath == m_playingRelpath;
-        m_dots[i]->setOpacity(wanted.contains(i) && !playing ? 0.0 : 1.0);
+        m_dots[i]->setOpacity(1.0);
     }
 }
 
@@ -1525,6 +1526,23 @@ QVector<bool> WCrateGalaxy::deckPlayingStates() const {
     return states;
 }
 
+QVector<bool> WCrateGalaxy::deckLoadedStates() const {
+    // Mirrors deckPlayingStates: [ChannelN],track_loaded is owned by each
+    // deck's EngineBuffer.
+    QVector<bool> states;
+    const int maxDecks = m_pPlayerManager != nullptr
+            ? static_cast<int>(m_pPlayerManager->numberOfDecks())
+            : 8;
+    for (int i = 0; i < maxDecks; ++i) {
+        const ConfigKey loadedKey(PlayerManager::groupForDeck(i), "track_loaded");
+        if (!ControlObject::exists(loadedKey)) {
+            break;
+        }
+        states.append(ControlObject::get(loadedKey) != 0.0);
+    }
+    return states;
+}
+
 double WCrateGalaxy::orbitAngleDelta(int pixelDelta, int viewportExtent, double zoomRatio) {
     const double extent = static_cast<double>(qMax(1, viewportExtent));
     const double ratio = zoomRatio > 0.0 ? zoomRatio : 1.0;
@@ -1535,85 +1553,81 @@ double WCrateGalaxy::orbitAngleDelta(int pixelDelta, int viewportExtent, double 
     return static_cast<double>(pixelDelta) * 360.0 / extent / ratio;
 }
 
-int WCrateGalaxy::pickNextPrepDeck(const QVector<bool>& playing, int lastStartedIndex) {
+int WCrateGalaxy::pickNextPrepDeck(
+        const QVector<bool>& playing, const QVector<bool>& loaded) {
+    // Her rule (interview 2026-07-19, round 2): loaded-or-playing = taken.
+    // Fill EMPTY decks first, in order; once every deck holds a track, replace
+    // the lowest-numbered STOPPED deck; never touch a playing one. (The old
+    // playing-only rule saw stopped-but-loaded decks as free and silently
+    // overwrote deck 1 forever — "clicking always puts something on deck 1".)
     const int n = playing.size();
-    if (n == 0) {
-        return 0;
-    }
-    bool anyPlaying = false;
-    bool anyStopped = false;
-    for (bool p : playing) {
-        anyPlaying = anyPlaying || p;
-        anyStopped = anyStopped || !p;
-    }
-    if (!anyPlaying) {
-        return 1; // fresh session: prep deck 1
-    }
-    if (!anyStopped) {
-        return 0; // every deck busy: never steal
-    }
-    // Reference playing deck = the most-recently-started one when known and still
-    // playing; otherwise the lowest-numbered playing deck.
-    int refIndex = lastStartedIndex;
-    if (refIndex < 0 || refIndex >= n || !playing[refIndex]) {
-        refIndex = -1;
-        for (int i = 0; i < n; ++i) {
-            if (playing[i]) {
-                refIndex = i;
-                break;
-            }
-        }
-    }
-    // Sides mirror the physical layout: decks 1/3 (even 0-based index) vs 2/4
-    // (odd 0-based index). Prep the opposite side of the reference deck.
-    const int oppositeSide = 1 - (refIndex % 2);
+    const auto isLoaded = [&loaded](int i) {
+        // A deck with no loaded-state available reads as empty.
+        return i < loaded.size() && loaded[i];
+    };
     for (int i = 0; i < n; ++i) {
-        if (!playing[i] && (i % 2) == oppositeSide) {
+        if (!isLoaded(i) && !playing[i]) {
             return i + 1;
         }
     }
-    // Opposite side is full; fall back to the lowest-numbered stopped deck.
     for (int i = 0; i < n; ++i) {
         if (!playing[i]) {
             return i + 1;
         }
     }
-    return 0;
+    return 0; // every deck playing: never steal
 }
 
 int WCrateGalaxy::nextPrepDeck() const {
-    // Live "most-recently-started" is approximated by PlayerInfo's current
-    // (loudest audible) playing deck; for the standard two-deck battle these
-    // coincide. Verified live (S5): full 4-deck last-started ordering.
-    return pickNextPrepDeck(
-            deckPlayingStates(), PlayerInfo::instance().getCurrentPlayingDeck());
+    return pickNextPrepDeck(deckPlayingStates(), deckLoadedStates());
 }
 
 int WCrateGalaxy::nodeAtViewportPos(const QPoint& viewportPos) const {
-    if (m_3dMode) {
-        return projectedNodeAt(viewportPos);
-    }
     // Geometric pick in VIEWPORT space, mirroring projectedNodeAt. itemAt()
     // returned whatever was topmost — hover pills are 172x50 screen-anchored
     // rects above the dots, so once a pill showed, clicks over a wide area
     // resolved to the pill's node (or nothing) instead of the dot under the
     // cursor ("the hitbox gets really funky when the pill shows up").
     int nearest = -1;
-    double bestDistance = 14.0 * 14.0;
-    for (int i = 0; i < m_dots.size(); ++i) {
-        if (!nodeSelectable(i)) {
-            continue;
-        }
-        const QPointF center = mapFromScene(m_dots[i]->pos());
-        const double dx = center.x() - viewportPos.x();
-        const double dy = center.y() - viewportPos.y();
-        const double distance = dx * dx + dy * dy;
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            nearest = i;
+    if (m_3dMode) {
+        nearest = projectedNodeAt(viewportPos);
+    } else {
+        double bestDistance = 14.0 * 14.0;
+        for (int i = 0; i < m_dots.size(); ++i) {
+            if (!nodeSelectable(i)) {
+                continue;
+            }
+            const QPointF center = mapFromScene(m_dots[i]->pos());
+            const double dx = center.x() - viewportPos.x();
+            const double dy = center.y() - viewportPos.y();
+            const double distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                nearest = i;
+            }
         }
     }
-    return nearest;
+    if (nearest >= 0) {
+        return nearest;
+    }
+    // No dot under the cursor: a visible pill counts as its dot (interview
+    // 2026-07-19: "pill = the dot, everywhere"). Pills are screen-anchored
+    // (ItemIgnoresTransformations), so hit-test their device-space rect
+    // anchored at the dot's viewport position.
+    for (auto it = m_pills.constBegin(); it != m_pills.constEnd(); ++it) {
+        const int index = it.key();
+        if (!nodeSelectable(index) || index >= m_dots.size() ||
+                !it.value()->isVisible()) {
+            continue;
+        }
+        const QPointF anchor = mapFromScene(m_dots[index]->pos());
+        const QRectF pillRect =
+                it.value()->boundingRect().translated(anchor);
+        if (pillRect.contains(viewportPos)) {
+            return index;
+        }
+    }
+    return -1;
 }
 
 QVector<WCrateGalaxy::DeckLoadEntry> WCrateGalaxy::deckLoadEntries(int nodeIndex) const {

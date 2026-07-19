@@ -51,7 +51,8 @@ class WCrateGalaxy : public QGraphicsView {
     // otherwise the lowest-numbered stopped deck on the side (1/3 vs 2/4)
     // opposite the reference playing deck, falling back to the lowest-numbered
     // stopped deck anywhere.
-    static int pickNextPrepDeck(const QVector<bool>& playing, int lastStartedIndex);
+    static int pickNextPrepDeck(
+            const QVector<bool>& playing, const QVector<bool>& loaded);
 
     // Pure, engine-free sensitivity mapping for the 3D orbit (spec wave-5 S4).
     // Returns the orbit angle change in DEGREES for a mouse motion of
@@ -183,6 +184,7 @@ class WCrateGalaxy : public QGraphicsView {
     void loadCursorToNextPrepDeck();
     void loadCursorIntoDeck(int deckIndex);
     QVector<bool> deckPlayingStates() const;
+    QVector<bool> deckLoadedStates() const;
     int nextPrepDeck() const;
     // Deck-load context-menu integration (spec wave-5 S3, item 1).
     struct DeckLoadEntry {
