@@ -91,6 +91,12 @@ jobs:
           CTEST_OUTPUT_ON_FAILURE: 1
           QT_QPA_PLATFORM: offscreen
 
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          dotnet.exe tool install --global wix --version 6.0.2
+          wix extension add --global WixToolset.UI.wixext/6.0.2
+
       - name: Package installer
         run: cpack -G WIX -V
         working-directory: build
