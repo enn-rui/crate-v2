@@ -1,11 +1,12 @@
-// Widget-level interaction tests for the galaxy chip bar: real synthesized
-// mouse clicks on the buttons must switch modes. This exists because the
+// Widget-level interaction tests for the sidebar MAP controls: real synthesized
+// input on the controls must switch galaxy state. This exists because the
 // interactive path shipped broken once while every mode worked via config keys
 // — config-driven verification cannot catch dead controls.
 
 #include <gtest/gtest.h>
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDir>
 #include <QFile>
 #include <QGraphicsItem>
@@ -24,6 +25,7 @@
 #include "control/controlobject.h"
 #include "control/controlpushbutton.h"
 #include "crate/galaxy/wcrategalaxy.h"
+#include "crate/galaxy/wcratemapcontrols.h"
 #include "preferences/usersettings.h"
 
 namespace {
@@ -49,6 +51,8 @@ class CrateGalaxyUiTest : public ::testing::Test {
         // each emit. Create it BEFORE the galaxy so its ControlProxy binds.
         m_pMoveVertical = std::make_unique<ControlEncoder>(
                 ConfigKey("[Library]", "MoveVertical"), false);
+        m_pControls = std::make_unique<crate::WCrateMapControls>(nullptr, m_pConfig);
+        m_pControls->show();
         m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
                 nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
         m_pGalaxy->resize(900, 700);
@@ -82,23 +86,13 @@ class CrateGalaxyUiTest : public ::testing::Test {
     }
 
     void setKnobFocusMap() {
-        QPushButton* pKnob = m_pGalaxy->findChild<QPushButton*>(
-                QStringLiteral("KnobFocusChip"));
+        QPushButton* pKnob = m_pControls->findChild<QPushButton*>(
+                QStringLiteral("CrateMapKnob"));
         ASSERT_NE(pKnob, nullptr);
         if (!pKnob->isChecked()) {
             QTest::mouseClick(pKnob, Qt::LeftButton);
             QApplication::processEvents();
         }
-    }
-
-    QPushButton* chip(const QString& text) {
-        const auto buttons = m_pGalaxy->findChildren<QPushButton*>();
-        for (QPushButton* pButton : buttons) {
-            if (pButton->text() == text) {
-                return pButton;
-            }
-        }
-        return nullptr;
     }
 
     QString configValue(const char* key) {
@@ -152,61 +146,95 @@ class CrateGalaxyUiTest : public ::testing::Test {
     QTemporaryDir m_tmp;
     UserSettingsPointer m_pConfig;
     std::unique_ptr<ControlEncoder> m_pMoveVertical;
+    std::unique_ptr<crate::WCrateMapControls> m_pControls;
     std::unique_ptr<crate::WCrateGalaxy> m_pGalaxy;
 };
 
-TEST_F(CrateGalaxyUiTest, ChipBarExistsWithAllChips) {
-    for (const char* text : {"SCATTER", "WHEEL", "BPM", "ARTIST",
-                 "CLUSTER", "KEY", "TEMPO", "ENERGY", "3D", "HALO"}) {
-        EXPECT_NE(chip(QString::fromLatin1(text)), nullptr) << text;
+TEST_F(CrateGalaxyUiTest, LayoutComboChangesGalaxyForEveryChoice) {
+    auto* pCombo = m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapLayout"));
+    ASSERT_NE(pCombo, nullptr);
+    const QStringList expected{QStringLiteral("scatter"), QStringLiteral("key"),
+            QStringLiteral("bpm"), QStringLiteral("artist")};
+    for (int i = 0; i < expected.size(); ++i) {
+        QTest::keyClick(pCombo, Qt::Key_Home);
+        for (int step = 0; step < i; ++step) {
+            QTest::keyClick(pCombo, Qt::Key_Down);
+        }
+        QApplication::processEvents();
+        EXPECT_EQ(m_pGalaxy->testLayoutMode(), expected[i]);
+        if (i > 0) {
+            EXPECT_EQ(configValue("galaxy_layout"), expected[i]);
+        }
     }
-}
-
-TEST_F(CrateGalaxyUiTest, ClickingColorChipsSwitchesMode) {
-    QPushButton* pKey = chip(QStringLiteral("KEY"));
-    ASSERT_NE(pKey, nullptr);
-    QTest::mouseClick(pKey, Qt::LeftButton);
-    QApplication::processEvents();
-    EXPECT_EQ(configValue("galaxy_color_mode"), QStringLiteral("key"));
-    EXPECT_TRUE(pKey->isChecked());
-
-    QPushButton* pTempo = chip(QStringLiteral("TEMPO"));
-    ASSERT_NE(pTempo, nullptr);
-    QTest::mouseClick(pTempo, Qt::LeftButton);
-    QApplication::processEvents();
-    EXPECT_EQ(configValue("galaxy_color_mode"), QStringLiteral("tempo"));
-
-    QPushButton* pCluster = chip(QStringLiteral("CLUSTER"));
-    ASSERT_NE(pCluster, nullptr);
-    QTest::mouseClick(pCluster, Qt::LeftButton);
-    QApplication::processEvents();
-    EXPECT_EQ(configValue("galaxy_color_mode"), QStringLiteral("cluster"));
-}
-
-TEST_F(CrateGalaxyUiTest, ClickingLayoutChipsSwitchesLayout) {
-    QPushButton* pWheel = chip(QStringLiteral("WHEEL"));
-    ASSERT_NE(pWheel, nullptr);
-    QTest::mouseClick(pWheel, Qt::LeftButton);
-    QApplication::processEvents();
-    // NOTE: the wheel layout persists as "key" (naming quirk, matches the setter).
-    EXPECT_EQ(configValue("galaxy_layout"), QStringLiteral("key"));
-
-    QPushButton* pScatter = chip(QStringLiteral("SCATTER"));
-    ASSERT_NE(pScatter, nullptr);
-    QTest::mouseClick(pScatter, Qt::LeftButton);
+    QTest::keyClick(pCombo, Qt::Key_Home);
     QApplication::processEvents();
     EXPECT_EQ(configValue("galaxy_layout"), QStringLiteral("scatter"));
 }
 
-TEST_F(CrateGalaxyUiTest, Clicking3dTogglesProjection) {
-    QPushButton* p3d = chip(QStringLiteral("3D"));
+TEST_F(CrateGalaxyUiTest, ColorComboChangesGalaxyForEveryChoice) {
+    auto* pCombo = m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapColor"));
+    ASSERT_NE(pCombo, nullptr);
+    const QStringList expected{QStringLiteral("cluster"), QStringLiteral("key"),
+            QStringLiteral("tempo"), QStringLiteral("energy")};
+    for (int i = 0; i < expected.size(); ++i) {
+        QTest::keyClick(pCombo, Qt::Key_Home);
+        for (int step = 0; step < i; ++step) {
+            QTest::keyClick(pCombo, Qt::Key_Down);
+        }
+        QApplication::processEvents();
+        EXPECT_EQ(m_pGalaxy->testColorMode(), expected[i]);
+        if (i > 0) {
+            EXPECT_EQ(configValue("galaxy_color_mode"), expected[i]);
+        }
+    }
+    QTest::keyClick(pCombo, Qt::Key_Home);
+    QApplication::processEvents();
+    EXPECT_EQ(configValue("galaxy_color_mode"), QStringLiteral("cluster"));
+}
+
+TEST_F(CrateGalaxyUiTest, Clicking3dTogglesGalaxyBothWays) {
+    QPushButton* p3d = m_pControls->findChild<QPushButton*>(QStringLiteral("CrateMap3d"));
     ASSERT_NE(p3d, nullptr);
     QTest::mouseClick(p3d, Qt::LeftButton);
     QApplication::processEvents();
+    EXPECT_TRUE(m_pGalaxy->test3dMode());
     EXPECT_EQ(configValue("galaxy_3d"), QStringLiteral("1"));
     QTest::mouseClick(p3d, Qt::LeftButton);
     QApplication::processEvents();
+    EXPECT_FALSE(m_pGalaxy->test3dMode());
     EXPECT_EQ(configValue("galaxy_3d"), QStringLiteral("0"));
+}
+
+TEST_F(CrateGalaxyUiTest, ClickingHaloTogglesGalaxyBothWays) {
+    QPushButton* pHalo = m_pControls->findChild<QPushButton*>(QStringLiteral("CrateMapHalo"));
+    ASSERT_NE(pHalo, nullptr);
+    EXPECT_TRUE(m_pGalaxy->testHalosEnabled());
+    QTest::mouseClick(pHalo, Qt::LeftButton);
+    QApplication::processEvents();
+    EXPECT_FALSE(m_pGalaxy->testHalosEnabled());
+    QTest::mouseClick(pHalo, Qt::LeftButton);
+    QApplication::processEvents();
+    EXPECT_TRUE(m_pGalaxy->testHalosEnabled());
+}
+
+TEST_F(CrateGalaxyUiTest, RestoresAllSidebarStateFromConfig) {
+    m_pGalaxy.reset();
+    m_pControls.reset();
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_layout"), QStringLiteral("artist"));
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_color_mode"), QStringLiteral("energy"));
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_3d"), 1);
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_halos"), 0);
+    m_pConfig->setValue(ConfigKey("[Crate]", "knob_focus"), 1);
+    m_pControls = std::make_unique<crate::WCrateMapControls>(nullptr, m_pConfig);
+    m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(nullptr, nullptr, m_pConfig);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLayoutMode(), QStringLiteral("artist"));
+    EXPECT_EQ(m_pGalaxy->testColorMode(), QStringLiteral("energy"));
+    EXPECT_TRUE(m_pGalaxy->test3dMode());
+    EXPECT_FALSE(m_pGalaxy->testHalosEnabled());
+    EXPECT_TRUE(m_pGalaxy->testKnobFocusMap());
+    EXPECT_EQ(m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapLayout"))->currentIndex(), 3);
+    EXPECT_EQ(m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapColor"))->currentIndex(), 3);
 }
 
 TEST_F(CrateGalaxyUiTest, ZoomedIn3dShowsCulledPills) {
@@ -257,9 +285,9 @@ TEST_F(CrateGalaxyUiTest, HoverAndOrbitKeep3dPillOnProjectedDot) {
     EXPECT_EQ(pPill->pos(), pDot->pos());
 }
 
-TEST_F(CrateGalaxyUiTest, KnobChipDefaultsTableAndToggles) {
-    QPushButton* pKnob = m_pGalaxy->findChild<QPushButton*>(
-            QStringLiteral("KnobFocusChip"));
+TEST_F(CrateGalaxyUiTest, KnobSidebarToggleChangesGalaxyBothWays) {
+    QPushButton* pKnob = m_pControls->findChild<QPushButton*>(
+            QStringLiteral("CrateMapKnob"));
     ASSERT_NE(pKnob, nullptr);
     // Default TABLE = stock behavior (least surprise).
     EXPECT_FALSE(pKnob->isChecked());
@@ -271,6 +299,10 @@ TEST_F(CrateGalaxyUiTest, KnobChipDefaultsTableAndToggles) {
     EXPECT_TRUE(pKnob->isChecked());
     EXPECT_EQ(pKnob->text(), QStringLiteral("KNOB:MAP"));
     EXPECT_EQ(ControlObject::get(ConfigKey("[Crate]", "knob_focus")), 1.0);
+    EXPECT_TRUE(m_pGalaxy->testKnobFocusMap());
+    QTest::mouseClick(pKnob, Qt::LeftButton);
+    QApplication::processEvents();
+    EXPECT_FALSE(m_pGalaxy->testKnobFocusMap());
 }
 
 TEST_F(CrateGalaxyUiTest, KnobForwardWalksNearestUnvisited) {
@@ -353,8 +385,8 @@ TEST_F(CrateGalaxyUiTest, TableFocusIgnoresKnob) {
     ASSERT_GE(seeded, 0);
 
     // Toggle back to TABLE; the galaxy cursor must stop responding to the knob.
-    QPushButton* pKnob = m_pGalaxy->findChild<QPushButton*>(
-            QStringLiteral("KnobFocusChip"));
+    QPushButton* pKnob = m_pControls->findChild<QPushButton*>(
+            QStringLiteral("CrateMapKnob"));
     ASSERT_NE(pKnob, nullptr);
     QTest::mouseClick(pKnob, Qt::LeftButton);
     QApplication::processEvents();

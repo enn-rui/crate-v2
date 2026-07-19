@@ -231,6 +231,70 @@ WLibrarySidebar {
   /* background of Color delegate in selected row */
   selection-background-color: #2c4a73;
 }
+
+#CrateMapControls {
+  background: #05060a;
+  border-top: 1px solid #232a36;
+  color: #f4f7fb;
+  font-family: "IBM Plex Mono", "Cascadia Mono", "Consolas";
+  font-size: 10px;
+}
+#CrateMapHeader {
+  color: #b4d2ff;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+#CrateMapFieldLabel {
+  color: #788397;
+}
+#CrateMapControls QComboBox {
+  min-height: 20px;
+  padding: 1px 24px 1px 6px;
+  color: #f4f7fb;
+  background: #0d1017;
+  border: 1px solid #333b4a;
+  border-radius: 2px;
+}
+#CrateMapControls QComboBox:hover,
+#CrateMapControls QComboBox:focus {
+  border-color: #b4d2ff;
+}
+#CrateMapControls QComboBox::drop-down {
+  subcontrol-origin: padding;
+  subcontrol-position: top right;
+  width: 20px;
+  border-left: 1px solid #333b4a;
+}
+#CrateMapControls QComboBox::down-arrow {
+  image: url(skin:/image/style_branch_closed.svg);
+  width: 8px;
+  height: 8px;
+}
+#CrateMapControls QComboBox QAbstractItemView {
+  color: #f4f7fb;
+  background: #0d1017;
+  border: 1px solid #333b4a;
+  selection-color: #05060a;
+  selection-background-color: #b4d2ff;
+  outline: none;
+}
+#CrateMapControls QPushButton {
+  min-height: 20px;
+  padding: 1px 6px;
+  color: #9ca7b9;
+  background: #0d1017;
+  border: 1px solid #333b4a;
+  border-radius: 2px;
+}
+#CrateMapControls QPushButton:hover {
+  color: #f4f7fb;
+  border-color: #b4d2ff;
+}
+#CrateMapControls QPushButton:checked {
+  color: #05060a;
+  background: #b4d2ff;
+  border-color: #b4d2ff;
+}
 /* Override the 'missing' color in Tracks > Missing,
    it's not useful there */
 #DlgMissing WTrackTableView {

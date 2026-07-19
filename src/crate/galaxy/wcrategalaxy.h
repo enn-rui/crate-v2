@@ -22,9 +22,6 @@ class QContextMenuEvent;
 class QGraphicsScene;
 class QPainter;
 class QGraphicsEllipseItem;
-class QAbstractButton;
-class QButtonGroup;
-class QFrame;
 class QVariantAnimation;
 class QAbstractItemModel;
 
@@ -61,6 +58,11 @@ class WCrateGalaxy : public QGraphicsView {
     int testProjectedNodeAt(const QPoint& viewportPos) const;
     void testApplySubsetByRelpaths(const QSet<QString>& relpaths);
     void testClearSubset();
+    QString testLayoutMode() const;
+    QString testColorMode() const;
+    bool test3dMode() const { return m_3dMode; }
+    bool testHalosEnabled() const { return m_halosEnabled; }
+    bool testKnobFocusMap() const { return m_knobFocusMap; }
 
   protected:
     bool eventFilter(QObject* pObj, QEvent* pEvent) override;
@@ -111,9 +113,6 @@ class WCrateGalaxy : public QGraphicsView {
     void setHoveredNode(int index);
     void set3dMode(bool enabled);
     void setHalosEnabled(bool enabled);
-    void createControlBar();
-    void positionControlBar();
-    void syncControlBar();
     void update3dProjection();
     int projectedNodeAt(const QPoint& viewportPos) const;
     void updateMixabilityHalos();
@@ -173,12 +172,6 @@ class WCrateGalaxy : public QGraphicsView {
     SonicVectors m_sonicVectors;
     bool m_vectorsLoadAttempted = false;
     bool m_halosEnabled = true;
-    QFrame* m_pControlBar = nullptr;
-    QButtonGroup* m_pLayoutButtons = nullptr;
-    QButtonGroup* m_pColorButtons = nullptr;
-    QAbstractButton* m_p3dButton = nullptr;
-    QAbstractButton* m_pHaloButton = nullptr;
-    QAbstractButton* m_pKnobButton = nullptr;
     QString m_playingRelpath;
     QHash<int, double> m_haloScores;
     QHash<QString, int> m_nodeByRelpath;
@@ -196,8 +189,12 @@ class WCrateGalaxy : public QGraphicsView {
     // Controls. knob_focus + galaxy_load are owned here (new [Crate] controls);
     // MoveVertical is a proxy onto the stock [Library] encoder the browse knob
     // already drives.
-    std::unique_ptr<ControlPushButton> m_pKnobFocusCO;
     std::unique_ptr<ControlPushButton> m_pGalaxyLoadCO;
+    ControlProxy* m_pLayoutProxy = nullptr;
+    ControlProxy* m_pColorProxy = nullptr;
+    ControlProxy* m_p3dProxy = nullptr;
+    ControlProxy* m_pHaloProxy = nullptr;
+    ControlProxy* m_pKnobFocusProxy = nullptr;
     ControlProxy* m_pMoveVerticalProxy = nullptr;
 };
 

@@ -66,6 +66,12 @@
                       </CoverArt>
                     </Children>
                   </Splitter>
+                  <CrateMapControls>
+                    <ObjectName>CrateMapControls</ObjectName>
+                    <SizePolicy>me,f</SizePolicy>
+                    <MinimumSize>150,142</MinimumSize>
+                    <MaximumSize>-1,142</MaximumSize>
+                  </CrateMapControls>
                 </Children>
               </WidgetGroup>
 

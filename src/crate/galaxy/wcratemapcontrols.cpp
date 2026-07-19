@@ -1,0 +1,184 @@
+#include "crate/galaxy/wcratemapcontrols.h"
+
+#include <QComboBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QVBoxLayout>
+
+#include "control/controlobject.h"
+#include "control/controlpushbutton.h"
+
+namespace {
+
+constexpr int kScatter = 0;
+constexpr int kKeyWheel = 1;
+constexpr int kBpmSerpentine = 2;
+constexpr int kArtist = 3;
+
+constexpr int kCluster = 0;
+constexpr int kKey = 1;
+constexpr int kTempo = 2;
+constexpr int kEnergy = 3;
+
+int savedLayout(const UserSettingsPointer& pConfig) {
+    const QString value = pConfig->getValue(
+            ConfigKey("[Crate]", "galaxy_layout"), QStringLiteral("scatter"));
+    if (value == QStringLiteral("key")) return kKeyWheel;
+    if (value == QStringLiteral("bpm")) return kBpmSerpentine;
+    if (value == QStringLiteral("artist")) return kArtist;
+    return kScatter;
+}
+
+int savedColor(const UserSettingsPointer& pConfig) {
+    const QString value = pConfig->getValue(
+            ConfigKey("[Crate]", "galaxy_color_mode"), QStringLiteral("cluster"));
+    if (value == QStringLiteral("key")) return kKey;
+    if (value == QStringLiteral("tempo")) return kTempo;
+    if (value == QStringLiteral("energy")) return kEnergy;
+    return kCluster;
+}
+
+} // namespace
+
+namespace crate {
+
+WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConfig)
+        : QWidget(pParent),
+          m_pConfig(std::move(pConfig)),
+          m_pLayoutCombo(new QComboBox(this)),
+          m_pColorCombo(new QComboBox(this)),
+          m_p3dButton(new QPushButton(QStringLiteral("3D"), this)),
+          m_pHaloButton(new QPushButton(QStringLiteral("HALO"), this)),
+          m_pKnobButton(new QPushButton(this)),
+          m_pLayoutCO(std::make_unique<ControlObject>(
+                  ConfigKey("[Crate]", "galaxy_layout_control"))),
+          m_pColorCO(std::make_unique<ControlObject>(
+                  ConfigKey("[Crate]", "galaxy_color_control"))),
+          m_p3dCO(std::make_unique<ControlPushButton>(
+                  ConfigKey("[Crate]", "galaxy_3d"))),
+          m_pHaloCO(std::make_unique<ControlPushButton>(
+                  ConfigKey("[Crate]", "galaxy_halos"))),
+          m_pKnobCO(std::make_unique<ControlPushButton>(
+                  ConfigKey("[Crate]", "knob_focus"))) {
+    setObjectName(QStringLiteral("CrateMapControls"));
+    setFixedHeight(142);
+
+    auto* pMain = new QVBoxLayout(this);
+    pMain->setContentsMargins(8, 6, 8, 7);
+    pMain->setSpacing(4);
+    auto* pHeader = new QLabel(QStringLiteral("MAP"), this);
+    pHeader->setObjectName(QStringLiteral("CrateMapHeader"));
+    pMain->addWidget(pHeader);
+
+    const auto addComboRow = [this, pMain](const QString& label, QComboBox* pCombo) {
+        auto* pRow = new QHBoxLayout();
+        pRow->setContentsMargins(0, 0, 0, 0);
+        pRow->setSpacing(6);
+        auto* pLabel = new QLabel(label, this);
+        pLabel->setObjectName(QStringLiteral("CrateMapFieldLabel"));
+        pLabel->setFixedWidth(48);
+        pCombo->setFocusPolicy(Qt::NoFocus);
+        pCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        pRow->addWidget(pLabel);
+        pRow->addWidget(pCombo);
+        pMain->addLayout(pRow);
+    };
+
+    m_pLayoutCombo->setObjectName(QStringLiteral("CrateMapLayout"));
+    m_pLayoutCombo->addItems({QStringLiteral("Scatter"), QStringLiteral("Key wheel"),
+            QStringLiteral("BPM serpentine"), QStringLiteral("Artist")});
+    addComboRow(QStringLiteral("LAYOUT"), m_pLayoutCombo);
+    m_pColorCombo->setObjectName(QStringLiteral("CrateMapColor"));
+    m_pColorCombo->addItems({QStringLiteral("Cluster"), QStringLiteral("Key"),
+            QStringLiteral("Tempo"), QStringLiteral("Energy")});
+    addComboRow(QStringLiteral("COLOR"), m_pColorCombo);
+
+    auto* pButtons = new QHBoxLayout();
+    pButtons->setContentsMargins(0, 0, 0, 0);
+    pButtons->setSpacing(4);
+    for (QPushButton* pButton : {m_p3dButton, m_pHaloButton, m_pKnobButton}) {
+        pButton->setCheckable(true);
+        pButton->setFocusPolicy(Qt::NoFocus);
+        pButtons->addWidget(pButton);
+    }
+    m_p3dButton->setObjectName(QStringLiteral("CrateMap3d"));
+    m_pHaloButton->setObjectName(QStringLiteral("CrateMapHalo"));
+    m_pKnobButton->setObjectName(QStringLiteral("CrateMapKnob"));
+    m_pKnobButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    pMain->addLayout(pButtons);
+
+    m_p3dCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
+    m_pHaloCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
+    m_pKnobCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
+    m_pLayoutCO->set(savedLayout(m_pConfig));
+    m_pColorCO->set(savedColor(m_pConfig));
+    m_p3dCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_3d"), 0));
+    m_pHaloCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_halos"), 1));
+    m_pKnobCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "knob_focus"), 0));
+
+    connect(m_pLayoutCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int index) { m_pLayoutCO->set(index); });
+    connect(m_pColorCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int index) { m_pColorCO->set(index); });
+    connect(m_p3dButton, &QPushButton::clicked,
+            this, [this](bool checked) { m_p3dCO->set(checked ? 1.0 : 0.0); });
+    connect(m_pHaloButton, &QPushButton::clicked,
+            this, [this](bool checked) { m_pHaloCO->set(checked ? 1.0 : 0.0); });
+    connect(m_pKnobButton, &QPushButton::clicked,
+            this, [this](bool checked) {
+                syncKnob(checked ? 1.0 : 0.0);
+                m_pKnobCO->set(checked ? 1.0 : 0.0);
+            });
+    connect(m_pLayoutCO.get(), &ControlObject::valueChanged,
+            this, &WCrateMapControls::syncLayout);
+    connect(m_pColorCO.get(), &ControlObject::valueChanged,
+            this, &WCrateMapControls::syncColor);
+    connect(m_p3dCO.get(), &ControlObject::valueChanged,
+            this, &WCrateMapControls::sync3d);
+    connect(m_pHaloCO.get(), &ControlObject::valueChanged,
+            this, &WCrateMapControls::syncHalos);
+    connect(m_pKnobCO.get(), &ControlObject::valueChanged,
+            this, &WCrateMapControls::syncKnob);
+    syncLayout(m_pLayoutCO->get());
+    syncColor(m_pColorCO->get());
+    sync3d(m_p3dCO->get());
+    syncHalos(m_pHaloCO->get());
+    syncKnob(m_pKnobCO->get());
+}
+
+WCrateMapControls::~WCrateMapControls() = default;
+
+void WCrateMapControls::syncLayout(double value) {
+    const QSignalBlocker blocker(m_pLayoutCombo);
+    m_pLayoutCombo->setCurrentIndex(qBound(0, qRound(value), 3));
+    m_pLayoutCombo->setEnabled(m_p3dCO->get() == 0.0);
+}
+
+void WCrateMapControls::syncColor(double value) {
+    const QSignalBlocker blocker(m_pColorCombo);
+    m_pColorCombo->setCurrentIndex(qBound(0, qRound(value), 3));
+}
+
+void WCrateMapControls::sync3d(double value) {
+    const QSignalBlocker blocker(m_p3dButton);
+    m_p3dButton->setChecked(value != 0.0);
+    m_pLayoutCombo->setEnabled(value == 0.0);
+}
+
+void WCrateMapControls::syncHalos(double value) {
+    const QSignalBlocker blocker(m_pHaloButton);
+    m_pHaloButton->setChecked(value != 0.0);
+}
+
+void WCrateMapControls::syncKnob(double value) {
+    const QSignalBlocker blocker(m_pKnobButton);
+    const bool map = value != 0.0;
+    m_pKnobButton->setChecked(map);
+    m_pKnobButton->setText(map ? QStringLiteral("KNOB:MAP") : QStringLiteral("KNOB:TABLE"));
+}
+
+} // namespace crate
+
+#include "moc_wcratemapcontrols.cpp"

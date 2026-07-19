@@ -1763,6 +1763,7 @@ add_library(
   src/widget/wcoverartlabel.cpp
   src/crate/data/cratesidecars.cpp
   src/crate/galaxy/wcrategalaxy.cpp
+  src/crate/galaxy/wcratemapcontrols.cpp
   src/crate/intelligence/scores.cpp
   src/crate/intelligence/sonicvectors.cpp
   src/widget/wcoverartmenu.cpp

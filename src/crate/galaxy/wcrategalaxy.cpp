@@ -3,9 +3,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QActionGroup>
-#include <QButtonGroup>
 #include <QContextMenuEvent>
-#include <QFrame>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
@@ -14,13 +12,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QLayout>
-#include <QMargins>
-#include <QPushButton>
 #include <QStyle>
-#include <QWidgetItem>
 #include <QRadialGradient>
 #include <QRegularExpression>
 #include <QVariantAnimation>
@@ -57,7 +49,6 @@ constexpr double kPillFadeStart = 2.55;
 constexpr double kPillFadeEnd = 3.15;
 constexpr int kPillCellWidth = 180;
 constexpr int kPillCellHeight = 52;
-constexpr int kControlMargin = 10;
 constexpr double kGhostColorStrength = 0.20;
 const QColor kGalaxyInk(0x05, 0x06, 0x0a);
 
@@ -104,97 +95,6 @@ class GalaxyPillItem final : public QGraphicsItem {
   private:
     crate::GalaxyNode m_node;
     QColor m_accent;
-};
-
-// A wrapping (flow) layout for the galaxy chip bar: on a wide pane the chips
-// stay one row; on a narrow MAP pane they wrap to a second row instead of
-// clipping off the right edge. Standard Qt FlowLayout, trimmed.
-class FlowLayout final : public QLayout {
-  public:
-    FlowLayout(QWidget* pParent, int margin, int hSpacing, int vSpacing)
-            : QLayout(pParent), m_hSpace(hSpacing), m_vSpace(vSpacing) {
-        setContentsMargins(margin, margin, margin, margin);
-    }
-    ~FlowLayout() override {
-        QLayoutItem* pItem = nullptr;
-        while ((pItem = takeAt(0)) != nullptr) {
-            delete pItem;
-        }
-    }
-    void addItem(QLayoutItem* pItem) override {
-        m_items.append(pItem);
-    }
-    int count() const override {
-        return m_items.size();
-    }
-    QLayoutItem* itemAt(int index) const override {
-        return m_items.value(index);
-    }
-    QLayoutItem* takeAt(int index) override {
-        return (index >= 0 && index < m_items.size()) ? m_items.takeAt(index) : nullptr;
-    }
-    Qt::Orientations expandingDirections() const override {
-        return {};
-    }
-    bool hasHeightForWidth() const override {
-        return true;
-    }
-    int heightForWidth(int width) const override {
-        return doLayout(QRect(0, 0, width, 0), true);
-    }
-    void setGeometry(const QRect& rect) override {
-        QLayout::setGeometry(rect);
-        doLayout(rect, false);
-    }
-    QSize sizeHint() const override {
-        // Natural (single-row) width, so wide panes stay one row.
-        int w = 0;
-        int h = 0;
-        for (int i = 0; i < m_items.size(); ++i) {
-            const QSize s = m_items[i]->sizeHint();
-            w += s.width() + (i ? m_hSpace : 0);
-            h = qMax(h, s.height());
-        }
-        const QMargins m = contentsMargins();
-        return QSize(w + m.left() + m.right(), h + m.top() + m.bottom());
-    }
-    QSize minimumSize() const override {
-        QSize size;
-        for (QLayoutItem* pItem : m_items) {
-            size = size.expandedTo(pItem->minimumSize());
-        }
-        const QMargins m = contentsMargins();
-        return size + QSize(m.left() + m.right(), m.top() + m.bottom());
-    }
-
-  private:
-    int doLayout(const QRect& rect, bool testOnly) const {
-        const QMargins m = contentsMargins();
-        const QRect effective = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom());
-        int x = effective.x();
-        int y = effective.y();
-        int lineHeight = 0;
-        for (QLayoutItem* pItem : m_items) {
-            const QSize s = pItem->sizeHint();
-            int nextX = x + s.width() + m_hSpace;
-            if (nextX - m_hSpace > effective.right() + 1 && lineHeight > 0) {
-                x = effective.x();
-                y = y + lineHeight + m_vSpace;
-                nextX = x + s.width() + m_hSpace;
-                lineHeight = 0;
-            }
-            if (!testOnly) {
-                pItem->setGeometry(QRect(QPoint(x, y), s));
-            }
-            x = nextX;
-            lineHeight = qMax(lineHeight, s.height());
-        }
-        return y + lineHeight - rect.y() + m.bottom();
-    }
-
-    QList<QLayoutItem*> m_items;
-    int m_hSpace;
-    int m_vSpace;
 };
 
 // Faithful to Crate v1 map_view._cluster_color: golden-ratio hue walk,
@@ -300,8 +200,6 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     } else if (savedLayout == QStringLiteral("artist")) {
         m_layoutMode = LayoutMode::Artist;
     }
-    createControlBar();
-    syncControlBar();
     populate();
     if (m_pLibrary != nullptr) {
         connect(m_pLibrary,
@@ -338,15 +236,28 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     // a ControlObject so a future FLX4 mapping / other UI can read or flip it.
     const bool mapFocus = m_pConfig->getValue(
             ConfigKey("[Crate]", "knob_focus"), 0) != 0;
-    m_pKnobFocusCO = std::make_unique<ControlPushButton>(
-            ConfigKey("[Crate]", "knob_focus"));
-    m_pKnobFocusCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
-    m_pKnobFocusCO->set(mapFocus ? 1.0 : 0.0);
     m_knobFocusMap = mapFocus;
-    connect(m_pKnobFocusCO.get(),
-            &ControlObject::valueChanged,
-            this,
-            [this](double v) { setKnobFocusMap(v != 0.0); });
+
+    m_pLayoutProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_layout_control"), this);
+    m_pColorProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_color_control"), this);
+    m_p3dProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_3d"), this);
+    m_pHaloProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_halos"), this);
+    m_pKnobFocusProxy = new ControlProxy(ConfigKey("[Crate]", "knob_focus"), this);
+    m_pLayoutProxy->connectValueChanged(this, [this](double value) {
+        setLayoutMode(static_cast<LayoutMode>(qBound(0, qRound(value), 3)));
+    });
+    m_pColorProxy->connectValueChanged(this, [this](double value) {
+        setColorMode(static_cast<ColorMode>(qBound(0, qRound(value), 3)));
+    });
+    m_p3dProxy->connectValueChanged(this, [this](double value) { set3dMode(value != 0.0); });
+    m_pHaloProxy->connectValueChanged(this, [this](double value) { setHalosEnabled(value != 0.0); });
+    m_pKnobFocusProxy->connectValueChanged(
+            this, [this](double value) { setKnobFocusMap(value != 0.0); });
+    m_pLayoutProxy->set(static_cast<int>(m_layoutMode));
+    m_pColorProxy->set(static_cast<int>(m_colorMode));
+    m_p3dProxy->set(m_3dMode ? 1.0 : 0.0);
+    m_pHaloProxy->set(m_halosEnabled ? 1.0 : 0.0);
+    m_pKnobFocusProxy->set(m_knobFocusMap ? 1.0 : 0.0);
 
     // galaxy_load: a push control that loads the CURSOR track into the first
     // stopped deck (never yanks a playing one). Mirrors the double-click load
@@ -372,138 +283,9 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
                 this, &WCrateGalaxy::onKnobMove);
     }
 
-    syncControlBar();
 }
 
 WCrateGalaxy::~WCrateGalaxy() = default;
-
-void WCrateGalaxy::createControlBar() {
-    m_pControlBar = new QFrame(viewport());
-    m_pControlBar->setObjectName(QStringLiteral("GalaxyControlBar"));
-    m_pControlBar->setStyleSheet(QStringLiteral(
-            "QFrame#GalaxyControlBar { background: rgba(5, 6, 10, 225); "
-            "border: 1px solid rgba(244, 247, 251, 34); }"
-            "QLabel { color: rgba(244, 247, 251, 120); font: 9px monospace; "
-            "padding: 0 2px; }"
-            "QPushButton { background: transparent; color: rgba(244, 247, 251, 145); "
-            "border: 1px solid rgba(244, 247, 251, 55); border-radius: 2px; "
-            "font: 9px monospace; padding: 2px 7px; min-height: 15px; }"
-            "QPushButton:hover { border-color: rgba(180, 210, 255, 180); "
-            "color: rgb(234, 242, 255); }"
-            "QPushButton:checked { background: rgba(80, 145, 230, 150); "
-            "border-color: rgb(150, 200, 255); color: white; }"));
-    auto* pLayout = new FlowLayout(m_pControlBar, 4, 3, 3);
-
-    const auto addLabel = [pLayout, this](const QString& text) {
-        pLayout->addWidget(new QLabel(text, m_pControlBar));
-    };
-    const auto addButton = [pLayout, this](const QString& text) {
-        auto* pButton = new QPushButton(text, m_pControlBar);
-        pButton->setCheckable(true);
-        pButton->setFocusPolicy(Qt::NoFocus);
-        pLayout->addWidget(pButton);
-        return pButton;
-    };
-
-    addLabel(QStringLiteral("LAYOUT"));
-    m_pLayoutButtons = new QButtonGroup(this);
-    m_pLayoutButtons->setExclusive(true);
-    const auto addLayoutButton = [&](const QString& text, LayoutMode mode, int id) {
-        auto* pButton = addButton(text);
-        m_pLayoutButtons->addButton(pButton, id);
-        connect(pButton, &QPushButton::clicked, this, [this, mode] {
-            setLayoutMode(mode);
-        });
-    };
-    addLayoutButton(QStringLiteral("SCATTER"), LayoutMode::Scatter, 0);
-    addLayoutButton(QStringLiteral("WHEEL"), LayoutMode::KeyWheel, 1);
-    addLayoutButton(QStringLiteral("BPM"), LayoutMode::BpmSerpentine, 2);
-    addLayoutButton(QStringLiteral("ARTIST"), LayoutMode::Artist, 3);
-
-    addLabel(QStringLiteral("COLOR"));
-    m_pColorButtons = new QButtonGroup(this);
-    m_pColorButtons->setExclusive(true);
-    const auto addColorButton = [&](const QString& text, ColorMode mode, int id) {
-        auto* pButton = addButton(text);
-        m_pColorButtons->addButton(pButton, id);
-        connect(pButton, &QPushButton::clicked, this, [this, mode] {
-            setColorMode(mode);
-        });
-    };
-    addColorButton(QStringLiteral("CLUSTER"), ColorMode::Cluster, 0);
-    addColorButton(QStringLiteral("KEY"), ColorMode::Key, 1);
-    addColorButton(QStringLiteral("TEMPO"), ColorMode::Tempo, 2);
-    addColorButton(QStringLiteral("ENERGY"), ColorMode::Energy, 3);
-
-    m_p3dButton = addButton(QStringLiteral("3D"));
-    connect(m_p3dButton, &QAbstractButton::clicked, this, &WCrateGalaxy::set3dMode);
-    m_pHaloButton = addButton(QStringLiteral("HALO"));
-    connect(m_pHaloButton, &QAbstractButton::clicked, this, &WCrateGalaxy::setHalosEnabled);
-
-    // KNOB focus toggle: routes the browse knob to the galaxy cursor (MAP) or
-    // leaves stock library scroll (TABLE, default). Self-labeling chip; stable
-    // objectName so tests can find it across the MAP/TABLE text swap.
-    m_pKnobButton = addButton(QStringLiteral("KNOB:TABLE"));
-    m_pKnobButton->setObjectName(QStringLiteral("KnobFocusChip"));
-    connect(m_pKnobButton, &QAbstractButton::clicked, this, [this] {
-        // Drive state directly (a ControlObject does not re-emit valueChanged for
-        // its own set), then setKnobFocusMap mirrors the value back into the CO
-        // for controllers/other UI to read.
-        setKnobFocusMap(!m_knobFocusMap);
-    });
-
-    positionControlBar();
-    m_pControlBar->raise();
-}
-
-void WCrateGalaxy::positionControlBar() {
-    if (!m_pControlBar) {
-        return;
-    }
-    // Clamp the bar to the pane width so the FlowLayout wraps chips to a second
-    // row on a narrow MAP pane instead of clipping them off the right edge.
-    QLayout* pLayout = m_pControlBar->layout();
-    const int natural = m_pControlBar->sizeHint().width();
-    const int available = viewport()->width() - 2 * kControlMargin;
-    int barWidth = (available > 0) ? qMin(natural, available) : natural;
-    barWidth = qMax(barWidth, 140);
-    const int barHeight = (pLayout && pLayout->hasHeightForWidth())
-            ? pLayout->heightForWidth(barWidth)
-            : m_pControlBar->sizeHint().height();
-    m_pControlBar->setGeometry(kControlMargin, kControlMargin, barWidth, barHeight);
-    m_pControlBar->raise();
-}
-
-void WCrateGalaxy::syncControlBar() {
-    if (!m_pControlBar) {
-        return;
-    }
-    const int layoutId = m_layoutMode == LayoutMode::Scatter ? 0
-            : m_layoutMode == LayoutMode::KeyWheel           ? 1
-            : m_layoutMode == LayoutMode::BpmSerpentine     ? 2
-                                                            : 3;
-    const int colorId = m_colorMode == ColorMode::Cluster ? 0
-            : m_colorMode == ColorMode::Key               ? 1
-            : m_colorMode == ColorMode::Tempo             ? 2
-                                                          : 3;
-    if (auto* pButton = m_pLayoutButtons->button(layoutId)) {
-        pButton->setChecked(true);
-    }
-    if (auto* pButton = m_pColorButtons->button(colorId)) {
-        pButton->setChecked(true);
-    }
-    m_p3dButton->setChecked(m_3dMode);
-    m_pHaloButton->setChecked(m_halosEnabled);
-    if (m_pKnobButton) {
-        m_pKnobButton->setChecked(m_knobFocusMap);
-        m_pKnobButton->setText(m_knobFocusMap
-                        ? QStringLiteral("KNOB:MAP")
-                        : QStringLiteral("KNOB:TABLE"));
-    }
-    for (QAbstractButton* pButton : m_pLayoutButtons->buttons()) {
-        pButton->setEnabled(!m_3dMode);
-    }
-}
 
 void WCrateGalaxy::populate() {
     const QString sidecarDir = m_pConfig->getValue(
@@ -879,7 +661,9 @@ void WCrateGalaxy::setColorMode(ColorMode mode) {
         value = QStringLiteral("energy");
     }
     m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_color_mode"), value);
-    syncControlBar();
+    if (m_pColorProxy && qRound(m_pColorProxy->get()) != static_cast<int>(mode)) {
+        m_pColorProxy->set(static_cast<int>(mode));
+    }
     updateColors();
 }
 
@@ -1013,7 +797,9 @@ void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
     else if (mode == LayoutMode::BpmSerpentine) value = QStringLiteral("bpm");
     else if (mode == LayoutMode::Artist) value = QStringLiteral("artist");
     m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_layout"), value);
-    syncControlBar();
+    if (m_pLayoutProxy && qRound(m_pLayoutProxy->get()) != static_cast<int>(mode)) {
+        m_pLayoutProxy->set(static_cast<int>(mode));
+    }
     const QVector<QPointF> start = [&] { QVector<QPointF> p; for (auto* dot : m_dots) p.append(dot->pos()); return p; }();
     const QVector<QPointF> target = layoutTarget(mode);
     m_pLayoutAnimation->stop();
@@ -1094,7 +880,7 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     pPainter->setPen(QColor(0xf4, 0xf7, 0xfb));
 
     const int margin = 10;
-    const int top = m_pControlBar ? m_pControlBar->height() + 2 * kControlMargin : margin;
+    const int top = margin;
     if (m_colorMode == ColorMode::Key) {
         const QRect chip(margin, top, 224, 42);
         pPainter->setBrush(QColor(0x05, 0x06, 0x0a, 205));
@@ -1198,7 +984,9 @@ void WCrateGalaxy::set3dMode(bool enabled) {
         fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
         m_fitScale = transform().m11();
     }
-    syncControlBar();
+    if (m_p3dProxy && (m_p3dProxy->get() != 0.0) != enabled) {
+        m_p3dProxy->set(enabled ? 1.0 : 0.0);
+    }
     applyHaloVisuals();
     updatePills();
     viewport()->update();
@@ -1206,12 +994,13 @@ void WCrateGalaxy::set3dMode(bool enabled) {
 
 void WCrateGalaxy::setHalosEnabled(bool enabled) {
     if (m_halosEnabled == enabled) {
-        syncControlBar();
         return;
     }
     m_halosEnabled = enabled;
     m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_halos"), enabled ? 1 : 0);
-    syncControlBar();
+    if (m_pHaloProxy && (m_pHaloProxy->get() != 0.0) != enabled) {
+        m_pHaloProxy->set(enabled ? 1.0 : 0.0);
+    }
     updateMixabilityHalos();
 }
 
@@ -1383,7 +1172,6 @@ void WCrateGalaxy::leaveEvent(QEvent* pEvent) {
 
 void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
     QGraphicsView::resizeEvent(pEvent);
-    positionControlBar();
     if (m_3dMode) {
         update3dProjection();
     }
@@ -1483,10 +1271,9 @@ void WCrateGalaxy::setKnobFocusMap(bool mapFocus) {
     const bool changed = m_knobFocusMap != mapFocus;
     m_knobFocusMap = mapFocus;
     m_pConfig->setValue(ConfigKey("[Crate]", "knob_focus"), mapFocus ? 1 : 0);
-    if (m_pKnobFocusCO && (m_pKnobFocusCO->get() != 0.0) != mapFocus) {
-        m_pKnobFocusCO->set(mapFocus ? 1.0 : 0.0);
+    if (m_pKnobFocusProxy && (m_pKnobFocusProxy->get() != 0.0) != mapFocus) {
+        m_pKnobFocusProxy->set(mapFocus ? 1.0 : 0.0);
     }
-    syncControlBar();
     Q_UNUSED(changed);
 }
 
@@ -1782,6 +1569,26 @@ void WCrateGalaxy::testApplySubsetByRelpaths(const QSet<QString>& relpaths) {
 
 void WCrateGalaxy::testClearSubset() {
     applySubset({}, false);
+}
+
+QString WCrateGalaxy::testLayoutMode() const {
+    switch (m_layoutMode) {
+    case LayoutMode::Scatter: return QStringLiteral("scatter");
+    case LayoutMode::KeyWheel: return QStringLiteral("key");
+    case LayoutMode::BpmSerpentine: return QStringLiteral("bpm");
+    case LayoutMode::Artist: return QStringLiteral("artist");
+    }
+    return {};
+}
+
+QString WCrateGalaxy::testColorMode() const {
+    switch (m_colorMode) {
+    case ColorMode::Cluster: return QStringLiteral("cluster");
+    case ColorMode::Key: return QStringLiteral("key");
+    case ColorMode::Tempo: return QStringLiteral("tempo");
+    case ColorMode::Energy: return QStringLiteral("energy");
+    }
+    return {};
 }
 
 void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
