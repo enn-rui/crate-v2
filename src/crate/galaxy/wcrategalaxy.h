@@ -6,7 +6,9 @@
 #include "preferences/usersettings.h"
 
 class PlayerManager;
+class QContextMenuEvent;
 class QGraphicsScene;
+class QPainter;
 
 namespace crate {
 
@@ -23,12 +25,31 @@ class WCrateGalaxy : public QGraphicsView {
             UserSettingsPointer pConfig);
 
   protected:
+    void contextMenuEvent(QContextMenuEvent* pEvent) override;
+    void drawForeground(QPainter* pPainter, const QRectF& rect) override;
     void wheelEvent(QWheelEvent* pEvent) override;
     void mouseDoubleClickEvent(QMouseEvent* pEvent) override;
     void showEvent(QShowEvent* pEvent) override;
 
   private:
+    enum class ColorMode {
+        Cluster,
+        Key,
+        Tempo,
+        Energy,
+    };
+
+    struct ValueRange {
+        double low = 0.0;
+        double high = 0.0;
+        bool valid = false;
+    };
+
     void populate();
+    void updateColors();
+    void setColorMode(ColorMode mode);
+    QColor nodeColor(const GalaxyNode& node) const;
+    static ValueRange percentileRange(const QVector<double>& values);
     QString resolveMusicPath(const QString& relpath) const;
 
     PlayerManager* m_pPlayerManager;
@@ -36,6 +57,9 @@ class WCrateGalaxy : public QGraphicsView {
     QGraphicsScene* m_pScene;
     QVector<GalaxyNode> m_nodes;
     QString m_musicRoot;
+    ColorMode m_colorMode = ColorMode::Cluster;
+    ValueRange m_tempoRange;
+    ValueRange m_energyRange;
     bool m_initialFitDone = false;
 };
 
