@@ -48,7 +48,17 @@ void CrateSidecars::parseTrackName(
         const QString& relpath, QString* pTitle, QString* pArtist) {
     const QString stem = QFileInfo(relpath).completeBaseName().trimmed();
     QString cleaned = stem;
-    cleaned.remove(QRegularExpression(QStringLiteral("^\\d+[.]\\s*")));
+    // Common rip/export prefixes: track ("07 ", "07.", "07-"),
+    // spaced track separator ("07 - "), and disc-track ("1-06 ").
+    const QString stripped = cleaned
+                                     .remove(QRegularExpression(QStringLiteral(
+                                             "^\\s*(?:\\d+\\s*-\\s*\\d+|\\d+)(?:\\s*[.-]\\s*|\\s+)")))
+                                     .trimmed();
+    if (!stripped.isEmpty()) {
+        cleaned = stripped;
+    } else {
+        cleaned = stem;
+    }
     QStringList parts = cleaned.split(
             QRegularExpression(QStringLiteral("\\s+-\\s+")), Qt::KeepEmptyParts);
     const bool numbered = QRegularExpression(QStringLiteral("^\\d+[.]?$")).match(

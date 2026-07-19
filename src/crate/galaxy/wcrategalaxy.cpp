@@ -30,6 +30,8 @@ constexpr double kSceneSpan = 2000.0; // normalized coordinate span
 constexpr double kDotRadius = 3.5;    // px, transform-independent
 constexpr double kPillFadeStart = 2.55;
 constexpr double kPillFadeEnd = 3.15;
+constexpr int kPillCellWidth = 180;
+constexpr int kPillCellHeight = 52;
 
 class GalaxyPillItem final : public QGraphicsItem {
   public:
@@ -60,11 +62,16 @@ class GalaxyPillItem final : public QGraphicsItem {
         p->drawText(QPointF(14.0, -10.0), elide(m_node.title));
         p->drawText(QPointF(14.0, 3.0), elide(m_node.artist));
         p->setPen(m_accent.lighter(120));
-        const QString key = m_node.keyCamelot.isEmpty() ? QStringLiteral("--") : m_node.keyCamelot;
-        const QString bpm = m_node.bpm > 0.0
-                ? QString::number(m_node.bpm, 'f', 1)
-                : QStringLiteral("--");
-        p->drawText(QPointF(14.0, 17.0), key + QStringLiteral("  \u00b7  ") + bpm);
+        QStringList details;
+        if (!m_node.keyCamelot.isEmpty()) {
+            details.append(m_node.keyCamelot);
+        }
+        if (m_node.bpm > 0.0 && std::isfinite(m_node.bpm)) {
+            details.append(QString::number(m_node.bpm, 'f', 1));
+        }
+        if (!details.isEmpty()) {
+            p->drawText(QPointF(14.0, 17.0), details.join(QStringLiteral("  \u00b7  ")));
+        }
     }
   private:
     crate::GalaxyNode m_node;
@@ -410,16 +417,47 @@ void WCrateGalaxy::updatePills() {
     const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
     const double margin = 190.0 / qMax(transform().m11(), 0.001);
     const QRectF nearby = visible.adjusted(-margin, -margin, margin, margin);
-    QSet<int> wanted;
+    QVector<int> candidates;
     if (lodOpacity > 0.0) {
         for (int i = 0; i < m_dots.size(); ++i) {
             if (nearby.contains(m_dots[i]->pos())) {
-                wanted.insert(i);
+                candidates.append(i);
             }
         }
     }
+
+    // Cull in viewport pixels because pills ignore the view transform. Reserve
+    // the hovered node first, then use ascending node index as stable priority.
+    // The rectangle check also prevents overlap across adjacent cell edges.
+    QSet<int> wanted;
+    QSet<QPair<int, int>> occupiedCells;
+    QVector<QRect> occupiedRects;
+    const auto tryAdd = [&](int index) {
+        if (index < 0 || index >= m_dots.size() || wanted.contains(index)) {
+            return;
+        }
+        const QPoint anchor = mapFromScene(m_dots[index]->pos());
+        const QPair<int, int> cell(
+                qFloor(static_cast<double>(anchor.x()) / kPillCellWidth),
+                qFloor(static_cast<double>(anchor.y()) / kPillCellHeight));
+        const QRect pillRect(anchor.x() + 7, anchor.y() - 25, 172, 50);
+        if (occupiedCells.contains(cell)) {
+            return;
+        }
+        for (const QRect& occupied : std::as_const(occupiedRects)) {
+            if (occupied.intersects(pillRect)) {
+                return;
+            }
+        }
+        wanted.insert(index);
+        occupiedCells.insert(cell);
+        occupiedRects.append(pillRect);
+    };
     if (m_hoveredNode >= 0) {
-        wanted.insert(m_hoveredNode);
+        tryAdd(m_hoveredNode);
+    }
+    for (int index : std::as_const(candidates)) {
+        tryAdd(index);
     }
     for (auto it = m_pills.begin(); it != m_pills.end();) {
         if (!wanted.contains(it.key())) {
@@ -440,7 +478,7 @@ void WCrateGalaxy::updatePills() {
         pPill->setOpacity(index == m_hoveredNode ? 1.0 : lodOpacity);
     }
     for (int i = 0; i < m_dots.size(); ++i) {
-        m_dots[i]->setOpacity(i == m_hoveredNode ? 0.0 : 1.0 - lodOpacity);
+        m_dots[i]->setOpacity(wanted.contains(i) ? 0.0 : 1.0);
     }
 }
 
