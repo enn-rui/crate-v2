@@ -78,18 +78,18 @@
     <linearGradient
        id="linearGradient4942">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946" />
     </linearGradient>
     <linearGradient
        id="linearGradient5695-6">
       <stop
-         style="stop-color:#3c3c3c;stop-opacity:1;"
+         style="stop-color:#2b3140;stop-opacity:1;"
          offset="0"
          id="stop5697-6" />
       <stop
@@ -100,7 +100,7 @@
     <linearGradient
        id="linearGradient5695-4">
       <stop
-         style="stop-color:#646464;stop-opacity:1;"
+         style="stop-color:#565e6d;stop-opacity:1;"
          offset="0"
          id="stop5697-7" />
       <stop
@@ -111,22 +111,22 @@
     <linearGradient
        id="linearGradient4942-73">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944-6" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946-6" />
     </linearGradient>
     <linearGradient
        id="linearGradient4942-5">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944-9" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946-5" />
     </linearGradient>
@@ -194,7 +194,7 @@ Grid based on suggestions from http://techbase.kde.org/Projects/Oxygen/Style</dc
        id="ic_library_unchecked"
        style="display:inline">
       <rect
-         style="display:inline;opacity:0.25;fill:none;stroke:#b3b3b3;stroke-width:2.40906954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+         style="display:inline;opacity:0.25;fill:none;stroke:#7f8694;stroke-width:2.40906954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
          id="style_checkbox_unchecked"
          width="26.499765"
          height="26.499765"

@@ -24,6 +24,11 @@ listed here. This list is the entire merge-conflict surface for future `upstream
   src/util/versionstore.cpp
 - Crate splash/packaged logo: res/images/mixxx_logo.svg (flat #05060a field with
   monochrome CRATE wordmark; intentionally replaces upstream Mixxx branding)
+- Skin identity de-grey (2026-07-19): res/images/library/*.svg recolored to Crate mono
+  palette (gradient stops #ff6600/#de5800 -> #9aa3b2/#6b7280, #646464/#3c3c3c ->
+  #565e6d/#2b3140, flat #979797/#b3b3b3 -> #7f8694, flat orange -> #b4d2ff) and
+  cover_default.svg dimmed to ink (#2e3442/#4a5262). These are qrc-embedded — visual
+  changes require a rebuild.
 
 ## Known issues
 - Skin manifest <attribute> DEFAULTS not applied on a virgin profile (sections default

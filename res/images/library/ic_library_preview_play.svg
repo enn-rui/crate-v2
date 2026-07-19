@@ -78,18 +78,18 @@
     <linearGradient
        id="linearGradient4942">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946" />
     </linearGradient>
     <linearGradient
        id="linearGradient5695-6">
       <stop
-         style="stop-color:#3c3c3c;stop-opacity:1;"
+         style="stop-color:#2b3140;stop-opacity:1;"
          offset="0"
          id="stop5697-6" />
       <stop
@@ -100,7 +100,7 @@
     <linearGradient
        id="linearGradient5695-4">
       <stop
-         style="stop-color:#646464;stop-opacity:1;"
+         style="stop-color:#565e6d;stop-opacity:1;"
          offset="0"
          id="stop5697-7" />
       <stop
@@ -111,22 +111,22 @@
     <linearGradient
        id="linearGradient4942-73">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944-6" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946-6" />
     </linearGradient>
     <linearGradient
        id="linearGradient4942-5">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944-9" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946-5" />
     </linearGradient>
@@ -209,7 +209,7 @@ Grid based on suggestions from http://techbase.kde.org/Projects/Oxygen/Style</dc
            inkscape:export-filename=""
            inkscape:transform-center-x="-0.99997903"
            sodipodi:type="star"
-           style="display:inline;fill:#979797;fill-opacity:0.5;stroke:none"
+           style="display:inline;fill:#7f8694;fill-opacity:0.5;stroke:none"
            id="path4203"
            sodipodi:sides="3"
            sodipodi:cx="570.63519"
@@ -230,12 +230,12 @@ Grid based on suggestions from http://techbase.kde.org/Projects/Oxygen/Style</dc
            inkscape:export-filename=""
            inkscape:export-xdpi="90"
            inkscape:export-ydpi="90"
-           style="fill:#979797;fill-opacity:0.5">
+           style="fill:#7f8694;fill-opacity:0.5">
           <path
              id="path4249"
              transform="matrix(1.1666667,0,0,1.1666667,8.1148843,-27.333333)"
              d="m -26,32 c -3.376146,0 -5.8125,2.420091 -5.8125,5.75 -0.02885,0.04115 -0.0269,0.04484 0,0.0625 v 2.09375 C -31.95368,40.251454 -32,40.690868 -32,41.1875 c 0,1.08133 0.15281,1.96875 1.21875,1.96875 v -3.9375 c -0.05826,0 -0.103077,0.02604 -0.15625,0.03125 v -1.5 c 0,-0.35788 0.03255,-0.711959 0.09375,-1.03125 0.05746,-0.308575 0.173694,-0.595956 0.28125,-0.875 0.707406,-1.67368 2.381799,-2.625 4.5625,-2.625 2.180238,0 3.886417,0.95132 4.59375,2.625 0.235778,0.557893 0.34375,1.19049 0.34375,1.90625 v 1.46875 c -0.05502,-0.0057 -0.09568,0 -0.15625,0 V 43.125 c 1.065786,0 1.21875,-0.856631 1.21875,-1.9375 0,-0.488809 -0.02108,-0.938349 -0.15625,-1.28125 V 37.75 C -20.15625,34.420091 -22.624315,32 -26,32 Z"
-             style="fill:#979797;fill-opacity:0.5;fill-rule:nonzero;stroke:none"
+             style="fill:#7f8694;fill-opacity:0.5;fill-rule:nonzero;stroke:none"
              inkscape:connector-curvature="0" />
           <rect
              ry="0.2"
@@ -245,9 +245,9 @@ Grid based on suggestions from http://techbase.kde.org/Projects/Oxygen/Style</dc
              height="6"
              width="2.5"
              id="rect4251"
-             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:#979797;fill-opacity:0.5;fill-rule:evenodd;stroke:#979797;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate" />
+             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:#7f8694;fill-opacity:0.5;fill-rule:evenodd;stroke:#7f8694;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate" />
           <rect
-             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:#979797;fill-opacity:0.5;fill-rule:evenodd;stroke:#979797;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate"
+             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:#7f8694;fill-opacity:0.5;fill-rule:evenodd;stroke:#7f8694;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate"
              id="rect4253"
              width="2.5"
              height="6"

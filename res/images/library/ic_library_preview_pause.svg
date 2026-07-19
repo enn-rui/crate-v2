@@ -79,18 +79,18 @@
     <linearGradient
        id="linearGradient4942">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946" />
     </linearGradient>
     <linearGradient
        id="linearGradient5695-6">
       <stop
-         style="stop-color:#3c3c3c;stop-opacity:1;"
+         style="stop-color:#2b3140;stop-opacity:1;"
          offset="0"
          id="stop5697-6" />
       <stop
@@ -101,7 +101,7 @@
     <linearGradient
        id="linearGradient5695-4">
       <stop
-         style="stop-color:#646464;stop-opacity:1;"
+         style="stop-color:#565e6d;stop-opacity:1;"
          offset="0"
          id="stop5697-7" />
       <stop
@@ -112,22 +112,22 @@
     <linearGradient
        id="linearGradient4942-73">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944-6" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946-6" />
     </linearGradient>
     <linearGradient
        id="linearGradient4942-5">
       <stop
-         style="stop-color:#ff6600;stop-opacity:1;"
+         style="stop-color:#9aa3b2;stop-opacity:1;"
          offset="0"
          id="stop4944-9" />
       <stop
-         style="stop-color:#de5800;stop-opacity:1;"
+         style="stop-color:#6b7280;stop-opacity:1;"
          offset="1"
          id="stop4946-5" />
     </linearGradient>
@@ -253,7 +253,7 @@ Grid based on suggestions from http://techbase.kde.org/Projects/Oxygen/Style</dc
          inkscape:export-xdpi="90"
          inkscape:export-ydpi="90">
         <g
-           style="fill:#979797;fill-opacity:0.5"
+           style="fill:#7f8694;fill-opacity:0.5"
            inkscape:export-ydpi="90"
            inkscape:export-xdpi="90"
            inkscape:export-filename=""
@@ -266,7 +266,7 @@ Grid based on suggestions from http://techbase.kde.org/Projects/Oxygen/Style</dc
              transform="matrix(1.1666667,0,0,1.1666667,8.1148843,-27.333333)"
              id="path3438" />
           <rect
-             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:url(#linearGradient5259);fill-opacity:1;fill-rule:evenodd;stroke:#979797;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate"
+             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:url(#linearGradient5259);fill-opacity:1;fill-rule:evenodd;stroke:#7f8694;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate"
              id="rect3440"
              width="2.5"
              height="6"
@@ -282,7 +282,7 @@ Grid based on suggestions from http://techbase.kde.org/Projects/Oxygen/Style</dc
              height="6"
              width="2.5"
              id="rect3442"
-             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:url(#linearGradient3442);fill-opacity:1;fill-rule:evenodd;stroke:#979797;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate" />
+             style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:url(#linearGradient3442);fill-opacity:1;fill-rule:evenodd;stroke:#7f8694;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.25098039;marker:none;enable-background:accumulate" />
         </g>
         <g
            transform="translate(0,-0.49999978)"
