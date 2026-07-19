@@ -63,7 +63,9 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
           m_pKnobCO(std::make_unique<ControlPushButton>(
                   ConfigKey("[Crate]", "knob_focus"))) {
     setObjectName(QStringLiteral("CrateMapControls"));
-    setFixedHeight(142);
+    // Tall enough for stacked label-over-combo rows; the label-beside-combo
+    // variant clipped current-item text at sidebar width ("Scat"/"Clus").
+    setFixedHeight(184);
 
     auto* pMain = new QVBoxLayout(this);
     pMain->setContentsMargins(8, 6, 8, 7);
@@ -73,17 +75,12 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
     pMain->addWidget(pHeader);
 
     const auto addComboRow = [this, pMain](const QString& label, QComboBox* pCombo) {
-        auto* pRow = new QHBoxLayout();
-        pRow->setContentsMargins(0, 0, 0, 0);
-        pRow->setSpacing(6);
         auto* pLabel = new QLabel(label, this);
         pLabel->setObjectName(QStringLiteral("CrateMapFieldLabel"));
-        pLabel->setFixedWidth(48);
         pCombo->setFocusPolicy(Qt::NoFocus);
         pCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        pRow->addWidget(pLabel);
-        pRow->addWidget(pCombo);
-        pMain->addLayout(pRow);
+        pMain->addWidget(pLabel);
+        pMain->addWidget(pCombo);
     };
 
     m_pLayoutCombo->setObjectName(QStringLiteral("CrateMapLayout"));
@@ -95,19 +92,25 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
             QStringLiteral("Tempo"), QStringLiteral("Energy")});
     addComboRow(QStringLiteral("COLOR"), m_pColorCombo);
 
+    // Mockup-faithful rows: [3D][HALO] pair, then KNOB on its own full-width
+    // row (three-in-a-row clipped the knob label to "OB:TAB" at sidebar width).
     auto* pButtons = new QHBoxLayout();
     pButtons->setContentsMargins(0, 0, 0, 0);
     pButtons->setSpacing(4);
     for (QPushButton* pButton : {m_p3dButton, m_pHaloButton, m_pKnobButton}) {
         pButton->setCheckable(true);
         pButton->setFocusPolicy(Qt::NoFocus);
-        pButtons->addWidget(pButton);
     }
+    pButtons->addWidget(m_p3dButton);
+    pButtons->addWidget(m_pHaloButton);
     m_p3dButton->setObjectName(QStringLiteral("CrateMap3d"));
     m_pHaloButton->setObjectName(QStringLiteral("CrateMapHalo"));
     m_pKnobButton->setObjectName(QStringLiteral("CrateMapKnob"));
+    m_p3dButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_pHaloButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_pKnobButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     pMain->addLayout(pButtons);
+    pMain->addWidget(m_pKnobButton);
 
     m_p3dCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pHaloCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
