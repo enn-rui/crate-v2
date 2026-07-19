@@ -465,23 +465,34 @@ QColor WCrateGalaxy::subsetColor(int index, const QColor& color) const {
 }
 
 QString WCrateGalaxy::relpathForLocation(const QString& location) const {
-    if (location.isEmpty() || m_musicRoot.isEmpty()) {
+    // Root-independent matching. The same share can be spelled many ways on
+    // Windows (mapped drive Z:\..., UNC \\host\share\..., differing case), and
+    // the configured music_root may use yet another spelling — a prefix strip
+    // against music_root silently resolved NOTHING when the library stored
+    // Z:/ paths while music_root was the UNC form (everything ghosted, no
+    // pills, no halo seed). Instead, walk the location's path suffixes against
+    // the known node relpaths: the full relative path incl. filename makes a
+    // false hit practically impossible, and any root spelling works.
+    if (location.isEmpty() || m_nodeByRelpath.isEmpty()) {
         return QString();
     }
-    const QString root = QDir::cleanPath(QFileInfo(m_musicRoot).absoluteFilePath());
-    const QString path = QDir::cleanPath(QFileInfo(location).absoluteFilePath());
-#ifdef Q_OS_WIN
-    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseInsensitive;
-#else
-    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
-#endif
-    const QString prefix = root.endsWith(QDir::separator())
-            ? root
-            : root + QDir::separator();
-    if (!path.startsWith(prefix, sensitivity)) {
-        return QString();
+    const QString path = QDir::fromNativeSeparators(
+            QDir::cleanPath(QFileInfo(location).absoluteFilePath()))
+                                 .toCaseFolded();
+    int from = 0;
+    while (true) {
+        const int slash = path.indexOf(QLatin1Char('/'), from);
+        if (slash < 0) {
+            return QString();
+        }
+        const auto it = m_nodeByRelpath.constFind(path.mid(slash + 1));
+        if (it != m_nodeByRelpath.constEnd()) {
+            // Return the node's stored relpath (original case/separators) so
+            // exact-string consumers (m_playingRelpath == node.relpath) match.
+            return m_nodes[*it].relpath;
+        }
+        from = slash + 1;
     }
-    return QDir::fromNativeSeparators(path.mid(prefix.size()));
 }
 
 void WCrateGalaxy::updateMixabilityHalos() {

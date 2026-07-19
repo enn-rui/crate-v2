@@ -428,6 +428,34 @@ TEST_F(CrateGalaxyUiTest, SubsetGhostsOnlyExcludedNodesWithoutMovingOrRebuilding
     }
 }
 
+TEST_F(CrateGalaxyUiTest, LocationResolvesUnderAnyRootSpelling) {
+    // Regression: her real profile stored music_root as the UNC share while the
+    // Mixxx library held Z:/ locations — the old music_root prefix strip
+    // resolved nothing, so every node ghosted and pills/halos died. Matching is
+    // now root-independent (suffix walk over known relpaths).
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 0);
+    const QString relpath = m_pGalaxy->testNodeRelpath(0);
+    ASSERT_FALSE(relpath.isEmpty());
+    const QStringList spellings = {
+            QStringLiteral("Z:/") + relpath,
+            QStringLiteral("Z:\\") + QString(relpath).replace('/', '\\'),
+            QStringLiteral("//192.168.5.203/media/") + relpath,
+            QStringLiteral("\\\\192.168.5.203\\media\\") +
+                    QString(relpath).replace('/', '\\'),
+            QStringLiteral("D:/some/other/mount/") + relpath,
+            QStringLiteral("Z:/") + relpath.toUpper(),
+    };
+    for (const QString& location : spellings) {
+        EXPECT_EQ(m_pGalaxy->testRelpathForLocation(location), relpath)
+                << "location spelling failed: " << location.toStdString();
+    }
+    EXPECT_TRUE(m_pGalaxy
+                    ->testRelpathForLocation(
+                            QStringLiteral("Z:/not/on/the/map/at all.flac"))
+                    .isEmpty());
+    EXPECT_TRUE(m_pGalaxy->testRelpathForLocation(QString()).isEmpty());
+}
+
 TEST_F(CrateGalaxyUiTest, Ghosted3dNodeIsNotProjectedPickable) {
     recreateGalaxy(/*mode3d=*/true, /*debugZoom=*/1.0);
     ASSERT_GT(m_pGalaxy->testNodeCount(), 1);

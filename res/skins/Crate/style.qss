@@ -2901,6 +2901,22 @@ QComboBox::down-arrow {
   width: 8px;
   height: 8px;
 }
+/* FX-row selectors live in width-tight collapsed unit rows: the generic 22px
+   padding-right + 18px drop-down inflated their size hints until the selectors
+   slid under the FX1/FX2 toggle (report: "drop down covers the fx1/fx2 text";
+   expanded parameter view had room, collapsed view didn't). Short effect names
+   need only a slim arrow gutter — keep these subclass rules tighter. */
+WEffectSelector,
+WEffectChainPresetSelector {
+  padding-right: 12px;
+}
+WEffectSelector::drop-down,
+WEffectChainPresetSelector::drop-down {
+  subcontrol-origin: padding;
+  subcontrol-position: top right;
+  width: 10px;
+  border-left: none;
+}
 QComboBox QAbstractItemView {
   color: #f4f7fb;
   background-color: #05060a;
