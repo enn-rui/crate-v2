@@ -3,7 +3,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QActionGroup>
+#include <QButtonGroup>
 #include <QContextMenuEvent>
+#include <QFrame>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
@@ -12,6 +14,9 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
 #include <QRadialGradient>
 #include <QRegularExpression>
 #include <QVariantAnimation>
@@ -41,6 +46,7 @@ constexpr double kPillFadeStart = 2.55;
 constexpr double kPillFadeEnd = 3.15;
 constexpr int kPillCellWidth = 180;
 constexpr int kPillCellHeight = 52;
+constexpr int kControlMargin = 10;
 
 class GalaxyPillItem final : public QGraphicsItem {
   public:
@@ -180,6 +186,8 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     } else if (savedLayout == QStringLiteral("artist")) {
         m_layoutMode = LayoutMode::Artist;
     }
+    createControlBar();
+    syncControlBar();
     populate();
     PlayerInfo& playerInfo = PlayerInfo::instance();
     connect(&playerInfo,
@@ -191,6 +199,107 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
             this,
             [this](int) { updateMixabilityHalos(); });
     updateMixabilityHalos();
+}
+
+void WCrateGalaxy::createControlBar() {
+    m_pControlBar = new QFrame(viewport());
+    m_pControlBar->setObjectName(QStringLiteral("GalaxyControlBar"));
+    m_pControlBar->setStyleSheet(QStringLiteral(
+            "QFrame#GalaxyControlBar { background: rgba(5, 6, 10, 225); "
+            "border: 1px solid rgba(244, 247, 251, 34); }"
+            "QLabel { color: rgba(244, 247, 251, 120); font: 9px monospace; "
+            "padding: 0 2px; }"
+            "QPushButton { background: transparent; color: rgba(244, 247, 251, 145); "
+            "border: 1px solid rgba(244, 247, 251, 55); border-radius: 2px; "
+            "font: 9px monospace; padding: 2px 7px; min-height: 15px; }"
+            "QPushButton:hover { border-color: rgba(180, 210, 255, 180); "
+            "color: rgb(234, 242, 255); }"
+            "QPushButton:checked { background: rgba(80, 145, 230, 150); "
+            "border-color: rgb(150, 200, 255); color: white; }"));
+    auto* pLayout = new QHBoxLayout(m_pControlBar);
+    pLayout->setContentsMargins(5, 4, 5, 4);
+    pLayout->setSpacing(3);
+
+    const auto addLabel = [pLayout, this](const QString& text) {
+        pLayout->addWidget(new QLabel(text, m_pControlBar));
+    };
+    const auto addButton = [pLayout, this](const QString& text) {
+        auto* pButton = new QPushButton(text, m_pControlBar);
+        pButton->setCheckable(true);
+        pButton->setFocusPolicy(Qt::NoFocus);
+        pLayout->addWidget(pButton);
+        return pButton;
+    };
+
+    addLabel(QStringLiteral("LAYOUT"));
+    m_pLayoutButtons = new QButtonGroup(this);
+    m_pLayoutButtons->setExclusive(true);
+    const auto addLayoutButton = [&](const QString& text, LayoutMode mode, int id) {
+        auto* pButton = addButton(text);
+        m_pLayoutButtons->addButton(pButton, id);
+        connect(pButton, &QPushButton::clicked, this, [this, mode] {
+            setLayoutMode(mode);
+        });
+    };
+    addLayoutButton(QStringLiteral("SCATTER"), LayoutMode::Scatter, 0);
+    addLayoutButton(QStringLiteral("WHEEL"), LayoutMode::KeyWheel, 1);
+    addLayoutButton(QStringLiteral("BPM"), LayoutMode::BpmSerpentine, 2);
+    addLayoutButton(QStringLiteral("ARTIST"), LayoutMode::Artist, 3);
+
+    addLabel(QStringLiteral("COLOR"));
+    m_pColorButtons = new QButtonGroup(this);
+    m_pColorButtons->setExclusive(true);
+    const auto addColorButton = [&](const QString& text, ColorMode mode, int id) {
+        auto* pButton = addButton(text);
+        m_pColorButtons->addButton(pButton, id);
+        connect(pButton, &QPushButton::clicked, this, [this, mode] {
+            setColorMode(mode);
+        });
+    };
+    addColorButton(QStringLiteral("CLUSTER"), ColorMode::Cluster, 0);
+    addColorButton(QStringLiteral("KEY"), ColorMode::Key, 1);
+    addColorButton(QStringLiteral("TEMPO"), ColorMode::Tempo, 2);
+    addColorButton(QStringLiteral("ENERGY"), ColorMode::Energy, 3);
+
+    m_p3dButton = addButton(QStringLiteral("3D"));
+    connect(m_p3dButton, &QAbstractButton::clicked, this, &WCrateGalaxy::set3dMode);
+    m_pHaloButton = addButton(QStringLiteral("HALO"));
+    connect(m_pHaloButton, &QAbstractButton::clicked, this, &WCrateGalaxy::setHalosEnabled);
+    m_pControlBar->adjustSize();
+    positionControlBar();
+    m_pControlBar->raise();
+}
+
+void WCrateGalaxy::positionControlBar() {
+    if (m_pControlBar) {
+        m_pControlBar->move(kControlMargin, kControlMargin);
+        m_pControlBar->raise();
+    }
+}
+
+void WCrateGalaxy::syncControlBar() {
+    if (!m_pControlBar) {
+        return;
+    }
+    const int layoutId = m_layoutMode == LayoutMode::Scatter ? 0
+            : m_layoutMode == LayoutMode::KeyWheel           ? 1
+            : m_layoutMode == LayoutMode::BpmSerpentine     ? 2
+                                                            : 3;
+    const int colorId = m_colorMode == ColorMode::Cluster ? 0
+            : m_colorMode == ColorMode::Key               ? 1
+            : m_colorMode == ColorMode::Tempo             ? 2
+                                                          : 3;
+    if (auto* pButton = m_pLayoutButtons->button(layoutId)) {
+        pButton->setChecked(true);
+    }
+    if (auto* pButton = m_pColorButtons->button(colorId)) {
+        pButton->setChecked(true);
+    }
+    m_p3dButton->setChecked(m_3dMode);
+    m_pHaloButton->setChecked(m_halosEnabled);
+    for (QAbstractButton* pButton : m_pLayoutButtons->buttons()) {
+        pButton->setEnabled(!m_3dMode);
+    }
 }
 
 void WCrateGalaxy::populate() {
@@ -478,6 +587,7 @@ void WCrateGalaxy::setColorMode(ColorMode mode) {
         value = QStringLiteral("energy");
     }
     m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_color_mode"), value);
+    syncControlBar();
     updateColors();
 }
 
@@ -607,6 +717,7 @@ void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
     else if (mode == LayoutMode::BpmSerpentine) value = QStringLiteral("bpm");
     else if (mode == LayoutMode::Artist) value = QStringLiteral("artist");
     m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_layout"), value);
+    syncControlBar();
     const QVector<QPointF> start = [&] { QVector<QPointF> p; for (auto* dot : m_dots) p.append(dot->pos()); return p; }();
     const QVector<QPointF> target = layoutTarget(mode);
     m_pLayoutAnimation->stop();
@@ -663,15 +774,11 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     QAction* p3d = menu.addAction(tr("3D view"));
     p3d->setCheckable(true);
     p3d->setChecked(m_3dMode);
-    connect(p3d, &QAction::toggled, this, &WCrateGalaxy::set3dMode);
+    connect(p3d, &QAction::triggered, this, &WCrateGalaxy::set3dMode);
     QAction* pHalos = menu.addAction(tr("Mixability halos"));
     pHalos->setCheckable(true);
     pHalos->setChecked(m_halosEnabled);
-    connect(pHalos, &QAction::toggled, this, [this](bool enabled) {
-        m_halosEnabled = enabled;
-        m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_halos"), enabled ? 1 : 0);
-        updateMixabilityHalos();
-    });
+    connect(pHalos, &QAction::triggered, this, &WCrateGalaxy::setHalosEnabled);
     menu.exec(pEvent->globalPos());
     pEvent->accept();
 }
@@ -691,14 +798,15 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     pPainter->setPen(QColor(0xf4, 0xf7, 0xfb));
 
     const int margin = 10;
+    const int top = m_pControlBar ? m_pControlBar->height() + 2 * kControlMargin : margin;
     if (m_colorMode == ColorMode::Key) {
-        const QRect chip(margin, margin, 224, 42);
+        const QRect chip(margin, top, 224, 42);
         pPainter->setBrush(QColor(0x05, 0x06, 0x0a, 205));
         pPainter->setPen(Qt::NoPen);
         pPainter->drawRoundedRect(chip, 3, 3);
         pPainter->setPen(QColor(0xf4, 0xf7, 0xfb));
         for (int row = 0; row < 2; ++row) {
-            const int y = margin + 6 + row * 17;
+            const int y = top + 6 + row * 17;
             pPainter->drawText(QRect(margin + 6, y, 10, 12),
                     Qt::AlignCenter, row == 0 ? QStringLiteral("B") : QStringLiteral("A"));
             for (int number = 1; number <= 12; ++number) {
@@ -714,8 +822,8 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     } else {
         const ValueRange& range =
                 m_colorMode == ColorMode::Tempo ? m_tempoRange : m_energyRange;
-        const QRect chip(margin, margin, 196, 30);
-        const QRect bar(margin + 38, margin + 7, 112, 8);
+        const QRect chip(margin, top, 196, 30);
+        const QRect bar(margin + 38, top + 7, 112, 8);
         pPainter->setBrush(QColor(0x05, 0x06, 0x0a, 205));
         pPainter->setPen(Qt::NoPen);
         pPainter->drawRoundedRect(chip, 3, 3);
@@ -729,9 +837,9 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
         pPainter->setPen(QColor(0xf4, 0xf7, 0xfb));
         const QString low = range.valid ? QString::number(range.low, 'f', 1) : QStringLiteral("--");
         const QString high = range.valid ? QString::number(range.high, 'f', 1) : QStringLiteral("--");
-        pPainter->drawText(QRect(margin + 5, margin + 5, 30, 12), Qt::AlignRight, low);
-        pPainter->drawText(QRect(margin + 154, margin + 5, 37, 12), Qt::AlignLeft, high);
-        pPainter->drawText(QRect(margin + 38, margin + 17, 112, 10),
+        pPainter->drawText(QRect(margin + 5, top + 5, 30, 12), Qt::AlignRight, low);
+        pPainter->drawText(QRect(margin + 154, top + 5, 37, 12), Qt::AlignLeft, high);
+        pPainter->drawText(QRect(margin + 38, top + 17, 112, 10),
                 Qt::AlignCenter,
                 m_colorMode == ColorMode::Tempo ? QStringLiteral("BPM")
                                                 : QStringLiteral("ENERGY"));
@@ -772,6 +880,9 @@ void WCrateGalaxy::set3dMode(bool enabled) {
     setDragMode(enabled ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
     setHoveredNode(-1);
     if (enabled) {
+        resetTransform();
+        fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
+        m_fitScale = transform().m11();
         update3dProjection();
     } else if (!m_nodes.isEmpty()) {
         for (int i = 0; i < m_dots.size(); ++i) {
@@ -782,10 +893,25 @@ void WCrateGalaxy::set3dMode(bool enabled) {
             pDot->setBrush(nodeColor(m_nodes[i]));
         }
         applyPositions(layoutTarget(m_layoutMode));
+        resetTransform();
+        fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
+        m_fitScale = transform().m11();
     }
+    syncControlBar();
     applyHaloVisuals();
     updatePills();
     viewport()->update();
+}
+
+void WCrateGalaxy::setHalosEnabled(bool enabled) {
+    if (m_halosEnabled == enabled) {
+        syncControlBar();
+        return;
+    }
+    m_halosEnabled = enabled;
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_halos"), enabled ? 1 : 0);
+    syncControlBar();
+    updateMixabilityHalos();
 }
 
 void WCrateGalaxy::update3dProjection() {
@@ -937,6 +1063,7 @@ void WCrateGalaxy::leaveEvent(QEvent* pEvent) {
 
 void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
     QGraphicsView::resizeEvent(pEvent);
+    positionControlBar();
     if (m_3dMode) {
         update3dProjection();
     }

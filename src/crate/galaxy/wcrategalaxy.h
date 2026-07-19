@@ -13,6 +13,9 @@ class QContextMenuEvent;
 class QGraphicsScene;
 class QPainter;
 class QGraphicsEllipseItem;
+class QAbstractButton;
+class QButtonGroup;
+class QFrame;
 class QVariantAnimation;
 
 namespace crate {
@@ -76,6 +79,10 @@ class WCrateGalaxy : public QGraphicsView {
     void updatePills();
     void setHoveredNode(int index);
     void set3dMode(bool enabled);
+    void setHalosEnabled(bool enabled);
+    void createControlBar();
+    void positionControlBar();
+    void syncControlBar();
     void update3dProjection();
     int projectedNodeAt(const QPoint& viewportPos) const;
     void updateMixabilityHalos();
@@ -108,6 +115,11 @@ class WCrateGalaxy : public QGraphicsView {
     SonicVectors m_sonicVectors;
     bool m_vectorsLoadAttempted = false;
     bool m_halosEnabled = true;
+    QFrame* m_pControlBar = nullptr;
+    QButtonGroup* m_pLayoutButtons = nullptr;
+    QButtonGroup* m_pColorButtons = nullptr;
+    QAbstractButton* m_p3dButton = nullptr;
+    QAbstractButton* m_pHaloButton = nullptr;
     QString m_playingRelpath;
     QHash<int, double> m_haloScores;
 };
