@@ -286,6 +286,10 @@ void Tooltips::addStandardTooltips() {
             << tr("Maximize Library")
             << tr("Hide all skin sections except the decks to have more screen space for the track library.");
 
+    add("show_crate_galaxy")
+            << tr("Toggle Galaxy Map")
+            << tr("Show the library as the Crate galaxy map.");
+
     add("show_mixer")
             << tr("Toggle Mixer")
             << tr("Show or hide the mixer.");

@@ -1,4 +1,5 @@
 #include "skin/legacy/legacyskinparser.h"
+#include "crate/galaxy/wcrategalaxy.h"
 
 #include <QDir>
 #include <QGridLayout>
@@ -646,6 +647,8 @@ QList<QWidget*> LegacySkinParser::parseNode(const QDomElement& node) {
         result = wrapWidget(parseLibrarySidebar(node));
     } else if (nodeName == "Library") {
         result = wrapWidget(parseLibrary(node));
+    } else if (nodeName == "CrateGalaxy") {
+        result = wrapWidget(parseCrateGalaxy(node));
     } else if (nodeName == "Key") {
         result = wrapWidget(parseEngineKey(node));
     } else if (nodeName == "Battery") {
@@ -1666,6 +1669,13 @@ void LegacySkinParser::parseSingletonDefinition(const QDomElement& node) {
     pChild->setObjectName(objectName);
     m_pContext->defineSingleton(objectName, pChild);
     pChild->hide();
+}
+
+QWidget* LegacySkinParser::parseCrateGalaxy(const QDomElement& node) {
+    auto* pGalaxy = new crate::WCrateGalaxy(m_pParent, m_pPlayerManager, m_pConfig);
+    setupWidget(node, pGalaxy);
+    pGalaxy->installEventFilter(m_pKeyboard);
+    return pGalaxy;
 }
 
 QWidget* LegacySkinParser::parseLibrary(const QDomElement& node) {

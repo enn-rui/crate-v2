@@ -354,6 +354,19 @@
             <Children>
 
               <Template src="skin:left_2state_button.xml">
+                <SetVariable name="TooltipId">show_crate_galaxy</SetVariable>
+                <SetVariable name="ObjectName">ToolbarButton</SetVariable>
+                <SetVariable name="MinimumSize">55,22</SetVariable>
+                <SetVariable name="MaximumSize"><Variable name="ToolbarButtonMaximumSize"/></SetVariable>
+                <SetVariable name="SizePolicy">me,f</SetVariable>
+                <SetVariable name="state_0_text">MAP</SetVariable>
+                <SetVariable name="state_1_text">MAP</SetVariable>
+                <SetVariable name="left_connection_control">[Skin],show_crate_galaxy</SetVariable>
+              </Template>
+
+              <WidgetGroup><Size>6f,1min</Size></WidgetGroup>
+
+              <Template src="skin:left_2state_button.xml">
                 <SetVariable name="TooltipId">show_mixer</SetVariable>
                 <SetVariable name="ObjectName">ToolbarButton</SetVariable>
                 <SetVariable name="MinimumSize">55,22</SetVariable>

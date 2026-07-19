@@ -1761,6 +1761,8 @@ add_library(
   src/widget/wcombobox.cpp
   src/widget/wcoverart.cpp
   src/widget/wcoverartlabel.cpp
+  src/crate/data/cratesidecars.cpp
+  src/crate/galaxy/wcrategalaxy.cpp
   src/widget/wcoverartmenu.cpp
   src/widget/wcuemenupopup.cpp
   src/widget/wcuebutton.cpp
