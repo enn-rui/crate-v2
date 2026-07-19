@@ -18,6 +18,7 @@ listed here. This list is the entire merge-conflict surface for future `upstream
   src/skin/legacy/legacyskinparser.h (+parseCrateGalaxy decl),
   src/skin/legacy/legacyskinparser.cpp (+include, +dispatch branch, +parseCrateGalaxy impl),
   src/skin/legacy/tooltips.cpp (+show_crate_galaxy tooltip)
+- Crate intelligence seam: CMakeLists.txt (SonicVectors/scores sources and golden test)
 - identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,
   src/dialog/dlgaboutdlg.ui, src/mixxx.rc, src/util/cmdlineargs.cpp,
   src/util/versionstore.cpp
