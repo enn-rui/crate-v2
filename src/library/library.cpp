@@ -31,6 +31,7 @@
 #include "library/trackset/crate/cratefeature.h"
 #include "library/trackset/playlistfeature.h"
 #include "library/trackset/setlogfeature.h"
+#include "library/trackset/smartcrate/smartcratefeature.h"
 #include "library/traktor/traktorfeature.h"
 #include "mixer/playermanager.h"
 #include "moc_library.cpp"
@@ -128,6 +129,10 @@ Library::Library(
             &Library::exportCrate, // signal-to-signal
             Qt::DirectConnection);
 #endif
+
+    // SMART CRATES (crate v2, wave-6): rule-based dynamic crates. Registered
+    // unconditionally -- unlike GRAB it needs no backend, only smart_crates.json.
+    addFeature(make_parented<SmartCrateFeature>(this, m_pConfig));
 
     // GRAB (crate v2, wave-6): config-gated. Only exists when a grab service is
     // configured, so public builds without a backend never see it.

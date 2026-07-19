@@ -369,6 +369,85 @@ WLibrarySidebar {
   border: none;
   border-bottom: 1px solid #232a36;
 }
+/* SMART CRATE rule editor (crate v2, wave-6): modal dialog, same ink-on-black
+   palette as GRAB. Scoped by #SmartCrateEditor so it never leaks into the skin. */
+#SmartCrateEditor {
+  background: #05060a;
+  color: #f4f7fb;
+  font-family: "IBM Plex Mono", "Cascadia Mono", "Consolas";
+  font-size: 11px;
+}
+#SmartCrateEditor QLabel {
+  color: #9ca7b9;
+}
+#SmartCrateEditor QLabel#SmartCrateRulesHeader {
+  color: #b4d2ff;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+#SmartCrateEditor QLineEdit {
+  min-height: 22px;
+  padding: 2px 8px;
+  color: #f4f7fb;
+  background: #0d1017;
+  border: 1px solid #333b4a;
+  border-radius: 2px;
+  selection-color: #05060a;
+  selection-background-color: #b4d2ff;
+}
+#SmartCrateEditor QLineEdit:focus {
+  border-color: #b4d2ff;
+}
+#SmartCrateEditor QComboBox {
+  min-height: 22px;
+  padding: 2px 24px 2px 8px;
+  color: #f4f7fb;
+  background: #0d1017;
+  border: 1px solid #333b4a;
+  border-radius: 2px;
+}
+#SmartCrateEditor QComboBox:focus {
+  border-color: #b4d2ff;
+}
+#SmartCrateEditor QComboBox::drop-down {
+  width: 18px;
+  border: none;
+  background: transparent;
+}
+#SmartCrateEditor QComboBox QAbstractItemView {
+  color: #f4f7fb;
+  background: #0d1017;
+  border: 1px solid #333b4a;
+  selection-color: #05060a;
+  selection-background-color: #b4d2ff;
+  outline: none;
+}
+#SmartCrateEditor QPushButton {
+  min-height: 22px;
+  padding: 2px 12px;
+  color: #9ca7b9;
+  background: #0d1017;
+  border: 1px solid #333b4a;
+  border-radius: 2px;
+}
+#SmartCrateEditor QPushButton:hover {
+  color: #f4f7fb;
+  border-color: #b4d2ff;
+}
+#SmartCrateEditor QPushButton#SmartCrateSave {
+  color: #05060a;
+  background: #b4d2ff;
+  border-color: #b4d2ff;
+}
+#SmartCrateEditor QPushButton#SmartCrateRemoveRow {
+  color: #9ca7b9;
+  padding: 2px 0;
+}
+#SmartCrateEditor QPushButton#SmartCrateRemoveRow:hover {
+  color: #f4f7fb;
+  border-color: #b4d2ff;
+}
+
 /* Override the 'missing' color in Tracks > Missing,
    it's not useful there */
 #DlgMissing WTrackTableView {
