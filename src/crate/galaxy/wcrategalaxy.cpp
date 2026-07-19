@@ -476,9 +476,15 @@ QString WCrateGalaxy::relpathForLocation(const QString& location) const {
     if (location.isEmpty() || m_nodeByRelpath.isEmpty()) {
         return QString();
     }
-    const QString path = QDir::fromNativeSeparators(
-            QDir::cleanPath(QFileInfo(location).absoluteFilePath()))
-                                 .toCaseFolded();
+    // Backslashes are normalized EXPLICITLY, not via fromNativeSeparators: on
+    // Linux/macOS that call is a no-op, but a library DB migrated from Windows
+    // still carries Z:\ / UNC spellings — those must resolve on any platform
+    // (caught by the first Linux CI run).
+    const QString path =
+            QDir::cleanPath(QFileInfo(QString(location).replace(
+                                              QLatin1Char('\\'), QLatin1Char('/')))
+                                    .absoluteFilePath())
+                    .toCaseFolded();
     int from = 0;
     while (true) {
         const int slash = path.indexOf(QLatin1Char('/'), from);
