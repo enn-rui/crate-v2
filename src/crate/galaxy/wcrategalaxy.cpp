@@ -1086,16 +1086,23 @@ void WCrateGalaxy::updatePills() {
     const double margin = 190.0 / qMax(transform().m11(), 0.001);
     const QRectF nearby = visible.adjusted(-margin, -margin, margin, margin);
     QVector<int> candidates;
-    if (!m_3dMode && lodOpacity > 0.0) {
+    if (lodOpacity > 0.0) {
         for (int i = 0; i < m_dots.size(); ++i) {
-            if (nearby.contains(m_dots[i]->pos())) {
+            if ((!m_3dMode || m_nodes[i].has3d) && m_dots[i]->isVisible() &&
+                    nearby.contains(m_dots[i]->pos())) {
                 candidates.append(i);
             }
+        }
+        if (m_3dMode) {
+            std::stable_sort(candidates.begin(), candidates.end(), [this](int a, int b) {
+                return m_dots[a]->zValue() > m_dots[b]->zValue();
+            });
         }
     }
 
     // Cull in viewport pixels because pills ignore the view transform. Reserve
-    // the hovered node first, then use ascending node index as stable priority.
+    // the hovered node first, then use front-to-back depth in 3D (or ascending
+    // node index in 2D) as stable priority.
     // The rectangle check also prevents overlap across adjacent cell edges.
     QSet<int> wanted;
     QSet<QPair<int, int>> occupiedCells;
@@ -1124,10 +1131,8 @@ void WCrateGalaxy::updatePills() {
     if (m_hoveredNode >= 0 && (!m_3dMode || m_nodes[m_hoveredNode].has3d)) {
         tryAdd(m_hoveredNode);
     }
-    if (!m_3dMode) {
-        for (int index : std::as_const(candidates)) {
-            tryAdd(index);
-        }
+    for (int index : std::as_const(candidates)) {
+        tryAdd(index);
     }
     for (auto it = m_pills.begin(); it != m_pills.end();) {
         if (!wanted.contains(it.key())) {
@@ -1141,10 +1146,10 @@ void WCrateGalaxy::updatePills() {
         QGraphicsItem* pPill = m_pills.value(index, nullptr);
         if (pPill == nullptr) {
             pPill = new GalaxyPillItem(m_nodes[index], nodeColor(m_nodes[index]), index);
-            pPill->setPos(m_dots[index]->pos());
             m_pScene->addItem(pPill);
             m_pills.insert(index, pPill);
         }
+        pPill->setPos(m_dots[index]->pos());
         pPill->setOpacity(index == m_hoveredNode ? 1.0 : lodOpacity);
     }
     for (int i = 0; i < m_dots.size(); ++i) {
