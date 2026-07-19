@@ -6,6 +6,7 @@
 
 #include "control/controlobject.h"
 #include "controllers/keyboard/keyboardeventfilter.h"
+#include "crate/grab/grabfeature.h"
 #include "library/analysis/analysisfeature.h"
 #include "library/autodj/autodjfeature.h"
 #include "library/banshee/bansheefeature.h"
@@ -127,6 +128,12 @@ Library::Library(
             &Library::exportCrate, // signal-to-signal
             Qt::DirectConnection);
 #endif
+
+    // GRAB (crate v2, wave-6): config-gated. Only exists when a grab service is
+    // configured, so public builds without a backend never see it.
+    if (crate::GrabFeature::isConfigured(m_pConfig)) {
+        addFeature(make_parented<crate::GrabFeature>(this, m_pConfig));
+    }
 
     m_pBrowseFeature = make_parented<BrowseFeature>(
             this, m_pConfig, pRecordingManager);
