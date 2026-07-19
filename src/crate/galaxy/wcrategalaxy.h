@@ -54,6 +54,7 @@ class WCrateGalaxy : public QGraphicsView {
     bool testNodeVisible(int index) const;
 
   protected:
+    bool eventFilter(QObject* pObj, QEvent* pEvent) override;
     void contextMenuEvent(QContextMenuEvent* pEvent) override;
     void drawForeground(QPainter* pPainter, const QRectF& rect) override;
     void wheelEvent(QWheelEvent* pEvent) override;
@@ -146,6 +147,7 @@ class WCrateGalaxy : public QGraphicsView {
     LayoutMode m_layoutMode = LayoutMode::Scatter;
     QVariantAnimation* m_pLayoutAnimation = nullptr;
     bool m_initialFitDone = false;
+    bool m_debugInput = false;
     bool m_3dMode = false;
     double m_azimuth = 30.0;
     double m_elevation = 18.0;

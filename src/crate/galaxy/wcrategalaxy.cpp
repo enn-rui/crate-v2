@@ -240,6 +240,14 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
           m_pScene(new QGraphicsScene(this)),
           m_pLayoutAnimation(new QVariantAnimation(this)) {
     setScene(m_pScene);
+    // Input diagnostics, off by default: set [Crate],debug_input 1 to log which
+    // widget receives every mouse press (added for the intermittent
+    // cannot-rotate-3D report 2026-07-19; presses reached the widget fine when
+    // retested under instrumentation).
+    m_debugInput = m_pConfig->getValue(ConfigKey("[Crate]", "debug_input"), 0) != 0;
+    if (m_debugInput) {
+        qApp->installEventFilter(this);
+    }
     setBackgroundBrush(QColor(0x05, 0x06, 0x0a));
     setFrameShape(QFrame::NoFrame);
     setDragMode(QGraphicsView::ScrollHandDrag);
@@ -1205,7 +1213,22 @@ int WCrateGalaxy::projectedNodeAt(const QPoint& viewportPos) const {
     return nearest;
 }
 
+bool WCrateGalaxy::eventFilter(QObject* pObj, QEvent* pEvent) {
+    // [Crate],debug_input diagnostics: identify the real receiver of presses.
+    if (m_debugInput && pEvent->type() == QEvent::MouseButtonPress) {
+        auto* pWidget = qobject_cast<QWidget*>(pObj);
+        kLogger.info() << "ORBITDBG app-press receiver="
+                       << pObj->metaObject()->className()
+                       << (pWidget ? pWidget->objectName() : QStringLiteral("<non-widget>"));
+    }
+    return QGraphicsView::eventFilter(pObj, pEvent);
+}
+
 void WCrateGalaxy::mousePressEvent(QMouseEvent* pEvent) {
+    if (m_debugInput) {
+        kLogger.info() << "ORBITDBG press button=" << pEvent->button()
+                       << "3d=" << m_3dMode << "pos=" << pEvent->pos();
+    }
     if (m_3dMode && pEvent->button() == Qt::LeftButton) {
         m_orbiting = true;
         m_orbitMoved = false;
@@ -1226,6 +1249,9 @@ void WCrateGalaxy::mouseReleaseEvent(QMouseEvent* pEvent) {
 }
 
 void WCrateGalaxy::mouseMoveEvent(QMouseEvent* pEvent) {
+    if (m_debugInput && m_orbiting) {
+        kLogger.info() << "ORBITDBG move orbiting pos=" << pEvent->pos();
+    }
     if (m_3dMode && m_orbiting) {
         const QPoint delta = pEvent->pos() - m_orbitLast;
         if (delta.manhattanLength() > 0) {
