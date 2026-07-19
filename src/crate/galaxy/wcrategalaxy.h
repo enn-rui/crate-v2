@@ -5,6 +5,7 @@
 #include <QPointF>
 
 #include "crate/data/cratesidecars.h"
+#include "crate/intelligence/sonicvectors.h"
 #include "preferences/usersettings.h"
 
 class PlayerManager;
@@ -77,12 +78,16 @@ class WCrateGalaxy : public QGraphicsView {
     void set3dMode(bool enabled);
     void update3dProjection();
     int projectedNodeAt(const QPoint& viewportPos) const;
+    void updateMixabilityHalos();
+    void applyHaloVisuals();
+    QString relpathForLocation(const QString& location) const;
 
     PlayerManager* m_pPlayerManager;
     UserSettingsPointer m_pConfig;
     QGraphicsScene* m_pScene;
     QVector<GalaxyNode> m_nodes;
     QVector<QGraphicsEllipseItem*> m_dots;
+    QVector<QGraphicsEllipseItem*> m_halos;
     QHash<int, QGraphicsItem*> m_pills;
     QString m_musicRoot;
     ColorMode m_colorMode = ColorMode::Cluster;
@@ -100,6 +105,11 @@ class WCrateGalaxy : public QGraphicsView {
     bool m_orbitMoved = false;
     double m_fitScale = 1.0;
     int m_hoveredNode = -1;
+    SonicVectors m_sonicVectors;
+    bool m_vectorsLoadAttempted = false;
+    bool m_halosEnabled = true;
+    QString m_playingRelpath;
+    QHash<int, double> m_haloScores;
 };
 
 } // namespace crate
