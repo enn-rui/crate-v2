@@ -2,6 +2,7 @@
 
 #include <QGraphicsView>
 #include <QHash>
+#include <QPointer>
 #include <QPointF>
 #include <QSet>
 #include <QVector>
@@ -25,6 +26,7 @@ class QAbstractButton;
 class QButtonGroup;
 class QFrame;
 class QVariantAnimation;
+class QAbstractItemModel;
 
 namespace crate {
 
@@ -51,7 +53,14 @@ class WCrateGalaxy : public QGraphicsView {
         return m_nodes.size();
     }
     QPointF testNodeDisplayPos(int index) const;
+    QString testNodeRelpath(int index) const;
     bool testNodeVisible(int index) const;
+    bool testNodeGhosted(int index) const;
+    bool testNodeHasHalo(int index) const;
+    quintptr testDotItemIdentity(int index) const;
+    int testProjectedNodeAt(const QPoint& viewportPos) const;
+    void testApplySubsetByRelpaths(const QSet<QString>& relpaths);
+    void testClearSubset();
 
   protected:
     bool eventFilter(QObject* pObj, QEvent* pEvent) override;
@@ -110,6 +119,11 @@ class WCrateGalaxy : public QGraphicsView {
     void updateMixabilityHalos();
     void applyHaloVisuals();
     QString relpathForLocation(const QString& location) const;
+    void bindSubsetModel(QAbstractItemModel* pModel);
+    void recomputeSubsetFromModel();
+    void applySubset(const QSet<QString>& relpaths, bool active = true);
+    bool nodeInSubset(int index) const;
+    QColor subsetColor(int index, const QColor& color) const;
 
     // FLX4 browse-knob MAP navigation (wave 4). The walk mirrors v1
     // map_view.nearest_unplayed: forward = nearest node not yet visited in the
@@ -167,6 +181,10 @@ class WCrateGalaxy : public QGraphicsView {
     QAbstractButton* m_pKnobButton = nullptr;
     QString m_playingRelpath;
     QHash<int, double> m_haloScores;
+    QHash<QString, int> m_nodeByRelpath;
+    QSet<int> m_subsetNodes;
+    bool m_subsetActive = false;
+    QPointer<QAbstractItemModel> m_pSubsetModel;
 
     // MAP-walk state.
     bool m_knobFocusMap = false;

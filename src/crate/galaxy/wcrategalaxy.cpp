@@ -38,6 +38,7 @@
 #include "crate/intelligence/scores.h"
 #include "library/library.h"
 #include "library/trackcollectionmanager.h"
+#include "library/trackmodel.h"
 #include "mixer/playerinfo.h"
 #include "mixer/playermanager.h"
 #include "track/track.h"
@@ -57,6 +58,8 @@ constexpr double kPillFadeEnd = 3.15;
 constexpr int kPillCellWidth = 180;
 constexpr int kPillCellHeight = 52;
 constexpr int kControlMargin = 10;
+constexpr double kGhostColorStrength = 0.20;
+const QColor kGalaxyInk(0x05, 0x06, 0x0a);
 
 class GalaxyPillItem final : public QGraphicsItem {
   public:
@@ -248,7 +251,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     if (m_debugInput) {
         qApp->installEventFilter(this);
     }
-    setBackgroundBrush(QColor(0x05, 0x06, 0x0a));
+    setBackgroundBrush(kGalaxyInk);
     setFrameShape(QFrame::NoFrame);
     setDragMode(QGraphicsView::ScrollHandDrag);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
@@ -300,6 +303,13 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     createControlBar();
     syncControlBar();
     populate();
+    if (m_pLibrary != nullptr) {
+        connect(m_pLibrary,
+                &Library::showTrackModel,
+                this,
+                [this](QAbstractItemModel* pModel, bool) { bindSubsetModel(pModel); });
+        bindSubsetModel(m_pLibrary->currentTrackTableModel());
+    }
     PlayerInfo& playerInfo = PlayerInfo::instance();
     connect(&playerInfo,
             &PlayerInfo::currentPlayingTrackChanged,
@@ -523,6 +533,11 @@ void WCrateGalaxy::populate() {
     if (m_nodes.isEmpty()) {
         return;
     }
+    m_nodeByRelpath.reserve(m_nodes.size());
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        m_nodeByRelpath.insert(
+                QDir::fromNativeSeparators(m_nodes[i].relpath).toCaseFolded(), i);
+    }
 
     QVector<double> tempos;
     QVector<double> energies;
@@ -582,6 +597,90 @@ void WCrateGalaxy::populate() {
     applyHaloVisuals();
 }
 
+void WCrateGalaxy::bindSubsetModel(QAbstractItemModel* pModel) {
+    if (m_pSubsetModel == pModel) {
+        recomputeSubsetFromModel();
+        return;
+    }
+    if (m_pSubsetModel != nullptr) {
+        disconnect(m_pSubsetModel, nullptr, this, nullptr);
+    }
+    m_pSubsetModel = pModel;
+    if (pModel == nullptr) {
+        applySubset({}, false);
+        return;
+    }
+    const auto refresh = [this] { recomputeSubsetFromModel(); };
+    connect(pModel, &QAbstractItemModel::modelReset, this, refresh);
+    connect(pModel, &QAbstractItemModel::rowsInserted, this, refresh);
+    connect(pModel, &QAbstractItemModel::rowsRemoved, this, refresh);
+    connect(pModel, &QAbstractItemModel::layoutChanged, this, refresh);
+    connect(pModel, &QAbstractItemModel::dataChanged, this, refresh);
+    recomputeSubsetFromModel();
+}
+
+void WCrateGalaxy::recomputeSubsetFromModel() {
+    auto* pModel = m_pSubsetModel.data();
+    auto* pTrackModel = pModel ? dynamic_cast<TrackModel*>(pModel) : nullptr;
+    if (pTrackModel == nullptr) {
+        applySubset({}, false);
+        return;
+    }
+    QSet<QString> relpaths;
+    relpaths.reserve(pModel->rowCount());
+    for (int row = 0; row < pModel->rowCount(); ++row) {
+        const QString relpath = relpathForLocation(
+                pTrackModel->getTrackLocation(pModel->index(row, 0)));
+        if (!relpath.isEmpty()) {
+            relpaths.insert(relpath);
+        }
+    }
+    applySubset(relpaths);
+}
+
+void WCrateGalaxy::applySubset(const QSet<QString>& relpaths, bool active) {
+    QSet<int> nodes;
+    nodes.reserve(relpaths.size());
+    for (const QString& relpath : relpaths) {
+        const auto it = m_nodeByRelpath.constFind(
+                QDir::fromNativeSeparators(relpath).toCaseFolded());
+        if (it != m_nodeByRelpath.constEnd()) {
+            nodes.insert(*it);
+        }
+    }
+    m_subsetActive = active && nodes.size() != m_nodes.size();
+    m_subsetNodes = m_subsetActive ? std::move(nodes) : QSet<int>();
+    if (m_hoveredNode >= 0 && !nodeInSubset(m_hoveredNode)) {
+        setHoveredNode(-1);
+    }
+    if (m_cursorNode >= 0 && !nodeInSubset(m_cursorNode)) {
+        resetWalk();
+    }
+    updateMixabilityHalos();
+    if (m_3dMode) {
+        update3dProjection();
+    } else {
+        applyHaloVisuals();
+        updatePills();
+        updateCursorVisual();
+    }
+}
+
+bool WCrateGalaxy::nodeInSubset(int index) const {
+    return index >= 0 && index < m_nodes.size() &&
+            (!m_subsetActive || m_subsetNodes.contains(index));
+}
+
+QColor WCrateGalaxy::subsetColor(int index, const QColor& color) const {
+    if (nodeInSubset(index)) {
+        return color;
+    }
+    return QColor(qRound(kGalaxyInk.red() + (color.red() - kGalaxyInk.red()) * kGhostColorStrength),
+            qRound(kGalaxyInk.green() + (color.green() - kGalaxyInk.green()) * kGhostColorStrength),
+            qRound(kGalaxyInk.blue() + (color.blue() - kGalaxyInk.blue()) * kGhostColorStrength),
+            color.alpha());
+}
+
 QString WCrateGalaxy::relpathForLocation(const QString& location) const {
     if (location.isEmpty() || m_musicRoot.isEmpty()) {
         return QString();
@@ -625,7 +724,7 @@ void WCrateGalaxy::updateMixabilityHalos() {
             break;
         }
     }
-    if (playingIndex < 0) {
+    if (playingIndex < 0 || !nodeInSubset(playingIndex)) {
         applyHaloVisuals();
         return;
     }
@@ -648,7 +747,7 @@ void WCrateGalaxy::updateMixabilityHalos() {
     ranked.reserve(m_nodes.size());
     const GalaxyNode& playing = m_nodes[playingIndex];
     for (int i = 0; i < m_nodes.size(); ++i) {
-        if (i == playingIndex) {
+        if (i == playingIndex || !nodeInSubset(i)) {
             continue;
         }
         const GalaxyNode& node = m_nodes[i];
@@ -683,7 +782,7 @@ void WCrateGalaxy::updateMixabilityHalos() {
 
 void WCrateGalaxy::applyHaloVisuals() {
     for (int i = 0; i < m_dots.size(); ++i) {
-        const bool playing = !m_playingRelpath.isEmpty() &&
+        const bool playing = nodeInSubset(i) && !m_playingRelpath.isEmpty() &&
                 m_nodes[i].relpath == m_playingRelpath;
         QGraphicsEllipseItem* pDot = m_dots[i];
         const double radius = playing ? kDotRadius * 1.65 : kDotRadius;
@@ -695,7 +794,7 @@ void WCrateGalaxy::applyHaloVisuals() {
             pDot->setBrush(QColor(0xf4, 0xf7, 0xfb));
             pDot->setZValue(100.0);
         } else if (!m_3dMode) {
-            pDot->setBrush(nodeColor(m_nodes[i]));
+            pDot->setBrush(subsetColor(i, nodeColor(m_nodes[i])));
             pDot->setZValue(0.0);
         }
 
@@ -705,7 +804,7 @@ void WCrateGalaxy::applyHaloVisuals() {
         }
         pHalo->setPos(pDot->pos());
         const auto score = m_haloScores.constFind(i);
-        const bool visible = score != m_haloScores.constEnd() && pDot->isVisible();
+        const bool visible = nodeInSubset(i) && score != m_haloScores.constEnd() && pDot->isVisible();
         pHalo->setVisible(visible);
         if (visible) {
             const double strength = qBound(0.0, (*score - 0.5) / 0.5, 1.0);
@@ -756,7 +855,7 @@ QColor WCrateGalaxy::nodeColor(const GalaxyNode& node) const {
 
 void WCrateGalaxy::updateColors() {
     for (int i = 0; i < m_dots.size(); ++i) {
-        m_dots[i]->setBrush(nodeColor(m_nodes[i]));
+        m_dots[i]->setBrush(subsetColor(i, nodeColor(m_nodes[i])));
     }
     if (m_3dMode) {
         update3dProjection();
@@ -1062,6 +1161,9 @@ void WCrateGalaxy::wheelEvent(QWheelEvent* pEvent) {
 }
 
 void WCrateGalaxy::setHoveredNode(int index) {
+    if (!nodeSelectable(index)) {
+        index = -1;
+    }
     if (m_hoveredNode != index) {
         m_hoveredNode = index;
         updatePills();
@@ -1180,7 +1282,7 @@ void WCrateGalaxy::update3dProjection() {
         }
         const double d = (depths[i] - minDepth) / depthSpan;
         const double radius = kDotRadius * (0.55 + 0.9 * d);
-        QColor color = nodeColor(m_nodes[i]);
+        QColor color = subsetColor(i, nodeColor(m_nodes[i]));
         color.setAlpha(qRound(70.0 + 170.0 * d));
         QGraphicsEllipseItem* pDot = m_dots[i];
         pDot->setVisible(true);
@@ -1198,7 +1300,7 @@ int WCrateGalaxy::projectedNodeAt(const QPoint& viewportPos) const {
     int nearest = -1;
     double bestDistance = 18.0 * 18.0;
     for (int i = 0; i < m_dots.size(); ++i) {
-        if (!m_dots[i]->isVisible() || !m_nodes[i].has3d) {
+        if (!nodeSelectable(i) || !m_nodes[i].has3d) {
             continue;
         }
         const QPointF center = mapFromScene(m_dots[i]->pos());
@@ -1306,7 +1408,7 @@ void WCrateGalaxy::updatePills() {
     QVector<int> candidates;
     if (lodOpacity > 0.0) {
         for (int i = 0; i < m_dots.size(); ++i) {
-            if ((!m_3dMode || m_nodes[i].has3d) && m_dots[i]->isVisible() &&
+            if (nodeSelectable(i) && (!m_3dMode || m_nodes[i].has3d) &&
                     nearby.contains(m_dots[i]->pos())) {
                 candidates.append(i);
             }
@@ -1346,7 +1448,7 @@ void WCrateGalaxy::updatePills() {
         occupiedCells.insert(cell);
         occupiedRects.append(pillRect);
     };
-    if (m_hoveredNode >= 0 && (!m_3dMode || m_nodes[m_hoveredNode].has3d)) {
+    if (nodeSelectable(m_hoveredNode) && (!m_3dMode || m_nodes[m_hoveredNode].has3d)) {
         tryAdd(m_hoveredNode);
     }
     for (int index : std::as_const(candidates)) {
@@ -1371,7 +1473,7 @@ void WCrateGalaxy::updatePills() {
         pPill->setOpacity(index == m_hoveredNode ? 1.0 : lodOpacity);
     }
     for (int i = 0; i < m_dots.size(); ++i) {
-        const bool playing = !m_playingRelpath.isEmpty() &&
+        const bool playing = nodeInSubset(i) && !m_playingRelpath.isEmpty() &&
                 m_nodes[i].relpath == m_playingRelpath;
         m_dots[i]->setOpacity(wanted.contains(i) && !playing ? 0.0 : 1.0);
     }
@@ -1410,6 +1512,9 @@ void WCrateGalaxy::onKnobMove(double delta) {
 
 bool WCrateGalaxy::nodeSelectable(int index) const {
     if (index < 0 || index >= m_nodes.size() || index >= m_dots.size()) {
+        return false;
+    }
+    if (!nodeInSubset(index)) {
         return false;
     }
     if (m_3dMode) {
@@ -1649,6 +1754,36 @@ bool WCrateGalaxy::testNodeVisible(int index) const {
     return nodeSelectable(index);
 }
 
+QString WCrateGalaxy::testNodeRelpath(int index) const {
+    return index >= 0 && index < m_nodes.size() ? m_nodes[index].relpath : QString();
+}
+
+bool WCrateGalaxy::testNodeGhosted(int index) const {
+    return index >= 0 && index < m_nodes.size() && !nodeInSubset(index);
+}
+
+bool WCrateGalaxy::testNodeHasHalo(int index) const {
+    return index >= 0 && index < m_halos.size() && m_halos[index]->isVisible();
+}
+
+quintptr WCrateGalaxy::testDotItemIdentity(int index) const {
+    return index >= 0 && index < m_dots.size()
+            ? reinterpret_cast<quintptr>(m_dots[index])
+            : 0;
+}
+
+int WCrateGalaxy::testProjectedNodeAt(const QPoint& viewportPos) const {
+    return projectedNodeAt(viewportPos);
+}
+
+void WCrateGalaxy::testApplySubsetByRelpaths(const QSet<QString>& relpaths) {
+    applySubset(relpaths);
+}
+
+void WCrateGalaxy::testClearSubset() {
+    applySubset({}, false);
+}
+
 void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
     QGraphicsItem* pItem = itemAt(pEvent->pos());
     const int projectedIndex = m_3dMode ? projectedNodeAt(pEvent->pos()) : -1;
@@ -1657,7 +1792,7 @@ void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
         return;
     }
     const QVariant idx = m_3dMode ? QVariant(projectedIndex) : pItem->data(0);
-    if (!idx.isValid()) {
+    if (!idx.isValid() || !nodeSelectable(idx.toInt())) {
         return;
     }
     // Re-seed the MAP-walk cursor here: a click on a node resets the walk with

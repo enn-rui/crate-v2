@@ -822,3 +822,11 @@ LibraryTableModel* Library::trackTableModel() const {
 
     return m_pMixxxLibraryFeature->trackTableModel();
 }
+
+QAbstractItemModel* Library::currentTrackTableModel() const {
+    if (m_pLibraryWidget == nullptr) {
+        return nullptr;
+    }
+    WTrackTableView* pTrackTableView = m_pLibraryWidget->getCurrentTrackTableView();
+    return pTrackTableView ? pTrackTableView->model() : nullptr;
+}

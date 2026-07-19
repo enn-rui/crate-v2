@@ -365,4 +365,72 @@ TEST_F(CrateGalaxyUiTest, TableFocusIgnoresKnob) {
     EXPECT_EQ(m_pGalaxy->testCursorNode(), seeded);
 }
 
+TEST_F(CrateGalaxyUiTest, SubsetGhostsOnlyExcludedNodesWithoutMovingOrRebuilding) {
+    const int count = m_pGalaxy->testNodeCount();
+    ASSERT_GT(count, 4);
+    QSet<QString> subset;
+    QVector<QPointF> positions;
+    QVector<quintptr> identities;
+    for (int i = 0; i < count; ++i) {
+        positions.append(m_pGalaxy->testNodeDisplayPos(i));
+        identities.append(m_pGalaxy->testDotItemIdentity(i));
+        if (i < 3) {
+            subset.insert(m_pGalaxy->testNodeRelpath(i));
+        }
+    }
+
+    m_pGalaxy->testApplySubsetByRelpaths(subset);
+    for (int i = 0; i < count; ++i) {
+        EXPECT_EQ(m_pGalaxy->testNodeGhosted(i), i >= 3);
+        EXPECT_EQ(m_pGalaxy->testNodeDisplayPos(i), positions[i]);
+        EXPECT_EQ(m_pGalaxy->testDotItemIdentity(i), identities[i]);
+    }
+
+    m_pGalaxy->testClearSubset();
+    for (int i = 0; i < count; ++i) {
+        EXPECT_FALSE(m_pGalaxy->testNodeGhosted(i));
+        EXPECT_EQ(m_pGalaxy->testNodeDisplayPos(i), positions[i]);
+        EXPECT_EQ(m_pGalaxy->testDotItemIdentity(i), identities[i]);
+    }
+}
+
+TEST_F(CrateGalaxyUiTest, Ghosted3dNodeIsNotProjectedPickable) {
+    recreateGalaxy(/*mode3d=*/true, /*debugZoom=*/1.0);
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 1);
+    const int ghost = 0;
+    QSet<QString> subset;
+    for (int i = 1; i < m_pGalaxy->testNodeCount(); ++i) {
+        subset.insert(m_pGalaxy->testNodeRelpath(i));
+    }
+    m_pGalaxy->testApplySubsetByRelpaths(subset);
+    const QPoint viewportPos = m_pGalaxy->mapFromScene(
+            m_pGalaxy->testNodeDisplayPos(ghost));
+    EXPECT_TRUE(m_pGalaxy->testNodeGhosted(ghost));
+    EXPECT_NE(m_pGalaxy->testProjectedNodeAt(viewportPos), ghost);
+}
+
+TEST_F(CrateGalaxyUiTest, WalkAndHalosNeverUseGhostedNodes) {
+    const int count = m_pGalaxy->testNodeCount();
+    ASSERT_GT(count, 4);
+    QSet<QString> subset;
+    for (int i = 0; i < count; i += 2) {
+        subset.insert(m_pGalaxy->testNodeRelpath(i));
+    }
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_debug_seed"),
+            m_pGalaxy->testNodeRelpath(0));
+    m_pGalaxy->testApplySubsetByRelpaths(subset);
+    setKnobFocusMap();
+    for (int step = 0; step < 50; ++step) {
+        pokeKnob(1.0);
+        const int cursor = m_pGalaxy->testCursorNode();
+        ASSERT_GE(cursor, 0);
+        EXPECT_FALSE(m_pGalaxy->testNodeGhosted(cursor));
+    }
+    for (int i = 0; i < count; ++i) {
+        if (m_pGalaxy->testNodeGhosted(i)) {
+            EXPECT_FALSE(m_pGalaxy->testNodeHasHalo(i));
+        }
+    }
+}
+
 } // namespace
