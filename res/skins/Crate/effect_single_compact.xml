@@ -1,0 +1,43 @@
+<!DOCTYPE template>
+<!--
+Wave-5 S7: one compact effect slot on a single baseline.
+  [effect selector] [meta knob] [enable button]
+Reuses the existing controls (WEffectSelector, effect_meta_knob.xml,
+the EffectEnableButton left_2state_button) with no new wiring. Replaces the
+old two-state effect_single_no_parameters / effect_single_with_parameters slots.
+
+Variables:
+  EffectRack: the rack
+  EffectUnit: the chain
+  Effect: the effect
+-->
+<Template>
+  <WidgetGroup>
+    <ObjectName>EffectSlotCompact</ObjectName>
+    <Layout>horizontal</Layout>
+    <SizePolicy>me,min</SizePolicy>
+    <Children>
+
+      <EffectSelector>
+        <EffectRack><Variable name="EffectRack"/></EffectRack>
+        <EffectUnit><Variable name="EffectUnit"/></EffectUnit>
+        <Effect><Variable name="Effect"/></Effect>
+        <MinimumSize>90,22</MinimumSize>
+        <MaximumSize>120,22</MaximumSize>
+        <SizePolicy>me,f</SizePolicy>
+      </EffectSelector>
+
+      <Template src="skin:effect_meta_knob.xml"/>
+
+      <Template src="skin:left_2state_button.xml">
+        <SetVariable name="TooltipId">EffectSlot_enabled</SetVariable>
+        <SetVariable name="ObjectName">EffectEnableButton</SetVariable>
+        <SetVariable name="MinimumSize"><Variable name="SquareButtonMinimumSize"/></SetVariable>
+        <SetVariable name="MaximumSize"><Variable name="SquareButtonMaximumSize"/></SetVariable>
+        <SetVariable name="SizePolicy"><Variable name="SquareButtonSizePolicy"/></SetVariable>
+        <SetVariable name="left_connection_control">[EffectRack<Variable name="EffectRack"/>_EffectUnit<Variable name="EffectUnit"/>_Effect<Variable name="Effect"/>],enabled</SetVariable>
+      </Template>
+
+    </Children>
+  </WidgetGroup>
+</Template>

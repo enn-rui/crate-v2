@@ -1385,18 +1385,29 @@ WTrackProperty:hover {
   qproperty-layoutAlignment: 'AlignTop';
 }
 
-#EffectUnitToggle {
-  padding: 0px 0px 0px 27px;
-  font: bold 14px/20px;
-  border: 0px;
+/* wave-5 S7: the FX1/FX2 expand toggle is gone; it is now a plain ink label.
+   The compact unit is ONE fixed-height row (no expand/collapse). */
+#EffectUnitRow {
+  qproperty-layoutSpacing: 6;
+  qproperty-layoutAlignment: 'AlignLeft | AlignVCenter';
 }
 
-#EffectUnitToggle[value="0"] {
-  image: url(skin:/icon/ic_unfold_more_48px.svg) no-repeat top right;
+#EffectUnitFxLabel {
+  color: #f4f7fb;
+  font: bold 14px;
+  text-transform: none;
+  padding: 0px 8px 0px 2px;
+  qproperty-alignment: 'AlignLeft | AlignVCenter';
 }
 
-#EffectUnitToggle[value="1"] {
-  image: url(skin:/icon/ic_unfold_less_48px.svg) no-repeat top right;
+#EffectSlotsRow {
+  qproperty-layoutSpacing: 14;
+  qproperty-layoutAlignment: 'AlignLeft | AlignVCenter';
+}
+
+#EffectSlotCompact {
+  qproperty-layoutSpacing: 4;
+  qproperty-layoutAlignment: 'AlignLeft | AlignVCenter';
 }
 
 WEffectChainPresetButton {
@@ -1449,14 +1460,14 @@ WEffectChainPresetButton::menu-indicator {
 #EffectUnitControls {
   border: 1px solid #05060a;
   border-width: 0px 0px 0px 1px;
-  qproperty-layoutSpacing: 2;
-  padding: 0px 0px 1px 0px;
-  qproperty-layoutAlignment: 'AlignHCenter | AlignTop';
+  qproperty-layoutSpacing: 6;
+  padding: 0px 2px 0px 6px;
+  qproperty-layoutAlignment: 'AlignRight | AlignVCenter';
   background-color: #0d1017; /* wave-5: was #333 stock-grey; Crate panel ink */
 }
 
 #EffectUnitHead {
-  padding: 0px 0px 3px 0px;
+  padding: 0px;
 }
 
 #EffectButtonContainer {

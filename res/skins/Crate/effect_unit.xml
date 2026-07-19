@@ -1,7 +1,15 @@
 <!DOCTYPE template>
 <!--
   Description:
-    An effect chain widget.
+    An effect chain unit rendered as ONE fixed-height compact row (wave-5 S7).
+    Layout per her approved mockup:
+
+      [FX1] [Echo    v](o)[on] [Reverb  v](o)[on] [Flanger v](o)[on]  (mix)
+
+    A plain ink "FX1"/"FX2" label, then three [selector][meta knob][enable]
+    slots evenly spaced on one baseline, then the unit super/mix knobs, routing
+    gear and headphone right-aligned. Nothing ever expands, collapses or
+    reflows; the old two-state expand/minimize toggle is gone.
   Variables:
     EffectRack: number of the effect rack (1)
     EffectUnit: number of this effect unit
@@ -10,40 +18,48 @@
   <SetVariable name="group">[EffectRack<Variable name="EffectRack"/>_EffectUnit<Variable name="EffectUnit"/>]</SetVariable>
   <WidgetGroup>
     <ObjectName>EffectUnit<Variable name="EffectUnit"/></ObjectName>
-    <Layout>vertical</Layout>
-    <Size>502min,me</Size>
+    <Layout>horizontal</Layout>
+    <SizePolicy>me,min</SizePolicy>
     <Children>
-      <WidgetGroup>
-        <Layout>horizontal</Layout>
-        <SizePolicy>min,max</SizePolicy>
-        <Children>
-          <Template src="skin:effect_unit_no_parameters.xml"/>
-          <Template src="skin:effect_unit_controls.xml"/>
-        </Children>
-        <Connection>
-          <ConfigKey><Variable name="group"/>,show_parameters</ConfigKey>
-          <BindProperty>visible</BindProperty>
-          <Transform><Not/></Transform>
-        </Connection>
-      </WidgetGroup>
 
       <WidgetGroup>
+        <ObjectName>EffectUnitRow</ObjectName>
         <Layout>horizontal</Layout>
-        <SizePolicy>min,min</SizePolicy>
+        <SizePolicy>me,min</SizePolicy>
         <Children>
-          <Template src="skin:effect_unit_with_parameters.xml"/>
+
+          <Label>
+            <ObjectName>EffectUnitFxLabel</ObjectName>
+            <Text>FX<Variable name="EffectUnit"/></Text>
+          </Label>
+
+          <WidgetGroup>
+            <ObjectName>EffectSlotsRow</ObjectName>
+            <Layout>horizontal</Layout>
+            <SizePolicy>me,min</SizePolicy>
+            <Children>
+              <Template src="skin:effect_single_compact.xml">
+                <SetVariable name="Effect">1</SetVariable>
+              </Template>
+              <Template src="skin:effect_single_compact.xml">
+                <SetVariable name="Effect">2</SetVariable>
+              </Template>
+              <Template src="skin:effect_single_compact.xml">
+                <SetVariable name="Effect">3</SetVariable>
+              </Template>
+            </Children>
+          </WidgetGroup>
+
+          <WidgetGroup>
+            <ObjectName>EffectUnitRowSpacer</ObjectName>
+            <SizePolicy>me,min</SizePolicy>
+          </WidgetGroup>
+
           <Template src="skin:effect_unit_controls.xml"/>
+
         </Children>
-        <Connection>
-          <ConfigKey><Variable name="group"/>,show_parameters</ConfigKey>
-          <BindProperty>visible</BindProperty>
-        </Connection>
       </WidgetGroup>
 
-      <WidgetGroup>
-        <ObjectName>EffectUnitFiller</ObjectName>
-        <SizePolicy>min,me</SizePolicy>
-      </WidgetGroup>
     </Children>
   </WidgetGroup>
 </Template>
