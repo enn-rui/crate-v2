@@ -8,6 +8,7 @@
 #include <QPointer>
 #include <QPointF>
 #include <QPixmap>
+#include <QPair>
 #include <QSet>
 #include <QStringList>
 #include <QVector>
@@ -135,6 +136,9 @@ class WCrateGalaxy : public QGraphicsView {
     void testScaleWithoutRebuild(double factor) { scale(factor, factor); }
     bool testLeadersSuppressed() const { return leadersSuppressed(); }
     bool testLeaderGeometrySane() const;
+    int testDrawableLeaderCount() const;
+    QPair<int, int> testInViewportTrackLabelCoverage() const;
+    int testLabelDropCount() const { return m_labelDropCount; }
     int testLabelRebuildCount() const { return m_labelRebuildCount; }
     int testSidecarRebuildCount() const { return m_sidecarRebuildCount; }
     void testPanBy(int dx, int dy) { scrollContentsBy(dx, dy); }
@@ -291,6 +295,7 @@ class WCrateGalaxy : public QGraphicsView {
     QVector<MapLabel> m_trackLabels;
     QTimer* m_pLabelRebuildTimer = nullptr;
     int m_labelRebuildCount = 0;
+    int m_labelDropCount = 0;
     int m_sidecarRebuildCount = 0;
     QDateTime m_lastSidecarModified;
     QString m_musicRoot;

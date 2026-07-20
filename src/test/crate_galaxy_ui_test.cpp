@@ -675,6 +675,50 @@ TEST_F(CrateGalaxyUiTest, DisplacedTrackRecordsLeaderButHomeTrackDoesNot) {
     EXPECT_FALSE(m_pGalaxy->testLeadersSuppressed());
 }
 
+TEST_F(CrateGalaxyUiTest, FadingTrackLabelsDoNotDrawGhostLeaders) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/3.0, /*dense=*/false,
+            /*syntheticNodes=*/20);
+    m_pGalaxy->testSetAllNodeDisplayPositions(
+            m_pGalaxy->mapToScene(QPoint(300, 300)));
+    m_pGalaxy->testRebuildLabels();
+    ASSERT_GT(m_pGalaxy->testTrackLabelLeaderCount(), 0);
+    EXPECT_EQ(m_pGalaxy->testDrawableLeaderCount(), 0);
+}
+
+TEST_F(CrateGalaxyUiTest, RingExhaustionDropsAreCounted) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/false,
+            /*syntheticNodes=*/150);
+    m_pGalaxy->testSetAllNodeDisplayPositions(
+            m_pGalaxy->mapToScene(QPoint(450, 350)));
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_GT(m_pGalaxy->testLabelDropCount(), 0);
+}
+
+TEST_F(CrateGalaxyUiTest, ViewportFirstTrackLabelsCoverVisibleDotsAndCullOutsideMargin) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/false,
+            /*syntheticNodes=*/500);
+    const QRectF visible = m_pGalaxy->mapToScene(
+            m_pGalaxy->viewport()->rect()).boundingRect();
+    for (int i = 0; i < m_pGalaxy->testNodeCount(); ++i) {
+        QPointF position(visible.right() + visible.width(),
+                visible.bottom() + visible.height());
+        if (i < 30) {
+            const QPoint devicePoint(45 + (i % 6) * 140, 55 + (i / 6) * 125);
+            position = m_pGalaxy->mapToScene(devicePoint);
+        }
+        m_pGalaxy->testSetNodeDisplayPosition(i, position);
+    }
+    m_pGalaxy->testRebuildLabels();
+    const QPair<int, int> coverage =
+            m_pGalaxy->testInViewportTrackLabelCoverage();
+    RecordProperty("in_view_tracks", coverage.first);
+    RecordProperty("in_view_labeled", coverage.second);
+    ASSERT_GT(coverage.first, 0);
+    EXPECT_GE(coverage.second * 100, coverage.first * 95);
+    EXPECT_FALSE(m_pGalaxy->testTrackLabelRelpaths().contains(
+            m_pGalaxy->testNodeRelpath(499)));
+}
+
 TEST_F(CrateGalaxyUiTest, DeepZoomTrackCapGrowsBeyondLegacyCombinedCap) {
     recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/40.0, /*dense=*/false,
             /*syntheticNodes=*/300);
@@ -700,7 +744,7 @@ TEST_F(CrateGalaxyUiTest, LabelLayersShareCollisionSpace) {
     EXPECT_LE(rects.size(), 220);
 }
 
-TEST_F(CrateGalaxyUiTest, SmallPanDoesNotRecomputeLabelSetAfterSettle) {
+TEST_F(CrateGalaxyUiTest, SmallPanRecomputesOnceAfterSettleAndLabelsNewView) {
     recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
     settleLabelRebuilds();
     const int before = m_pGalaxy->testLabelRebuildCount();
@@ -711,7 +755,11 @@ TEST_F(CrateGalaxyUiTest, SmallPanDoesNotRecomputeLabelSetAfterSettle) {
     EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
     QTest::qWait(140);
     QApplication::processEvents();
-    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 1);
+    const QPair<int, int> coverage =
+            m_pGalaxy->testInViewportTrackLabelCoverage();
+    EXPECT_GT(coverage.first, 0);
+    EXPECT_GT(coverage.second, 0);
 }
 
 TEST_F(CrateGalaxyUiTest, LargePanRecomputesLabelsOnceAfterSettle) {
