@@ -9,6 +9,7 @@
 #include "crate/autoanalysis.h"
 #include "crate/data/playlistmigration.h"
 #include "crate/grab/grabfeature.h"
+#include "crate/triage/triagefeature.h"
 #include "library/analysis/analysisfeature.h"
 #include "library/autodj/autodjfeature.h"
 #include "library/banshee/bansheefeature.h"
@@ -152,6 +153,12 @@ Library::Library(
     // configured, so public builds without a backend never see it.
     if (crate::GrabFeature::isConfigured(m_pConfig)) {
         addFeature(make_parented<crate::GrabFeature>(this, m_pConfig));
+    }
+
+    // TRIAGE is the always-present inbox for tracks added after its one-time
+    // epoch and not yet placed in the Reviewed system crate.
+    if (crate::TriageFeature::isEnabled(m_pConfig)) {
+        addFeature(make_parented<crate::TriageFeature>(this, m_pConfig));
     }
 
     m_pBrowseFeature = make_parented<BrowseFeature>(

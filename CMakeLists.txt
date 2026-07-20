@@ -1771,6 +1771,9 @@ add_library(
   src/crate/data/playlistmigration.cpp
   src/crate/cull/cullclient.cpp
   src/crate/system/systemcrates.cpp
+  src/crate/triage/triagefeature.cpp
+  src/crate/triage/triagetablemodel.cpp
+  src/crate/triage/wtriageview.cpp
   src/crate/galaxy/wcrategalaxy.cpp
   src/crate/galaxy/wcratemapcontrols.cpp
   src/crate/grab/grabclient.cpp
@@ -2933,6 +2936,7 @@ if(BUILD_TESTING)
     src/test/crate_grab_test.cpp
     src/test/crate_cull_test.cpp
     src/test/crate_system_test.cpp
+    src/test/crate_triage_test.cpp
     src/test/crate_playlist_migration_test.cpp
     src/test/crate_prefs_test.cpp
     src/test/crate_smart_test.cpp
