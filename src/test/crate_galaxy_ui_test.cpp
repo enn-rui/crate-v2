@@ -29,7 +29,10 @@
 #include "control/controlpushbutton.h"
 #include "crate/galaxy/wcrategalaxy.h"
 #include "crate/galaxy/wcratemapcontrols.h"
+#include "mixer/playerinfo.h"
+#include "mixer/playermanager.h"
 #include "preferences/usersettings.h"
+#include "track/track.h"
 
 namespace {
 
@@ -282,6 +285,70 @@ TEST_F(CrateGalaxyUiTest, ClickingHaloTogglesGalaxyBothWays) {
     QTest::mouseClick(pHalo, Qt::LeftButton);
     QApplication::processEvents();
     EXPECT_TRUE(m_pGalaxy->testHalosEnabled());
+}
+
+TEST_F(CrateGalaxyUiTest, TrailStartsEmptyAndConsecutiveDeduplicatesPlayback) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 2);
+    EXPECT_TRUE(m_pGalaxy->testPlayTrail().isEmpty());
+    const QString first = m_pGalaxy->testNodeRelpath(0);
+    const QString second = m_pGalaxy->testNodeRelpath(1);
+    const QString third = m_pGalaxy->testNodeRelpath(2);
+    for (const QString& relpath : {first, second, second, third}) {
+        PlayerInfo::instance().currentPlayingTrackChanged(
+                Track::newTemporary(QDir(QStringLiteral("Z:/music")).filePath(relpath)));
+    }
+    EXPECT_EQ(m_pGalaxy->testPlayTrail(), QVector<int>({0, 1, 2}));
+    EXPECT_EQ(m_pGalaxy->testTrailSegmentCount(), 2);
+}
+
+TEST_F(CrateGalaxyUiTest, TrailToggleClearsOnlyPaintCache) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 1);
+    m_pGalaxy->testPlayingTrackChanged(m_pGalaxy->testNodeRelpath(0));
+    m_pGalaxy->testPlayingTrackChanged(m_pGalaxy->testNodeRelpath(1));
+    ASSERT_EQ(m_pGalaxy->testTrailSegmentCount(), 1);
+    QPushButton* pTrail = m_pControls->findChild<QPushButton*>(QStringLiteral("CrateMapTrail"));
+    ASSERT_NE(pTrail, nullptr);
+    EXPECT_EQ(pTrail->text(), QStringLiteral("TRAIL"));
+    QTest::mouseClick(pTrail, Qt::LeftButton);
+    QApplication::processEvents();
+    EXPECT_FALSE(m_pGalaxy->testTrailEnabled());
+    EXPECT_EQ(m_pGalaxy->testTrailSegmentCount(), 0);
+    EXPECT_EQ(m_pGalaxy->testPlayTrail().size(), 2);
+}
+
+TEST_F(CrateGalaxyUiTest, PlexusUsesPerDeckTopFortyAndClearsStoppedDeck) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 2);
+    ControlObject deck1Play(ConfigKey("[Channel1]", "play"));
+    ControlObject deck2Play(ConfigKey("[Channel2]", "play"));
+    ControlObject::set(ConfigKey("[Channel1]", "play"), 1.0);
+    ControlObject::set(ConfigKey("[Channel2]", "play"), 1.0);
+    PlayerInfo::instance().setTrackInfo(PlayerManager::groupForDeck(0),
+            Track::newTemporary(QDir(QStringLiteral("Z:/music")).filePath(
+                    m_pGalaxy->testNodeRelpath(0))));
+    PlayerInfo::instance().setTrackInfo(PlayerManager::groupForDeck(1),
+            Track::newTemporary(QDir(QStringLiteral("Z:/music")).filePath(
+                    m_pGalaxy->testNodeRelpath(1))));
+    m_pGalaxy->testRefreshPlexus();
+    EXPECT_EQ(m_pGalaxy->testPlexusDeckCount(), 2);
+    for (int deck = 0; deck < 2; ++deck) {
+        const auto scores = m_pGalaxy->testPlexusScores(deck);
+        EXPECT_LE(scores.size(), 40);
+        for (double score : scores) {
+            EXPECT_GE(score, 0.5);
+            EXPECT_LE(score, 1.0);
+        }
+    }
+    QPushButton* pPlexus = m_pControls->findChild<QPushButton*>(QStringLiteral("CrateMapHalo"));
+    ASSERT_NE(pPlexus, nullptr);
+    EXPECT_EQ(pPlexus->text(), QStringLiteral("PLEXUS"));
+    QTest::mouseClick(pPlexus, Qt::LeftButton);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testPlexusSegmentCount(), 0);
+    QTest::mouseClick(pPlexus, Qt::LeftButton);
+    QApplication::processEvents();
+    ControlObject::set(ConfigKey("[Channel2]", "play"), 0.0);
+    m_pGalaxy->testRefreshPlexus();
+    EXPECT_TRUE(m_pGalaxy->testPlexusScores(1).isEmpty());
 }
 
 TEST_F(CrateGalaxyUiTest, RestoresAllSidebarStateFromConfig) {

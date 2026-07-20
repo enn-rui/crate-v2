@@ -25,6 +25,7 @@ class WCrateMapControls final : public QWidget {
     void syncColor(double value);
     void sync3d(double value);
     void syncHalos(double value);
+    void syncTrail(double value);
     void syncKnob(double value);
     void syncLayoutStatus(double value);
 
@@ -33,12 +34,14 @@ class WCrateMapControls final : public QWidget {
     QComboBox* m_pColorCombo;
     QPushButton* m_p3dButton;
     QPushButton* m_pHaloButton;
+    QPushButton* m_pTrailButton;
     QPushButton* m_pKnobButton;
     QLabel* m_pLayoutStatus;
     std::unique_ptr<ControlObject> m_pLayoutCO;
     std::unique_ptr<ControlObject> m_pColorCO;
     std::unique_ptr<ControlPushButton> m_p3dCO;
     std::unique_ptr<ControlPushButton> m_pHaloCO;
+    std::unique_ptr<ControlPushButton> m_pTrailCO;
     std::unique_ptr<ControlPushButton> m_pKnobCO;
     std::unique_ptr<ControlObject> m_pLayoutDegradedCO;
 };

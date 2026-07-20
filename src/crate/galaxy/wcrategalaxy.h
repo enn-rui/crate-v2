@@ -2,6 +2,7 @@
 
 #include <QGraphicsView>
 #include <QHash>
+#include <QLineF>
 #include <QPointer>
 #include <QPointF>
 #include <QSet>
@@ -92,6 +93,17 @@ class WCrateGalaxy : public QGraphicsView {
     QString testColorMode() const;
     bool test3dMode() const { return m_3dMode; }
     bool testHalosEnabled() const { return m_halosEnabled; }
+    bool testTrailEnabled() const { return m_trailEnabled; }
+    int testTrailSegmentCount() const { return m_trailDeviceLines.size(); }
+    QVector<int> testPlayTrail() const { return m_playTrail; }
+    int testPlexusSegmentCount() const { return m_plexusDeviceLines.size(); }
+    int testPlexusDeckCount() const { return m_deckPlexusScores.size(); }
+    QHash<int, double> testPlexusScores(int deck) const {
+        return m_deckPlexusScores.value(deck);
+    }
+    void testPlayingTrackChanged(const QString& relpath);
+    void testSetTrailEnabled(bool enabled) { setTrailEnabled(enabled); }
+    void testRefreshPlexus() { updateMixabilityHalos(); }
     bool testKnobFocusMap() const { return m_knobFocusMap; }
     int testVisibleSelectableNodeCount() const;
     void testSetAllNodeDisplayPositions(const QPointF& position);
@@ -157,10 +169,14 @@ class WCrateGalaxy : public QGraphicsView {
     void setHoveredNode(int index);
     void set3dMode(bool enabled);
     void setHalosEnabled(bool enabled);
+    void setTrailEnabled(bool enabled);
     void update3dProjection();
     int projectedNodeAt(const QPoint& viewportPos) const;
     void updateMixabilityHalos();
     void applyHaloVisuals();
+    void playingTrackChanged(const TrackPointer& pTrack);
+    void appendTrailRelpath(const QString& relpath);
+    void rebuildOverlayCache();
     QString relpathForLocation(const QString& location) const;
     void bindSubsetModel(QAbstractItemModel* pModel);
     void recomputeSubsetFromModel();
@@ -228,8 +244,22 @@ class WCrateGalaxy : public QGraphicsView {
     SonicVectors m_sonicVectors;
     bool m_vectorsLoadAttempted = false;
     bool m_halosEnabled = true;
-    QString m_playingRelpath;
-    QHash<int, double> m_haloScores;
+    bool m_trailEnabled = true;
+    QVector<int> m_playTrail;
+    QVector<QLineF> m_trailDeviceLines;
+    QVector<QColor> m_trailDeviceColors;
+    struct PlexusSegment {
+        int deck = 0;
+        int from = -1;
+        int to = -1;
+        double score = 0.0;
+    };
+    QVector<PlexusSegment> m_plexusSegments;
+    QVector<QLineF> m_plexusDeviceLines;
+    QVector<QColor> m_plexusDeviceColors;
+    QVector<qreal> m_plexusDeviceWidths;
+    QHash<int, QHash<int, double>> m_deckPlexusScores;
+    QHash<int, int> m_deckPlayingNodes;
     QHash<QString, int> m_nodeByRelpath;
     QSet<int> m_subsetNodes;
     bool m_subsetActive = false;
@@ -255,6 +285,7 @@ class WCrateGalaxy : public QGraphicsView {
     ControlProxy* m_pColorProxy = nullptr;
     ControlProxy* m_p3dProxy = nullptr;
     ControlProxy* m_pHaloProxy = nullptr;
+    ControlProxy* m_pTrailProxy = nullptr;
     ControlProxy* m_pKnobFocusProxy = nullptr;
     ControlProxy* m_pMoveVerticalProxy = nullptr;
 };

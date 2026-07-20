@@ -162,6 +162,8 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_3dMode = m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_3d"), 0) != 0;
     m_halosEnabled = m_pConfig->getValue(
             ConfigKey("[Crate]", "galaxy_halos"), 1) != 0;
+    m_trailEnabled = m_pConfig->getValue(
+            ConfigKey("[Crate]", "galaxy_trail"), 1) != 0;
     const QString debugOrbit = m_pConfig->getValue(
             ConfigKey("[Crate]", "galaxy_debug_orbit"), QString());
     const QStringList orbitParts = debugOrbit.split(',');
@@ -212,11 +214,17 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     connect(&playerInfo,
             &PlayerInfo::currentPlayingTrackChanged,
             this,
-            [this](const TrackPointer&) { updateMixabilityHalos(); });
+            &WCrateGalaxy::playingTrackChanged);
     connect(&playerInfo,
             &PlayerInfo::currentPlayingDeckChanged,
             this,
             [this](int) { updateMixabilityHalos(); });
+    connect(&playerInfo,
+            &PlayerInfo::trackChanged,
+            this,
+            [this](const QString&, const TrackPointer&, const TrackPointer&) {
+                updateMixabilityHalos();
+            });
     updateMixabilityHalos();
 
     // Cursor highlight: a hollow mono ring, distinct from the now-playing dot
@@ -244,6 +252,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_pColorProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_color_control"), this);
     m_p3dProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_3d"), this);
     m_pHaloProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_halos"), this);
+    m_pTrailProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_trail"), this);
     m_pKnobFocusProxy = new ControlProxy(ConfigKey("[Crate]", "knob_focus"), this);
     m_pLayoutProxy->connectValueChanged(this, [this](double value) {
         setLayoutMode(static_cast<LayoutMode>(qBound(0, qRound(value), 3)));
@@ -253,6 +262,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     });
     m_p3dProxy->connectValueChanged(this, [this](double value) { set3dMode(value != 0.0); });
     m_pHaloProxy->connectValueChanged(this, [this](double value) { setHalosEnabled(value != 0.0); });
+    m_pTrailProxy->connectValueChanged(this, [this](double value) { setTrailEnabled(value != 0.0); });
     m_pKnobFocusProxy->connectValueChanged(
             this, [this](double value) { setKnobFocusMap(value != 0.0); });
     m_pLayoutProxy->set(static_cast<int>(m_layoutMode));
@@ -260,6 +270,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_pColorProxy->set(static_cast<int>(m_colorMode));
     m_p3dProxy->set(m_3dMode ? 1.0 : 0.0);
     m_pHaloProxy->set(m_halosEnabled ? 1.0 : 0.0);
+    m_pTrailProxy->set(m_trailEnabled ? 1.0 : 0.0);
     m_pKnobFocusProxy->set(m_knobFocusMap ? 1.0 : 0.0);
 
     // galaxy_load: a push control that loads the CURSOR track into the natural
@@ -505,30 +516,12 @@ QString WCrateGalaxy::relpathForLocation(const QString& location) const {
 }
 
 void WCrateGalaxy::updateMixabilityHalos() {
-    m_playingRelpath.clear();
-    m_haloScores.clear();
+    m_deckPlayingNodes.clear();
+    m_deckPlexusScores.clear();
+    m_plexusSegments.clear();
     if (!m_halosEnabled || m_nodes.isEmpty()) {
         applyHaloVisuals();
-        return;
-    }
-
-    const QString debugSeed = m_pConfig->getValue(
-            ConfigKey("[Crate]", "galaxy_debug_seed"), QString()).trimmed();
-    QString requested = QDir::fromNativeSeparators(debugSeed);
-    if (requested.isEmpty()) {
-        const TrackPointer pTrack = PlayerInfo::instance().getCurrentPlayingTrack();
-        requested = pTrack ? relpathForLocation(pTrack->getLocation()) : QString();
-    }
-    int playingIndex = -1;
-    for (int i = 0; i < m_nodes.size(); ++i) {
-        if (m_nodes[i].relpath.compare(requested, Qt::CaseInsensitive) == 0) {
-            playingIndex = i;
-            m_playingRelpath = m_nodes[i].relpath;
-            break;
-        }
-    }
-    if (playingIndex < 0 || !nodeInSubset(playingIndex)) {
-        applyHaloVisuals();
+        rebuildOverlayCache();
         return;
     }
     if (!m_vectorsLoadAttempted) {
@@ -541,60 +534,83 @@ void WCrateGalaxy::updateMixabilityHalos() {
                               << m_sonicVectors.lastError();
         }
     }
-    if (!m_sonicVectors.centered(m_playingRelpath)) {
-        applyHaloVisuals();
-        return;
-    }
-
-    QVector<QPair<double, int>> ranked;
-    ranked.reserve(m_nodes.size());
-    const GalaxyNode& playing = m_nodes[playingIndex];
-    for (int i = 0; i < m_nodes.size(); ++i) {
-        if (i == playingIndex || !nodeInSubset(i)) {
-            continue;
-        }
-        const GalaxyNode& node = m_nodes[i];
-        const auto sonic = m_sonicVectors.cosine(m_playingRelpath, node.relpath);
-        if (!sonic) {
-            continue;
-        }
-        const bool keysPresent = !playing.keyCamelot.isEmpty() && !node.keyCamelot.isEmpty();
-        const bool bpmsPresent = playing.bpm > 0.0 && node.bpm > 0.0 &&
-                std::isfinite(playing.bpm) && std::isfinite(node.bpm);
-        const double score = scores::mixability(sonic,
-                keysPresent,
-                keysPresent,
-                keysPresent ? scores::keyScore(playing.keyCamelot, node.keyCamelot) : 0.0,
-                bpmsPresent,
-                bpmsPresent,
-                bpmsPresent ? scores::bpmScore(playing.bpm, node.bpm) : 0.0,
-                m_sonicVectors.transition(m_playingRelpath, node.relpath));
-        if (score >= 0.5) {
-            ranked.append(qMakePair(score, i));
+    QVector<QString> requested;
+    const QString debugSeed = m_pConfig->getValue(
+            ConfigKey("[Crate]", "galaxy_debug_seed"), QString()).trimmed();
+    if (!debugSeed.isEmpty()) {
+        requested.append(QDir::fromNativeSeparators(debugSeed));
+    } else {
+        const QVector<bool> playing = deckPlayingStates();
+        requested.resize(playing.size());
+        for (int deck = 0; deck < playing.size(); ++deck) {
+            if (playing[deck]) {
+                const TrackPointer pTrack = PlayerInfo::instance().getTrackInfo(
+                        PlayerManager::groupForDeck(deck));
+                requested[deck] = pTrack ? relpathForLocation(pTrack->getLocation()) : QString();
+            }
         }
     }
-    std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
-        return a.first > b.first;
-    });
-    ranked.resize(qMin(40, ranked.size()));
-    for (const auto& entry : std::as_const(ranked)) {
-        m_haloScores.insert(entry.second, entry.first);
+    for (int deck = 0; deck < requested.size(); ++deck) {
+        const auto nodeIt = m_nodeByRelpath.constFind(
+                requested[deck].replace(QLatin1Char('\\'), QLatin1Char('/')).toCaseFolded());
+        if (nodeIt == m_nodeByRelpath.constEnd() || !nodeInSubset(*nodeIt)) {
+            continue;
+        }
+        const int playingIndex = *nodeIt;
+        const QString& playingRelpath = m_nodes[playingIndex].relpath;
+        if (!m_sonicVectors.centered(playingRelpath)) {
+            continue;
+        }
+        m_deckPlayingNodes.insert(deck, playingIndex);
+        m_deckPlexusScores.insert(deck, {});
+        QVector<QPair<double, int>> ranked;
+        const GalaxyNode& playingNode = m_nodes[playingIndex];
+        for (int i = 0; i < m_nodes.size(); ++i) {
+            if (i == playingIndex || !nodeInSubset(i)) continue;
+            const GalaxyNode& node = m_nodes[i];
+            const auto sonic = m_sonicVectors.cosine(playingRelpath, node.relpath);
+            if (!sonic) continue;
+            const bool keys = !playingNode.keyCamelot.isEmpty() && !node.keyCamelot.isEmpty();
+            const bool bpms = playingNode.bpm > 0.0 && node.bpm > 0.0 &&
+                    std::isfinite(playingNode.bpm) && std::isfinite(node.bpm);
+            const double score = scores::mixability(sonic, keys, keys,
+                    keys ? scores::keyScore(playingNode.keyCamelot, node.keyCamelot) : 0.0,
+                    bpms, bpms,
+                    bpms ? scores::bpmScore(playingNode.bpm, node.bpm) : 0.0,
+                    m_sonicVectors.transition(playingRelpath, node.relpath));
+            if (score >= 0.5) ranked.append(qMakePair(score, i));
+        }
+        std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+            return a.first > b.first;
+        });
+        ranked.resize(qMin(40, ranked.size()));
+        for (const auto& entry : std::as_const(ranked)) {
+            m_deckPlexusScores[deck].insert(entry.second, entry.first);
+            m_plexusSegments.append({deck, playingIndex, entry.second, entry.first});
+        }
     }
     applyHaloVisuals();
+    rebuildOverlayCache();
 }
 
 void WCrateGalaxy::applyHaloVisuals() {
     for (int i = 0; i < m_dots.size(); ++i) {
-        const bool playing = nodeInSubset(i) && !m_playingRelpath.isEmpty() &&
-                m_nodes[i].relpath == m_playingRelpath;
+        int playingDeck = -1;
+        for (auto it = m_deckPlayingNodes.constBegin(); it != m_deckPlayingNodes.constEnd(); ++it) {
+            if (it.value() == i) { playingDeck = it.key(); break; }
+        }
+        const bool playing = playingDeck >= 0;
         QGraphicsEllipseItem* pDot = m_dots[i];
         const double radius = playing ? kDotRadius * 1.65 : kDotRadius;
         if (!m_3dMode) {
             pDot->setRect(-radius, -radius, radius * 2, radius * 2);
         }
-        pDot->setPen(playing ? QPen(QColor(0xf4, 0xf7, 0xfb), 1.0) : QPen(Qt::NoPen));
+        QColor deckColor = playingDeck % 2 == 0
+                ? QColor(0xb4, 0xd2, 0xff) : QColor(0xff, 0xb4, 0x54);
+        if (playingDeck >= 2) deckColor.setAlpha(153);
+        pDot->setPen(playing ? QPen(deckColor, 1.2) : QPen(Qt::NoPen));
         if (playing) {
-            pDot->setBrush(QColor(0xf4, 0xf7, 0xfb));
+            pDot->setBrush(deckColor);
             pDot->setZValue(100.0);
         } else if (!m_3dMode) {
             pDot->setBrush(subsetColor(i, nodeColor(m_nodes[i])));
@@ -606,16 +622,21 @@ void WCrateGalaxy::applyHaloVisuals() {
             continue;
         }
         pHalo->setPos(pDot->pos());
-        const auto score = m_haloScores.constFind(i);
-        const bool visible = nodeInSubset(i) && score != m_haloScores.constEnd() && pDot->isVisible();
+        int ringDeck = playingDeck;
+        double ringScore = playing ? 1.0 : 0.0;
+        for (auto deckIt = m_deckPlexusScores.constBegin(); deckIt != m_deckPlexusScores.constEnd(); ++deckIt) {
+            const auto scoreIt = deckIt.value().constFind(i);
+            if (scoreIt != deckIt.value().constEnd() && *scoreIt > ringScore) {
+                ringDeck = deckIt.key(); ringScore = *scoreIt;
+            }
+        }
+        const bool visible = nodeInSubset(i) && ringDeck >= 0 && pDot->isVisible();
         pHalo->setVisible(visible);
         if (visible) {
-            const double strength = qBound(0.0, (*score - 0.5) / 0.5, 1.0);
-            QRadialGradient gradient(QPointF(0.0, 0.0), kHaloRadius);
-            gradient.setColorAt(0.0, QColor(180, 210, 255, qRound(105 + 80 * strength)));
-            gradient.setColorAt(0.42, QColor(180, 210, 255, qRound(65 + 65 * strength)));
-            gradient.setColorAt(1.0, QColor(180, 210, 255, 0));
-            pHalo->setBrush(gradient);
+            QColor color = ringDeck % 2 == 0 ? QColor(0xb4, 0xd2, 0xff) : QColor(0xff, 0xb4, 0x54);
+            color.setAlpha(ringDeck >= 2 ? 105 : qRound(80 + 110 * ringScore));
+            pHalo->setBrush(Qt::NoBrush);
+            pHalo->setPen(QPen(color, 1.0 + ringScore));
         }
     }
     viewport()->update();
@@ -695,6 +716,7 @@ void WCrateGalaxy::applyPositions(const QVector<QPointF>& positions) {
     }
     updateCursorVisual();
     updatePills();
+    rebuildOverlayCache();
     viewport()->update();
 }
 
@@ -938,6 +960,19 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
 
 void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     Q_UNUSED(rect);
+    pPainter->save();
+    pPainter->resetTransform();
+    pPainter->setRenderHint(QPainter::Antialiasing, true);
+    for (int i = 0; i < m_trailDeviceLines.size(); ++i) {
+        pPainter->setPen(QPen(m_trailDeviceColors[i], 1.25, Qt::SolidLine, Qt::RoundCap));
+        pPainter->drawLine(m_trailDeviceLines[i]);
+    }
+    for (int i = 0; i < m_plexusDeviceLines.size(); ++i) {
+        pPainter->setPen(QPen(m_plexusDeviceColors[i], m_plexusDeviceWidths[i],
+                Qt::SolidLine, Qt::RoundCap));
+        pPainter->drawLine(m_plexusDeviceLines[i]);
+    }
+    pPainter->restore();
     if (m_colorMode == ColorMode::Cluster) {
         return;
     }
@@ -1026,6 +1061,7 @@ void WCrateGalaxy::wheelEvent(QWheelEvent* pEvent) {
             update3dProjection();
         }
         updatePills();
+        rebuildOverlayCache();
     }
     pEvent->accept();
 }
@@ -1086,6 +1122,71 @@ void WCrateGalaxy::setHalosEnabled(bool enabled) {
         m_pHaloProxy->set(enabled ? 1.0 : 0.0);
     }
     updateMixabilityHalos();
+}
+
+void WCrateGalaxy::setTrailEnabled(bool enabled) {
+    if (m_trailEnabled == enabled) return;
+    m_trailEnabled = enabled;
+    m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_trail"), enabled ? 1 : 0);
+    if (m_pTrailProxy && (m_pTrailProxy->get() != 0.0) != enabled) {
+        m_pTrailProxy->set(enabled ? 1.0 : 0.0);
+    }
+    rebuildOverlayCache();
+}
+
+void WCrateGalaxy::playingTrackChanged(const TrackPointer& pTrack) {
+    if (pTrack) appendTrailRelpath(relpathForLocation(pTrack->getLocation()));
+    updateMixabilityHalos();
+}
+
+void WCrateGalaxy::appendTrailRelpath(const QString& relpath) {
+    const auto it = m_nodeByRelpath.constFind(
+            QString(relpath).replace(QLatin1Char('\\'), QLatin1Char('/')).toCaseFolded());
+    if (it == m_nodeByRelpath.constEnd()) return;
+    if (!m_playTrail.isEmpty() && m_playTrail.constLast() == *it) return;
+    m_playTrail.append(*it);
+    rebuildOverlayCache();
+}
+
+void WCrateGalaxy::testPlayingTrackChanged(const QString& relpath) {
+    appendTrailRelpath(relpath);
+}
+
+void WCrateGalaxy::rebuildOverlayCache() {
+    m_trailDeviceLines.clear();
+    m_trailDeviceColors.clear();
+    m_plexusDeviceLines.clear();
+    m_plexusDeviceColors.clear();
+    m_plexusDeviceWidths.clear();
+    if (m_trailEnabled && m_playTrail.size() > 1) {
+        const int segments = m_playTrail.size() - 1;
+        m_trailDeviceLines.reserve(segments);
+        m_trailDeviceColors.reserve(segments);
+        for (int i = 0; i < segments; ++i) {
+            const int age = segments - 1 - i;
+            const double freshness = qBound(0.0, (12.0 - age) / 12.0, 1.0);
+            m_trailDeviceLines.append(QLineF(mapFromScene(m_dots[m_playTrail[i]]->pos()),
+                    mapFromScene(m_dots[m_playTrail[i + 1]]->pos())));
+            m_trailDeviceColors.append(QColor(0xf4, 0xf7, 0xfb,
+                    qRound(38 + 170 * freshness)));
+        }
+    }
+    if (m_halosEnabled) {
+        m_plexusDeviceLines.reserve(m_plexusSegments.size());
+        for (const PlexusSegment& segment : std::as_const(m_plexusSegments)) {
+            if (segment.from < 0 || segment.to < 0 ||
+                    !m_dots[segment.from]->isVisible() || !m_dots[segment.to]->isVisible()) continue;
+            const double strength = qBound(0.0, (segment.score - 0.5) / 0.5, 1.0);
+            QColor color = segment.deck % 2 == 0
+                    ? QColor(0xb4, 0xd2, 0xff) : QColor(0xff, 0xb4, 0x54);
+            color.setAlpha(qRound((segment.deck >= 2 ? 0.6 : 1.0) * (24 + 180 * strength)));
+            m_plexusDeviceLines.append(QLineF(mapFromScene(m_dots[segment.from]->pos()),
+                    mapFromScene(m_dots[segment.to]->pos())));
+            m_plexusDeviceColors.append(color);
+            m_plexusDeviceWidths.append(0.65 + 1.45 * strength);
+        }
+    }
+    viewport()->update();
 }
 
 void WCrateGalaxy::update3dProjection() {
@@ -1166,6 +1267,7 @@ void WCrateGalaxy::update3dProjection() {
     applyHaloVisuals();
     updateCursorVisual();
     updatePills();
+    rebuildOverlayCache();
     viewport()->update();
 }
 
@@ -1262,11 +1364,13 @@ void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
         update3dProjection();
     }
     updatePills();
+    rebuildOverlayCache();
 }
 
 void WCrateGalaxy::scrollContentsBy(int dx, int dy) {
     QGraphicsView::scrollContentsBy(dx, dy);
     updatePills();
+    rebuildOverlayCache();
 }
 
 void WCrateGalaxy::updatePills() {
@@ -1440,13 +1544,8 @@ int WCrateGalaxy::nearestUnvisited(int fromNode) const {
 int WCrateGalaxy::seedNode() const {
     // Seed at the now-playing node if it is visible, else the visible node
     // nearest the current view center.
-    if (!m_playingRelpath.isEmpty()) {
-        for (int i = 0; i < m_nodes.size(); ++i) {
-            if (nodeSelectable(i) &&
-                    m_nodes[i].relpath == m_playingRelpath) {
-                return i;
-            }
-        }
+    for (auto it = m_deckPlayingNodes.constBegin(); it != m_deckPlayingNodes.constEnd(); ++it) {
+        if (nodeSelectable(it.value())) return it.value();
     }
     const QPointF center = mapToScene(viewport()->rect().center());
     int best = -1;

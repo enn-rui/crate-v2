@@ -35,8 +35,8 @@ constexpr int kCluster = 0;
 constexpr int kKey = 1;
 constexpr int kTempo = 2;
 constexpr int kEnergy = 3;
-constexpr int kBaseHeight = 184;
-constexpr int kStatusHeight = 204;
+constexpr int kBaseHeight = 210;
+constexpr int kStatusHeight = 230;
 
 int savedLayout(const UserSettingsPointer& pConfig) {
     const QString value = pConfig->getValue(
@@ -66,7 +66,8 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
           m_pLayoutCombo(new QComboBox(this)),
           m_pColorCombo(new QComboBox(this)),
           m_p3dButton(new QPushButton(QStringLiteral("3D"), this)),
-          m_pHaloButton(new QPushButton(QStringLiteral("HALO"), this)),
+          m_pHaloButton(new QPushButton(QStringLiteral("PLEXUS"), this)),
+          m_pTrailButton(new QPushButton(QStringLiteral("TRAIL"), this)),
           m_pKnobButton(new QPushButton(this)),
           m_pLayoutStatus(new ElidingLabel(this)),
           m_pLayoutCO(std::make_unique<ControlObject>(
@@ -77,6 +78,8 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
                   ConfigKey("[Crate]", "galaxy_3d"))),
           m_pHaloCO(std::make_unique<ControlPushButton>(
                   ConfigKey("[Crate]", "galaxy_halos"))),
+          m_pTrailCO(std::make_unique<ControlPushButton>(
+                  ConfigKey("[Crate]", "galaxy_trail"))),
           m_pKnobCO(std::make_unique<ControlPushButton>(
                   ConfigKey("[Crate]", "knob_focus"))),
           m_pLayoutDegradedCO(std::make_unique<ControlObject>(
@@ -111,12 +114,12 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
             QStringLiteral("Tempo"), QStringLiteral("Energy")});
     addComboRow(QStringLiteral("COLOR"), m_pColorCombo);
 
-    // Mockup-faithful rows: [3D][HALO] pair, then KNOB on its own full-width
+    // Compact toggle rows: [3D][PLEXUS], then [TRAIL], then KNOB.
     // row (three-in-a-row clipped the knob label to "OB:TAB" at sidebar width).
     auto* pButtons = new QHBoxLayout();
     pButtons->setContentsMargins(0, 0, 0, 0);
     pButtons->setSpacing(4);
-    for (QPushButton* pButton : {m_p3dButton, m_pHaloButton, m_pKnobButton}) {
+    for (QPushButton* pButton : {m_p3dButton, m_pHaloButton, m_pTrailButton, m_pKnobButton}) {
         pButton->setCheckable(true);
         pButton->setFocusPolicy(Qt::NoFocus);
     }
@@ -124,11 +127,14 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
     pButtons->addWidget(m_pHaloButton);
     m_p3dButton->setObjectName(QStringLiteral("CrateMap3d"));
     m_pHaloButton->setObjectName(QStringLiteral("CrateMapHalo"));
+    m_pTrailButton->setObjectName(QStringLiteral("CrateMapTrail"));
     m_pKnobButton->setObjectName(QStringLiteral("CrateMapKnob"));
     m_p3dButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_pHaloButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_pTrailButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_pKnobButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     pMain->addLayout(pButtons);
+    pMain->addWidget(m_pTrailButton);
     pMain->addWidget(m_pKnobButton);
     m_pLayoutStatus->setObjectName(QStringLiteral("CrateMapLayoutStatus"));
     m_pLayoutStatus->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -138,11 +144,13 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
 
     m_p3dCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pHaloCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
+    m_pTrailCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pKnobCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pLayoutCO->set(savedLayout(m_pConfig));
     m_pColorCO->set(savedColor(m_pConfig));
     m_p3dCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_3d"), 0));
     m_pHaloCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_halos"), 1));
+    m_pTrailCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_trail"), 1));
     m_pKnobCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "knob_focus"), 0));
 
     connect(m_pLayoutCombo, qOverload<int>(&QComboBox::currentIndexChanged),
@@ -153,6 +161,8 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
             this, [this](bool checked) { m_p3dCO->set(checked ? 1.0 : 0.0); });
     connect(m_pHaloButton, &QPushButton::clicked,
             this, [this](bool checked) { m_pHaloCO->set(checked ? 1.0 : 0.0); });
+    connect(m_pTrailButton, &QPushButton::clicked,
+            this, [this](bool checked) { m_pTrailCO->set(checked ? 1.0 : 0.0); });
     connect(m_pKnobButton, &QPushButton::clicked,
             this, [this](bool checked) {
                 syncKnob(checked ? 1.0 : 0.0);
@@ -166,6 +176,8 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
             this, &WCrateMapControls::sync3d);
     connect(m_pHaloCO.get(), &ControlObject::valueChanged,
             this, &WCrateMapControls::syncHalos);
+    connect(m_pTrailCO.get(), &ControlObject::valueChanged,
+            this, &WCrateMapControls::syncTrail);
     connect(m_pKnobCO.get(), &ControlObject::valueChanged,
             this, &WCrateMapControls::syncKnob);
     connect(m_pLayoutDegradedCO.get(), &ControlObject::valueChanged,
@@ -174,6 +186,7 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
     syncColor(m_pColorCO->get());
     sync3d(m_p3dCO->get());
     syncHalos(m_pHaloCO->get());
+    syncTrail(m_pTrailCO->get());
     syncKnob(m_pKnobCO->get());
     syncLayoutStatus(m_pLayoutDegradedCO->get());
 }
@@ -222,6 +235,11 @@ void WCrateMapControls::syncLayoutStatus(double value) {
 void WCrateMapControls::syncHalos(double value) {
     const QSignalBlocker blocker(m_pHaloButton);
     m_pHaloButton->setChecked(value != 0.0);
+}
+
+void WCrateMapControls::syncTrail(double value) {
+    const QSignalBlocker blocker(m_pTrailButton);
+    m_pTrailButton->setChecked(value != 0.0);
 }
 
 void WCrateMapControls::syncKnob(double value) {
