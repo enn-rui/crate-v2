@@ -6,6 +6,7 @@
 
 #include "control/controlobject.h"
 #include "controllers/keyboard/keyboardeventfilter.h"
+#include "crate/autoanalysis.h"
 #include "crate/grab/grabfeature.h"
 #include "library/analysis/analysisfeature.h"
 #include "library/autodj/autodjfeature.h"
@@ -82,6 +83,17 @@ Library::Library(
             &TrackCollectionManager::libraryScanFinished,
             this,
             &Library::slotRefreshLibraryModels);
+    connect(m_pTrackCollectionManager,
+            &TrackCollectionManager::libraryScanStarted,
+            this,
+            [this] { m_libraryScanInProgress = true; });
+    connect(m_pTrackCollectionManager,
+            &TrackCollectionManager::libraryScanFinished,
+            this,
+            [this] {
+                m_libraryScanInProgress = false;
+                maybeAutoAnalyzeLibrary();
+            });
 
     // TODO(rryan) -- turn this construction / adding of features into a static
     // method or something -- CreateDefaultLibrary
@@ -626,6 +638,27 @@ void Library::slotCreateCrate() {
 void Library::onSkinLoadFinished() {
     // Enable the default selection when a new skin is loaded.
     m_pSidebarModel->activateDefaultSelection();
+    m_autoAnalyzeStartupReady = true;
+    maybeAutoAnalyzeLibrary();
+}
+
+void Library::maybeAutoAnalyzeLibrary() {
+    if (!m_autoAnalyzeStartupReady || m_libraryScanInProgress || m_autoAnalyzeQueued) {
+        return;
+    }
+    slotAutoAnalyzeLibrary();
+}
+
+void Library::slotAutoAnalyzeLibrary() {
+    if (m_autoAnalyzeQueued) {
+        return;
+    }
+    m_autoAnalyzeQueued = true;
+    const auto tracks = crate::autoAnalyzeTracks(
+            m_pConfig, m_pTrackCollectionManager->internalCollection()->database());
+    if (!tracks.isEmpty()) {
+        emit analyzeTracks(tracks);
+    }
 }
 
 bool Library::requestAddDir(const QString& dir) {

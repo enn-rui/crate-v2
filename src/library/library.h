@@ -138,6 +138,7 @@ class Library: public QObject {
     void slotSearchInCurrentView();
     void slotSearchInAllTracks();
     void onSkinLoadFinished();
+    void slotAutoAnalyzeLibrary();
     void slotSaveCurrentViewState() const;
     void slotRestoreCurrentViewState() const;
 
@@ -185,6 +186,8 @@ class Library: public QObject {
       void onPlayerManagerTrackAnalyzerIdle();
 
   private:
+    void maybeAutoAnalyzeLibrary();
+
     const UserSettingsPointer m_pConfig;
 
     // The Mixxx database connection pool
@@ -208,4 +211,7 @@ class Library: public QObject {
     int m_iTrackTableRowHeight;
     bool m_editMetadataSelectedClick;
     std::unique_ptr<ControlObject> m_pKeyNotation;
+    bool m_libraryScanInProgress{false};
+    bool m_autoAnalyzeStartupReady{false};
+    bool m_autoAnalyzeQueued{false};
 };

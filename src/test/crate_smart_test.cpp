@@ -15,10 +15,52 @@
 #include <QUuid>
 #include <QVariant>
 
+#include "crate/autoanalysis.h"
 #include "library/trackset/smartcrate/smartcratespec.h"
 #include "library/trackset/smartcrate/smartcratestorage.h"
+#include "test/librarytest.h"
+#include "track/track.h"
 
 namespace {
+
+class CrateAutoAnalyzeTest : public LibraryTest {
+};
+
+TEST_F(CrateAutoAnalyzeTest, EnqueuesFullLibraryByDefault) {
+    const auto first = getOrAddTrackByLocation(
+            getTestDir().filePath(QStringLiteral("id3-test-data/artist.mp3")));
+    const auto second = getOrAddTrackByLocation(
+            getTestDir().filePath(QStringLiteral("id3-test-data/empty.mp3")));
+
+    const auto scheduled = crate::autoAnalyzeTracks(
+            config(), internalCollection()->database());
+    ASSERT_EQ(scheduled.size(), 2);
+    QSet<TrackId> ids;
+    for (const auto& track : scheduled) {
+        ids.insert(track.getTrackId());
+    }
+    EXPECT_EQ(ids, (QSet<TrackId>{first->getId(), second->getId()}));
+}
+
+TEST_F(CrateAutoAnalyzeTest, DisabledEnqueuesNothing) {
+    getOrAddTrackByLocation(
+            getTestDir().filePath(QStringLiteral("id3-test-data/artist.mp3")));
+    config()->setValue(ConfigKey("[Crate]", "auto_analyze"), 0);
+
+    const auto scheduled = crate::autoAnalyzeTracks(
+            config(), internalCollection()->database());
+    EXPECT_TRUE(scheduled.isEmpty());
+}
+
+TEST_F(CrateAutoAnalyzeTest, AnalyzerThreadOverrideIsRespected) {
+    config()->setValue(ConfigKey("[Crate]", "analyzer_threads"), 3);
+    EXPECT_EQ(crate::analyzerThreadCount(config(), 16), 3);
+}
+
+TEST_F(CrateAutoAnalyzeTest, AnalyzerThreadDefaultIsHalfIdealFloorOne) {
+    EXPECT_EQ(crate::analyzerThreadCount(config(), 16), 8);
+    EXPECT_EQ(crate::analyzerThreadCount(config(), 1), 1);
+}
 
 using SmartCrate::WhereClause;
 

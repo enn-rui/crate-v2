@@ -33,6 +33,14 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 - identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,
   src/dialog/dlgaboutdlg.ui, src/mixxx.rc, src/util/cmdlineargs.cpp,
   src/util/versionstore.cpp
+- Auto-analyze seam (2026-07-19, wave 7): src/library/library.h (+slotAutoAnalyzeLibrary
+  decl, +maybeAutoAnalyzeLibrary + 3 bool one-shot state members), src/library/library.cpp
+  (+include crate/autoanalysis.h; scanStarted/scanFinished lambdas track scan state;
+  onSkinLoadFinished arms the one-shot; slotAutoAnalyzeLibrary enqueues the whole library
+  via the existing analyzeTracks signal — AnalyzerBeats::shouldAnalyze skips analyzed
+  tracks so this is idempotent), src/library/analysis/analysisfeature.cpp (worker count
+  now crate::analyzerThreadCount: [Crate],analyzer_threads override, else
+  idealThreadCount/2 floor 1 — was all cores). Logic lives in src/crate/autoanalysis.h.
 - App-wide font seam (2026-07-19, wave 7): src/coreservices.cpp (+include QFont; after
   FontUtils::initializeFonts, QApplication::setFont("IBM Plex Mono") at the current
   default point size so dialogs/preferences stop rendering the OS default font; skin QSS

@@ -5,6 +5,7 @@
 
 #include "analyzer/analyzerscheduledtrack.h"
 #include "controllers/keyboard/keyboardeventfilter.h"
+#include "crate/autoanalysis.h"
 #include "library/analysis/dlganalysis.h"
 #include "library/library.h"
 #include "library/trackcollectionmanager.h"
@@ -19,14 +20,6 @@ namespace {
 const mixxx::Logger kLogger("AnalysisFeature");
 
 const QString kViewName = QStringLiteral("Analysis");
-
-// Utilize all available cores for batch analysis of tracks
-const int kNumberOfAnalyzerThreads = math_max(1, QThread::idealThreadCount());
-
-inline
-int numberOfAnalyzerThreads() {
-    return kNumberOfAnalyzerThreads;
-}
 
 inline
 AnalyzerModeFlags getAnalyzerModeFlags(
@@ -142,7 +135,7 @@ void AnalysisFeature::activate() {
 
 void AnalysisFeature::analyzeTracks(const QList<AnalyzerScheduledTrack>& tracks) {
     if (!m_pTrackAnalysisScheduler) {
-        const int numAnalyzerThreads = numberOfAnalyzerThreads();
+        const int numAnalyzerThreads = crate::analyzerThreadCount(m_pConfig);
         kLogger.info()
                 << "Starting analysis using"
                 << numAnalyzerThreads
