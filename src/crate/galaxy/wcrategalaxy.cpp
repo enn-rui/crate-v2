@@ -69,7 +69,7 @@ class GalaxyPillItem final : public QGraphicsItem {
         p->setPen(QPen(QColor(244, 247, 251, 46), 1.0));
         p->setBrush(QColor(5, 6, 10, 235));
         p->drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 4.0, 4.0);
-        QFont font(QStringLiteral("monospace"));
+        QFont font(QStringLiteral("IBM Plex Mono"));
         font.setStyleHint(QFont::Monospace);
         font.setPixelSize(10);
         p->setFont(font);
@@ -328,6 +328,9 @@ void WCrateGalaxy::populate() {
     }
     m_nodes = sidecars.nodes();
     if (m_nodes.isEmpty()) {
+        auto* pText = m_pScene->addSimpleText(
+                QStringLiteral("galaxy: no analyzed tracks yet"));
+        pText->setBrush(QColor(0xf4, 0xf7, 0xfb));
         return;
     }
     m_nodeByRelpath.reserve(m_nodes.size());
@@ -979,7 +982,7 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     pPainter->save();
     pPainter->resetTransform();
     pPainter->setRenderHint(QPainter::Antialiasing, true);
-    QFont font(QStringLiteral("monospace"));
+    QFont font(QStringLiteral("IBM Plex Mono"));
     font.setStyleHint(QFont::Monospace);
     font.setPixelSize(10);
     pPainter->setFont(font);

@@ -129,14 +129,14 @@
 
 #Sampler {
   border-style: solid;
-  border-color: #222;
+  border-color: #232a36;
   border-width: 0px 2px 0px 0px;
 }
 
 #SamplerMiddleSpacer {
   /* FIXME */
   border-style: solid;
-  border-color: #222;
+  border-color: #232a36;
   border-width: 0px 2px;
 }
 
@@ -145,20 +145,7 @@
 }
 
 #Spacer33 {
-  background-color: #333;
-}
-
-#TEST1 {
-  background-color: #452219;
-}
-#TEST2 {
-  background-color: #451911;
-}
-#TEST3 {
-  background-color: #114522;
-}
-#TEST4 {
-  background-color: #225487;
+  background-color: #232a36;
 }
 
 #AlignLeft {
@@ -195,13 +182,13 @@
 #SamplerRow6,
 #SamplerRow7,
 #SamplerRow8 {
-  border-color: #222;
+  border-color: #232a36;
   border-style: solid;
   border-width: 0px 0px 1px 0px;
 }
 
 #SamplerRow5 {
-  border-color: #222;
+  border-color: #232a36;
   border-style: solid;
   border-width: 1px 0px 1px 0px;
 }
@@ -477,9 +464,9 @@ WLibrarySidebar::item:selected,
   WTrackTableView::item:!selected:focus {
     /* For outline to be applied, background-color must be set, too ...
        Use a value between #1F1F1F and #05060a (alternate-background-color) */
-    background-color: #1d1d1d;
-    outline: 1px solid #fff;
-    color: #fff;
+    background-color: #141821;
+    outline: 1px solid #f4f7fb;
+    color: #f4f7fb;
   }
 WLibrarySidebar::item:selected:focus {
   outline: none;
@@ -488,7 +475,7 @@ WLibrarySidebar::item:!selected:focus,
 /* This, in conjunction with the c++ counterpart, styles only items hovered while dragging */
 WLibrarySidebar[dragHover="true"]::item:hover {
   outline: none;
-  border: 1px solid white;
+  border: 1px solid #f4f7fb;
 }
 /* Use the native focus decoration */
 /* This is for all cells including Played and Location */
@@ -504,7 +491,7 @@ WTrackTableView {
   qproperty-focusBorderColor: #f4f7fb;
   /* This is the color used to paint the text of played tracks.
      BaseTrackTableModel::data() uses this to override Qt::ForegroundRole (QBrush). */
-  qproperty-trackPlayedColor: #555;
+  qproperty-trackPlayedColor: #5b626e;
   /* Color for the track drop indicator line, ie. target position in playlist */
   qproperty-dropIndicatorColor: #2c4a73; /* blue like the track selection color */
 }
@@ -526,10 +513,10 @@ WBeatSpinBox,
 /* Track label inline editor */
 WTrackPropertyEditor,
 #LibraryBPMSpinBox {
-  color: #ddd;
-  background-color: #0f0f0f;
-  selection-color: #000;
-  selection-background-color: #ccc;
+  color: #f4f7fb;
+  background-color: #0d1017;
+  selection-color: #05060a;
+  selection-background-color: #b4d2ff;
 }
 WLibrary QLineEdit,
 WTrackPropertyEditor,
@@ -594,7 +581,7 @@ QPushButton#LibraryPreviewButton:!checked {
 
 QPushButton#LibraryPreviewButton:!checked:hover {
   background-color: #05060a;
-  border: 1px solid #00ABFD;
+  border: 1px solid #b4d2ff;
 }
 
 QPushButton#LibraryPreviewButton:checked {
@@ -604,7 +591,7 @@ QPushButton#LibraryPreviewButton:checked {
 }
 
 QPushButton#LibraryPreviewButton:checked:hover {
-  border: 1px solid #00ABFD;
+  border: 1px solid #b4d2ff;
 }
 
 /* library header row */
@@ -1171,7 +1158,7 @@ WOverview {
 WOverview #PassthroughLabel {
   font-size: 16px;
   font-weight: bold;
-  color: #73b3f7;
+  color: #b4d2ff;
 }
 
 /* Start spacing for Deck overview row (small waveform, option grid) */
@@ -1259,7 +1246,7 @@ WBeatSpinBox,
     border: 1px ridge #015d8d;
   }
   #spinBoxRecentDays:disabled {
-    color: #555;
+    color: #5b626e;
     border-color: #333;
   }
   WBeatSpinBox::down-button,
@@ -1769,8 +1756,7 @@ WNumberRate {
 
 #MixerStrip_4Decks {
   padding: 0px 5px;
-  qproperty-layoutAlignment: 'AlignHCenter';  /*
-  background-color: #911661; */
+  qproperty-layoutAlignment: 'AlignHCenter';
 }
 
 #ButtonContainer {
@@ -1780,8 +1766,7 @@ WNumberRate {
 
 #MixerButtonContainerRight {
   qproperty-layoutAlignment: 'AlignLeft';
-  padding: 0px 0px 0px 9px; /*
-  background-color: #456313;  */
+  padding: 0px 0px 0px 9px;
 }
 
 #MixerButtonContainerLeft {
@@ -1799,7 +1784,6 @@ WNumberRate {
 #channel_VuMeter_Group {
   qproperty-layoutSpacing: 2;
   qproperty-layoutAlignment: 'AlignHCenter';
-  /* background-color: #828315; */
 }
 
 #main_VuMeter_Group {
@@ -1807,12 +1791,10 @@ WNumberRate {
   qproperty-layoutAlignment: 'AlignHCenter';
   padding-left: 5px;
   padding-right: 5px;
-  /* background-color: #828315; */
 }
 
 #MainVu {
   qproperty-layoutAlignment: 'AlignCenter';
-  /* background-color: #582831; */
 }
 
 #vumeter_v, #vumeter_h {
@@ -2159,11 +2141,6 @@ do not highlight either state. */
     border: 0px solid #b4d2ff;
 }
 
-/* Special case SamplerPlayButtonRepeating controls
-  When sampler is playing, displays same play icon as normal, but
-  background is purple instead of blue.
-*/
-
 #SamplerPlayButtonRepeating[value="1"] {
     color: #b4d2ff;
     background-color: #b4d2ff;
@@ -2171,9 +2148,9 @@ do not highlight either state. */
 }
 
 #SamplerPlayButtonRepeating[value="1"]:hover {
-    color: #8b32ff;
-    background-color: #8b32ff;
-    border: 0px solid #8b32ff;
+    color: #b4d2ff;
+    background-color: #b4d2ff;
+    border: 0px solid #b4d2ff;
 }
 
 /* Special case link_type button for effect parameters
@@ -2609,7 +2586,7 @@ QPlainTextEdit QMenu::separator {
 WLibrarySidebar QMenu::indicator,
 WTrackTableViewHeader QMenu QCheckBox::indicator,
 WTrackMenu QMenu QCheckBox::indicator {
-  border: 1px solid #555;
+  border: 1px solid #5b626e;
   border-radius: 1px;
   background-color: #0f0f0f;
   /* remove OS focus indicator */
@@ -2635,7 +2612,7 @@ WTrackMenu QMenu::item:disabled,
 WTrackMenu QMenu QCheckBox:disabled,
 QLineEdit QMenu::item:disabled,
 QPlainTextEdit QMenu::item:disabled {
-  color: #555;
+  color: #5b626e;
 }
 WTrackMenu QMenu QCheckBox::indicator:disabled {
   border: 1px solid #222;
@@ -2935,16 +2912,16 @@ WPushButton#SyncLeader[value="2"] {
 #CueSavedLoopButton,
 #CueSavedJumpButton {
   color: #fff0df;
-  background-color: rgba(255, 159, 67, 31);
-  border: 1px solid rgba(255, 159, 67, 122);
+  background-color: rgba(255, 180, 84, 31);
+  border: 1px solid rgba(255, 180, 84, 122);
 }
 
 #CueDeleteButton:checked,
 #CueStandardButton:checked,
 #CueSavedLoopButton:checked,
 #CueSavedJumpButton:checked {
-  background-color: rgba(255, 159, 67, 71);
-  border-color: #ff9f43;
+  background-color: rgba(255, 180, 84, 71);
+  border-color: #ffb454;
 }
 
 #LibraryContainer QScrollBar:horizontal,
@@ -3000,12 +2977,19 @@ QLineEdit QMenu::item:selected {
 
 #DeckSync[value="1"], #DeckSync[value="2"],
 #BeatsyncButton[value="1"], #BeatsyncButton[value="2"],
-#SyncLeader[value="1"], #SyncLeader[value="2"],
-#BeatloopActivate[value="1"], #BeatloopActivate[value="2"],
-#LoopIn[value="1"], #LoopOut[value="1"], #LoopAnchor[value="1"] {
+#SyncLeader[value="1"], #SyncLeader[value="2"] {
   color: #5bd97a;
   background-color: rgba(91, 217, 122, 46);
   border-color: #5bd97a;
+}
+
+/* Loops are performance controls, not play/sync transport - green stays
+   exclusive to play/sync; active loops read in the cold-blue accent. */
+#BeatloopActivate[value="1"], #BeatloopActivate[value="2"],
+#LoopIn[value="1"], #LoopOut[value="1"], #LoopAnchor[value="1"] {
+  color: #b4d2ff;
+  background-color: rgba(180, 210, 255, 46);
+  border-color: #b4d2ff;
 }
 
 #SlipButton[value="1"], #SlipButton[value="2"],
@@ -3075,6 +3059,10 @@ WEffectChainPresetSelector {
   /* 16px keeps Plex Mono clear of the 10px arrow gutter (12px still grazed
      it); the full FX-row layout gets its own design pass. */
   padding-right: 16px;
+}
+#QuickEffectSelectorLeft,
+#QuickEffectSelectorRight {
+  padding-right: 8px;
 }
 WEffectSelector::drop-down,
 WEffectChainPresetSelector::drop-down {

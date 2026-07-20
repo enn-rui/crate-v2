@@ -14,7 +14,7 @@ const QString kViewName = QStringLiteral("CrateGrab");
 namespace crate {
 
 GrabFeature::GrabFeature(Library* pLibrary, UserSettingsPointer pConfig)
-        : LibraryFeature(pLibrary, std::move(pConfig), QStringLiteral("crates")),
+        : LibraryFeature(pLibrary, std::move(pConfig), QStringLiteral("grab")),
           m_title(QStringLiteral("Grab")),
           m_pSidebarModel(make_parented<TreeItemModel>(this)),
           m_pView(nullptr) {
