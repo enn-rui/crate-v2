@@ -119,7 +119,9 @@ WTrackMenu::WTrackMenu(
           m_bFindOnWebMenuLoaded(false),
           m_bPlaylistMenuLoaded(false),
           m_bCrateMenuLoaded(false),
-          m_eActiveFeatures(flags),
+          // Crate v2 exposes one user collection system. Playlist internals
+          // remain available for AutoDJ and history, but not in track menus.
+          m_eActiveFeatures(flags & ~Feature::Playlist),
           m_eTrackModelFeatures(Feature::TrackModelFeatures) {
     // Warn if any of the chosen features depend on a TrackModel
     VERIFY_OR_DEBUG_ASSERT(trackModel || (m_eTrackModelFeatures & flags) == 0) {

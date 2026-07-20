@@ -72,7 +72,7 @@ class Library: public QObject {
     void bindLibraryWidget(WLibrary* libraryWidget,
                     KeyboardEventFilter* pKeyboard);
 
-    void addFeature(LibraryFeature* feature);
+    void addFeature(LibraryFeature* feature, bool showInSidebar = true);
 
     /// Needed for exposing models to QML
     LibraryTableModel* trackTableModel() const;

@@ -824,6 +824,14 @@ void MixxxMainWindow::createMenuBar() {
     DEBUG_ASSERT(m_pCoreServices->getKeyboardEventFilter());
     m_pMenuBar = make_parented<WMainMenuBar>(
             this, m_pCoreServices->getSettings(), m_pCoreServices->getKeyboardEventFilter());
+    const QString newPlaylistText =
+            QCoreApplication::translate("WMainMenuBar", "Create &New Playlist");
+    for (auto* pAction : m_pMenuBar->findChildren<QAction*>()) {
+        if (pAction->text() == newPlaylistText) {
+            pAction->setVisible(false);
+            break;
+        }
+    }
     if (m_pCentralWidget) {
         m_pMenuBar->setStyleSheet(m_pCentralWidget->styleSheet());
     }
@@ -994,11 +1002,6 @@ void MixxxMainWindow::connectMenuBar() {
                 &WMainMenuBar::createCrate,
                 m_pCoreServices->getLibrary().get(),
                 &Library::slotCreateCrate,
-                Qt::UniqueConnection);
-        connect(m_pMenuBar,
-                &WMainMenuBar::createPlaylist,
-                m_pCoreServices->getLibrary().get(),
-                &Library::slotCreatePlaylist,
                 Qt::UniqueConnection);
         connect(m_pMenuBar,
                 &WMainMenuBar::showAutoDJ,

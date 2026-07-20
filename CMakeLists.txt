@@ -1767,6 +1767,7 @@ add_library(
   src/widget/wcoverart.cpp
   src/widget/wcoverartlabel.cpp
   src/crate/data/cratesidecars.cpp
+  src/crate/data/playlistmigration.cpp
   src/crate/galaxy/wcrategalaxy.cpp
   src/crate/galaxy/wcratemapcontrols.cpp
   src/crate/grab/grabclient.cpp
@@ -2906,6 +2907,7 @@ if(BUILD_TESTING)
     src/test/crate_galaxy_ui_test.cpp
     src/test/crate_golden_test.cpp
     src/test/crate_grab_test.cpp
+    src/test/crate_playlist_migration_test.cpp
     src/test/crate_smart_test.cpp
     src/test/crate_smart_ui_test.cpp
     src/test/cue_test.cpp

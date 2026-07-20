@@ -14,6 +14,14 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 
 ## Upstream files edited (keep current!)
 
+- Playlist-to-crate merge seam (2026-07-19, wave 7 slice C): CMakeLists.txt
+  (+playlist migrator source/test), src/library/library.h and .cpp (`addFeature` gains a
+  `showInSidebar` default; Setlog remains in the bind list but skips the sidebar;
+  PlaylistFeature stays constructed and connected but is not registered; startup calls
+  the one-shot public-API migrator after CrateFeature registration),
+  src/mixxxmainwindow.cpp (removes the New Playlist signal wiring), and
+  src/widget/wtrackmenu.cpp (centrally masks `Feature::Playlist` from all construction
+  sites while leaving AutoDJ and Crate flags intact).
 - CrateGalaxy seam: CMakeLists.txt (src/crate/*.cpp in source list),
   src/skin/legacy/legacyskinparser.h (+parseCrateGalaxy decl),
   src/skin/legacy/legacyskinparser.cpp (+include, +dispatch branch, +parseCrateGalaxy impl;

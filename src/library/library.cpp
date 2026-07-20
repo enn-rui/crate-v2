@@ -7,6 +7,7 @@
 #include "control/controlobject.h"
 #include "controllers/keyboard/keyboardeventfilter.h"
 #include "crate/autoanalysis.h"
+#include "crate/data/playlistmigration.h"
 #include "crate/grab/grabfeature.h"
 #include "library/analysis/analysisfeature.h"
 #include "library/autodj/autodjfeature.h"
@@ -113,7 +114,6 @@ Library::Library(
     addFeature(m_pAutoDJFeature);
 
     m_pPlaylistFeature = make_parented<PlaylistFeature>(this, UserSettingsPointer(m_pConfig));
-    addFeature(m_pPlaylistFeature);
 #ifdef __ENGINEPRIME__
     connect(m_pPlaylistFeature,
             &PlaylistFeature::exportAllPlaylists,
@@ -129,6 +129,8 @@ Library::Library(
 
     m_pCrateFeature = make_parented<CrateFeature>(this, m_pConfig);
     addFeature(m_pCrateFeature);
+    crate::migratePlaylistsToCrates(
+            m_pTrackCollectionManager->internalCollection(), m_pConfig);
 #ifdef __ENGINEPRIME__
     connect(m_pCrateFeature,
             &CrateFeature::exportAllCrates,
@@ -170,7 +172,7 @@ Library::Library(
 
     addFeature(new RecordingFeature(this, m_pConfig, pRecordingManager));
 
-    addFeature(new SetlogFeature(this, UserSettingsPointer(m_pConfig)));
+    addFeature(new SetlogFeature(this, UserSettingsPointer(m_pConfig)), false);
 
     m_pAnalysisFeature = make_parented<AnalysisFeature>(this, m_pConfig);
     connect(m_pPlaylistFeature,
@@ -511,12 +513,14 @@ void Library::bindLibraryWidget(
     emit setSelectedClick(m_editMetadataSelectedClick);
 }
 
-void Library::addFeature(LibraryFeature* feature) {
+void Library::addFeature(LibraryFeature* feature, bool showInSidebar) {
     VERIFY_OR_DEBUG_ASSERT(feature) {
         return;
     }
     m_features.push_back(feature);
-    m_pSidebarModel->addLibraryFeature(feature);
+    if (showInSidebar) {
+        m_pSidebarModel->addLibraryFeature(feature);
+    }
     connect(feature,
             &LibraryFeature::pasteFromSidebar,
             this,
