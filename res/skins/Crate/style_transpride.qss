@@ -210,3 +210,125 @@ QSplitter::handle { background: #5bcefa; }
     background: #bfe9ff;
     border-bottom: 1px solid #ff66b3;
 }
+
+/* Capture-review contrast fixes. Keep these last: this file is an append-delta
+   over style.qss and the base skin has later, more specific button rules. */
+
+/* Every real topbar push button, including the section toggles and the icon
+   buttons for settings and recording. */
+#ToolBar WPushButton,
+#ToolBar QPushButton,
+#ToolBar #ToolbarButton,
+#ToolBar #SidebarShowHideSkinSettingsButton,
+#ToolBar #RecordingNotification {
+    color: #2c3357;
+    background: rgba(255, 255, 255, 150);
+    border: 1px solid #5bcefa;
+    border-radius: 4px;
+}
+#ToolBar WPushButton:hover,
+#ToolBar QPushButton:hover,
+#ToolBar #ToolbarButton:hover,
+#ToolBar #SidebarShowHideSkinSettingsButton:hover,
+#ToolBar #RecordingNotification:hover {
+    color: #2c3357;
+    background: rgba(255, 255, 255, 210);
+    border-color: #ff66b3;
+}
+#ToolBar WPushButton[value="1"],
+#ToolBar WPushButton[value="2"],
+#ToolBar QPushButton:checked,
+#ToolBar #ToolbarButton[value="1"],
+#ToolBar #ToolbarButton[value="2"],
+#ToolBar #SidebarShowHideSkinSettingsButton[value="1"],
+#ToolBar #RecordingNotification[value="1"],
+#ToolBar #RecordingNotification[value="2"],
+#ToolBar #RecordingNotification[value="3"] {
+    color: #ffffff;
+    background: #ff66b3;
+    border: 1px solid #b21e4b;
+}
+
+/* The top-left utility/knob row and preview deck must read as panels instead
+   of transparent white boxes on the light ground. */
+#ToolBarLeft, #MainControls, #BoothControls, #HeadphoneControls,
+#PreviewDeck, #PreviewDeckTextRow, #PreviewDeckVisualRow,
+#PreviewDeckVUContainer {
+    color: #2c3357;
+    background: #e3f4fd;
+    border: 1px solid #5bcefa;
+}
+#PreviewDeckTextRow WLabel, #KnobLabelH {
+    color: #2c3357;
+}
+
+/* Deck transport and compact deck-mode controls: dark ink at rest, white ink
+   on semantic active colors. */
+#MainDecks #PlayToggle[value="0"],
+#MainDecks #DeckCue[value="0"],
+#MainDecks #CueStandardButton:!checked,
+#MainDecks #CueSavedJumpButton:!checked,
+#MainDecks #CueSavedLoopButton:!checked,
+#MainDecks #DeckSync[value="0"],
+#MainDecks #BeatsyncButton[value="0"],
+#MainDecks #SlipButton[value="0"],
+#MainDecks #ReverseButton[value="0"],
+#MainDecks #BeatloopActivate[value="0"],
+#MainDecks #LoopIn[value="0"],
+#MainDecks #LoopOut[value="0"],
+#MainDecks #LoopAnchor[value="0"] {
+    color: #2c3357;
+    background: #e3f4fd;
+    border: 1px solid #5bcefa;
+}
+#MainDecks #PlayToggle[value="1"],
+#MainDecks #DeckSync[value="1"], #MainDecks #DeckSync[value="2"],
+#MainDecks #BeatsyncButton[value="1"], #MainDecks #BeatsyncButton[value="2"] {
+    color: #ffffff;
+    background: #167a3e;
+    border: 1px solid #0d5d2d;
+}
+#MainDecks #DeckCue[value="1"],
+#MainDecks #CueStandardButton:checked,
+#MainDecks #CueSavedJumpButton:checked,
+#MainDecks #CueSavedLoopButton:checked {
+    color: #ffffff;
+    background: #a94f00;
+    border: 1px solid #783800;
+}
+#MainDecks #SlipButton[value="1"], #MainDecks #SlipButton[value="2"],
+#MainDecks #ReverseButton[value="1"], #MainDecks #ReverseButton[value="2"] {
+    color: #ffffff;
+    background: #b21e4b;
+    border: 1px solid #7d1434;
+}
+#MainDecks #BeatloopActivate[value="1"], #MainDecks #BeatloopActivate[value="2"],
+#MainDecks #LoopIn[value="1"], #MainDecks #LoopOut[value="1"],
+#MainDecks #LoopAnchor[value="1"] {
+    color: #ffffff;
+    background: #207cad;
+    border: 1px solid #145d86;
+}
+
+/* Mic/Aux labels and their small Play/Talk/PFL/FX/+ controls. */
+#MicAuxLabel, #DuckingLabel {
+    color: #2c3357;
+}
+#MicAuxContainer WPushButton,
+#MicAuxContainer QPushButton,
+#MicAuxButtons WPushButton,
+#MicAuxButtons QPushButton {
+    color: #2c3357;
+    background: #e3f4fd;
+    border: 1px solid #5bcefa;
+}
+#MicAuxContainer WPushButton[value="1"],
+#MicAuxContainer WPushButton[value="2"],
+#MicAuxContainer QPushButton:checked,
+#MicAuxButtons WPushButton[value="1"],
+#MicAuxButtons WPushButton[value="2"],
+#MicAuxButtons QPushButton:checked {
+    color: #ffffff;
+    background: #ff66b3;
+    border: 1px solid #b21e4b;
+}
