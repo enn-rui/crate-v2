@@ -136,6 +136,7 @@ class CrateGalaxyUiTest : public ::testing::Test {
             QSqlQuery query(db);
             if (syntheticNodes > 0) {
                 ASSERT_TRUE(db.transaction());
+                ASSERT_TRUE(query.exec(QStringLiteral("DELETE FROM coords")));
                 query.prepare(QStringLiteral(
                         "INSERT OR REPLACE INTO coords(relpath, x, y) VALUES(?, ?, ?)"));
                 for (int i = 0; i < syntheticNodes; ++i) {
@@ -501,6 +502,49 @@ TEST_F(CrateGalaxyUiTest, TrackTextCollisionIsStableAndUsesClusterColor) {
         EXPECT_EQ(m_pGalaxy->testLabelColor(2, i),
                 m_pGalaxy->testClusterColor(clusterId));
     }
+}
+
+TEST_F(CrateGalaxyUiTest, DeepZoomDenseTracksAllReceiveDeterministicLabels) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/40.0, /*dense=*/false,
+            /*syntheticNodes=*/150);
+    ASSERT_EQ(m_pGalaxy->testNodeCount(), 150);
+    // Every pair shares a device-space anchor, so every second home rectangle
+    // collides. Pair cells leave enough physical area for the bounded rings.
+    for (int i = 0; i < m_pGalaxy->testNodeCount(); ++i) {
+        const int pair = i / 2;
+        const QPoint devicePoint(45 + (pair % 10) * 300, 90 + (pair / 10) * 80);
+        m_pGalaxy->testSetNodeDisplayPosition(i,
+                m_pGalaxy->mapToScene(devicePoint));
+    }
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_EQ(m_pGalaxy->testLabelCount(2), m_pGalaxy->testNodeCount());
+    const QVector<QRectF> first = m_pGalaxy->testLabelRects();
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_EQ(m_pGalaxy->testLabelRects(), first);
+}
+
+TEST_F(CrateGalaxyUiTest, DisplacedTrackRecordsLeaderButHomeTrackDoesNot) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/40.0);
+    ASSERT_GE(m_pGalaxy->testNodeCount(), 2);
+    m_pGalaxy->testSetAllNodeDisplayPositions(m_pGalaxy->mapToScene(QPoint(100, 100)));
+    m_pGalaxy->testRebuildLabels();
+    ASSERT_GE(m_pGalaxy->testLabelCount(2), 2);
+    EXPECT_GT(m_pGalaxy->testTrackLabelLeaderCount(), 0);
+    EXPECT_LT(m_pGalaxy->testTrackLabelLeaderCount(),
+            m_pGalaxy->testLabelCount(2));
+}
+
+TEST_F(CrateGalaxyUiTest, DeepZoomTrackCapGrowsBeyondLegacyCombinedCap) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/40.0, /*dense=*/false,
+            /*syntheticNodes=*/300);
+    for (int i = 0; i < m_pGalaxy->testNodeCount(); ++i) {
+        const QPoint devicePoint(30 + (i % 30) * 90, 30 + (i / 30) * 24);
+        m_pGalaxy->testSetNodeDisplayPosition(i,
+                m_pGalaxy->mapToScene(devicePoint));
+    }
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_GT(m_pGalaxy->testLabelCount(2), 220);
+    EXPECT_LE(m_pGalaxy->testLabelCount(2), 600);
 }
 
 TEST_F(CrateGalaxyUiTest, LabelLayersShareCollisionSpace) {

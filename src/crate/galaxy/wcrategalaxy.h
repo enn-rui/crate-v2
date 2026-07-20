@@ -122,6 +122,8 @@ class WCrateGalaxy : public QGraphicsView {
     QStringList testLabelTexts(int layer) const;
     QColor testLabelColor(int layer, int index) const;
     int testLabelClusterId(int layer, int index) const;
+    int testTrackLabelLeaderCount() const;
+    bool testTrackLabelHasLeader(int index) const;
     QColor testClusterColor(int clusterId) const;
     QString testClusterName(int clusterId) const;
     void testRebuildLabels() { rebuildLabelCache(); }
@@ -268,6 +270,7 @@ class WCrateGalaxy : public QGraphicsView {
         qreal opacity = 1.0;
         int clusterId = -1;
         int nodeIndex = -1;
+        bool hasLeader = false;
     };
     QVector<MapLabel> m_clusterLabels;
     QVector<MapLabel> m_artistLabels;

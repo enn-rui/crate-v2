@@ -1023,6 +1023,33 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
                 Qt::SolidLine, Qt::RoundCap));
         pPainter->drawLine(m_plexusDeviceLines[i]);
     }
+    // Leader geometry is intentionally derived from the live transform. The
+    // device-space label offset is cached, but pan/zoom can move its scene
+    // anchor between debounced cache rebuilds.
+    QHash<QRgb, QVector<QLineF>> leaderBatches;
+    for (const MapLabel& label : std::as_const(m_trackLabels)) {
+        if (!label.hasLeader || label.nodeIndex < 0) {
+            continue;
+        }
+        const QPointF dotCenter = mapFromScene(label.sceneAnchor);
+        const QRectF labelRect(dotCenter + label.pixmapOffset, label.logicalSize);
+        const QPointF labelEdge(qBound(labelRect.left(), dotCenter.x(), labelRect.right()),
+                qBound(labelRect.top(), dotCenter.y(), labelRect.bottom()));
+        QLineF leader(dotCenter, labelEdge);
+        const QRectF dotRect = mapFromScene(
+                m_dots[label.nodeIndex]->sceneBoundingRect()).boundingRect();
+        const qreal dotRadius = qMax(dotRect.width(), dotRect.height()) * 0.5;
+        if (leader.length() > dotRadius) {
+            leader.setP1(leader.pointAt(dotRadius / leader.length()));
+        }
+        QColor leaderColor(label.color);
+        leaderColor.setAlphaF(0.40 * label.opacity);
+        leaderBatches[leaderColor.rgba()].append(leader);
+    }
+    for (auto it = leaderBatches.constBegin(); it != leaderBatches.constEnd(); ++it) {
+        pPainter->setPen(QPen(QColor::fromRgba(it.key()), 1.0));
+        pPainter->drawLines(it.value());
+    }
     const auto drawLabels = [pPainter, this](const QVector<MapLabel>& labels) {
         for (const MapLabel& label : labels) {
             pPainter->setOpacity(label.opacity);
@@ -1559,17 +1586,19 @@ void WCrateGalaxy::rebuildLabelCache() {
                     -logicalSize.height() * 0.5);
         }
         MapLabel label{text, sceneAnchor, offset, logicalSize, pixmap,
-                color, pixelSize, opacity, clusterId, nodeIndex};
+                color, pixelSize, opacity, clusterId, nodeIndex, false};
         return label;
     };
 
     // One device-space collision index for every layer. Keeping the stable
     // insertion order makes labels tile-like: zooming in only frees space.
     QVector<QRectF> occupied;
-    occupied.reserve(220);
+    const int labelCap = zoom < 8.0 ? 220 : 600;
+    occupied.reserve(labelCap);
     QVector<MapLabel> pendingArtistLabels;
-    const auto place = [&occupied, this](MapLabel&& label, QVector<MapLabel>* output) {
-        if (occupied.size() >= 220) return;
+    const auto place = [&occupied, this, labelCap](MapLabel&& label,
+                               QVector<MapLabel>* output) {
+        if (occupied.size() >= labelCap) return;
         const QPointF deviceAnchor = mapFromScene(label.sceneAnchor);
         const QRectF rect(deviceAnchor + label.pixmapOffset, label.logicalSize);
         const QRectF padded = rect.adjusted(-2, -2, 2, 2);
@@ -1578,6 +1607,41 @@ void WCrateGalaxy::rebuildLabelCache() {
         }
         occupied.append(padded);
         output->append(std::move(label));
+    };
+    const auto placeTrack = [&occupied, this, labelCap](MapLabel&& label,
+                                    QVector<MapLabel>* output) {
+        if (occupied.size() >= labelCap) return;
+        const QPointF deviceAnchor = mapFromScene(label.sceneAnchor);
+        const QPointF homeOffset = label.pixmapOffset;
+        const auto tryOffset = [&occupied, &label, deviceAnchor](const QPointF& offset) {
+            const QRectF rect(deviceAnchor + offset, label.logicalSize);
+            const QRectF padded = rect.adjusted(-2, -2, 2, 2);
+            for (const QRectF& other : std::as_const(occupied)) {
+                if (other.intersects(padded)) return false;
+            }
+            label.pixmapOffset = offset;
+            occupied.append(padded);
+            return true;
+        };
+        if (tryOffset(homeOffset)) {
+            output->append(std::move(label));
+            return;
+        }
+        // Clockwise rings, starting at the home/right direction. Integer ring
+        // radii and a fixed angle count make repeated rebuilds bit-stable.
+        constexpr int kAngles = 12;
+        for (int radius = 8; radius <= 56; radius += 8) {
+            for (int angle = 0; angle < kAngles; ++angle) {
+                const qreal radians = angle * (2.0 * M_PI / kAngles);
+                const QPointF candidate = homeOffset +
+                        QPointF(radius * std::cos(radians), radius * std::sin(radians));
+                if (tryOffset(candidate)) {
+                    label.hasLeader = radius > 10;
+                    output->append(std::move(label));
+                    return;
+                }
+            }
+        }
     };
 
     if (zoom < kClusterFadeEnd) {
@@ -1683,13 +1747,13 @@ void WCrateGalaxy::rebuildLabelCache() {
             return ah == bh ? m_nodes[a].relpath < m_nodes[b].relpath : ah < bh;
         });
         for (int index : std::as_const(visible)) {
-            if (occupied.size() >= 220) break;
+            if (occupied.size() >= labelCap) break;
             QFont font(QStringLiteral("IBM Plex Mono"));
             font.setPixelSize(10);
             const QString title = QFontMetrics(font).elidedText(
                     m_nodes[index].title, Qt::ElideRight,
                     QFontMetrics(font).horizontalAdvance(QString(24, QLatin1Char('M'))));
-            place(makeLabel(title, m_dots[index]->pos(),
+            placeTrack(makeLabel(title, m_dots[index]->pos(),
                           clusterColor(m_nodes[index].clusterId), 10, opacity,
                           m_nodes[index].clusterId, index, QPointF(7.0, -6.0)),
                     &m_trackLabels);
@@ -2240,6 +2304,19 @@ int WCrateGalaxy::testLabelClusterId(int layer, int index) const {
     const QVector<MapLabel>* labels = layer == 0 ? &m_clusterLabels
             : layer == 1 ? &m_artistLabels : &m_trackLabels;
     return index >= 0 && index < labels->size() ? labels->at(index).clusterId : -1;
+}
+
+int WCrateGalaxy::testTrackLabelLeaderCount() const {
+    int count = 0;
+    for (const MapLabel& label : m_trackLabels) {
+        if (label.hasLeader) ++count;
+    }
+    return count;
+}
+
+bool WCrateGalaxy::testTrackLabelHasLeader(int index) const {
+    return index >= 0 && index < m_trackLabels.size() &&
+            m_trackLabels[index].hasLeader;
 }
 
 QColor WCrateGalaxy::testClusterColor(int clusterId) const {
