@@ -45,6 +45,7 @@ ControlPickerMenu::ControlPickerMenu(QWidget* pParent)
 
     m_otherGroupsTrMap.insert("Skin", tr("Skin"));
     m_otherGroupsTrMap.insert("Library", m_libraryStr);
+    m_otherGroupsTrMap.insert("Crate", tr("Crate"));
     m_otherGroupsTrMap.insert("Controller", tr("Controller"));
     // TODO(ronso0) "translate" legacy 'Master' to 'Main' in main branch?
     m_otherGroupsTrMap.insert("Master", "Master");
@@ -1001,6 +1002,41 @@ ControlPickerMenu::ControlPickerMenu(QWidget* pParent)
             pLibraryMenu,
             false,
             m_libraryStr);
+
+    // Crate Controls
+    QMenu* pCrateMenu = addSubmenu(tr("Crate"));
+    addCrateControl("knob_focus",
+            tr("Browse knob: map / table"),
+            tr("Switch the browse knob between the map and the track table"),
+            pCrateMenu);
+    addCrateControl("galaxy_load",
+            tr("Load map cursor to prep deck"),
+            tr("Load the selected map track into the next available prep deck"),
+            pCrateMenu);
+    addCrateControl("galaxy_3d",
+            tr("Galaxy 3D view"),
+            tr("Switch the galaxy between flat and 3D views"),
+            pCrateMenu);
+    addCrateControl("galaxy_halos",
+            tr("Galaxy plexus overlay"),
+            tr("Show or hide mixability connections around loaded tracks"),
+            pCrateMenu);
+    addCrateControl("galaxy_trail",
+            tr("Galaxy session trail"),
+            tr("Show or hide the trail of tracks played this session"),
+            pCrateMenu);
+    addCrateControl("galaxy_layout_control",
+            tr("Galaxy layout mode"),
+            tr("Choose how tracks are arranged in the galaxy"),
+            pCrateMenu);
+    addCrateControl("galaxy_color_control",
+            tr("Galaxy color mode"),
+            tr("Choose how tracks are colored in the galaxy"),
+            pCrateMenu);
+    addCrateControl("galaxy_reload",
+            tr("Reload map from disk"),
+            tr("Reload the galaxy map from its sidecar files"),
+            pCrateMenu);
 
     // Effect Controls
     QMenu* pEffectsMenu = addSubmenu(tr("Effects"));
@@ -2043,6 +2079,13 @@ void ControlPickerMenu::addLibraryControl(const QString& control,
         const QString& description,
         QMenu* pMenu) {
     addSingleControl("[Library]", control, title, description, pMenu, m_libraryStr);
+}
+
+void ControlPickerMenu::addCrateControl(const QString& control,
+        const QString& title,
+        const QString& description,
+        QMenu* pMenu) {
+    addSingleControl("[Crate]", control, title, description, pMenu, tr("Crate"));
 }
 
 QMenu* ControlPickerMenu::addSubmenu(QString title, QMenu* pParent) {

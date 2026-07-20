@@ -90,7 +90,12 @@ bool CrateSidecars::load() {
     QHash<QString, int> indexByRelpath;
     {
         QSqlQuery q(umap);
-        q.exec(QStringLiteral("SELECT relpath, x, y FROM coords"));
+        if (!q.exec(QStringLiteral("SELECT relpath, x, y FROM coords"))) {
+            m_lastError = QStringLiteral("umap.sqlite coords unreadable: ") +
+                    q.lastError().text();
+            closeAndRemove(&umap);
+            return false;
+        }
         while (q.next()) {
             GalaxyNode node;
             node.relpath = q.value(0).toString();

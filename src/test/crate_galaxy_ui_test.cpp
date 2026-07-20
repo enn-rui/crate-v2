@@ -23,6 +23,7 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUuid>
 #include <QVector>
 
 #include <memory>
@@ -114,6 +115,45 @@ class CrateGalaxyUiTest : public ::testing::Test {
 
     QString configValue(const char* key) {
         return m_pConfig->getValue(ConfigKey("[Crate]", key), QString());
+    }
+
+    QString makeReloadSidecars(int nodeCount) {
+        const QString sidecarDir = m_tmp.filePath(QStringLiteral("reload-sidecars"));
+        EXPECT_TRUE(QDir().mkpath(sidecarDir));
+        const QDir source(goldenSidecarDir());
+        for (const QString& name : source.entryList(QDir::Files)) {
+            const QString destination = QDir(sidecarDir).filePath(name);
+            if (!QFile::exists(destination)) {
+                EXPECT_TRUE(QFile::copy(source.filePath(name), destination));
+            }
+        }
+        writeReloadCoords(sidecarDir, nodeCount);
+        return sidecarDir;
+    }
+
+    void writeReloadCoords(const QString& sidecarDir, int nodeCount) {
+        const QString connectionName = QStringLiteral("CrateGalaxyReload_%1")
+                                               .arg(QUuid::createUuid().toString());
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(
+                    QStringLiteral("QSQLITE"), connectionName);
+            db.setDatabaseName(QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite")));
+            ASSERT_TRUE(db.open());
+            QSqlQuery query(db);
+            ASSERT_TRUE(db.transaction());
+            ASSERT_TRUE(query.exec(QStringLiteral("DELETE FROM coords")));
+            query.prepare(QStringLiteral(
+                    "INSERT INTO coords(relpath, x, y) VALUES(?, ?, ?)"));
+            for (int i = 0; i < nodeCount; ++i) {
+                query.bindValue(0, QStringLiteral("music/dj/Reload Artist/Track %1.flac").arg(i));
+                query.bindValue(1, i * 0.1);
+                query.bindValue(2, i * 0.2);
+                ASSERT_TRUE(query.exec());
+            }
+            ASSERT_TRUE(db.commit());
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connectionName);
     }
 
     // Drain any pending debounced label rebuilds deterministically. Fixed
@@ -222,6 +262,53 @@ TEST_F(CrateGalaxyUiTest, LayoutComboChangesGalaxyForEveryChoice) {
     QTest::keyClick(pCombo, Qt::Key_Home);
     QApplication::processEvents();
     EXPECT_EQ(configValue("galaxy_layout"), QStringLiteral("scatter"));
+}
+
+TEST_F(CrateGalaxyUiTest, ReloadControlRebuildsLiveWidgetAndKeepsSceneOnFailure) {
+    const QString sidecarDir = makeReloadSidecars(4);
+    m_pConfig->setValue(ConfigKey("[Crate]", "sidecar_dir"), sidecarDir);
+    m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
+            nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
+    ASSERT_EQ(m_pGalaxy->testNodeCount(), 4);
+
+    writeReloadCoords(sidecarDir, 7);
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 1.0);
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
+    QApplication::processEvents();
+    ASSERT_EQ(m_pGalaxy->testNodeCount(), 7);
+
+    QFile umap(QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite")));
+    ASSERT_TRUE(umap.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    ASSERT_EQ(umap.write("not sqlite"), 10);
+    umap.close();
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 1.0);
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), 7);
+}
+
+TEST_F(CrateGalaxyUiTest, UnchangedSidecarMtimeDoesNotRebuildOnRepeatedFocusChecks) {
+    const int rebuilds = m_pGalaxy->testSidecarRebuildCount();
+    for (int i = 0; i < 2; ++i) {
+        m_pGalaxy->hide();
+        m_pGalaxy->show();
+        QApplication::processEvents();
+    }
+    EXPECT_EQ(m_pGalaxy->testSidecarRebuildCount(), rebuilds);
+}
+
+TEST_F(CrateGalaxyUiTest, RefreshButtonUsesReloadControl) {
+    const QString sidecarDir = makeReloadSidecars(3);
+    m_pConfig->setValue(ConfigKey("[Crate]", "sidecar_dir"), sidecarDir);
+    m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
+            nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
+    writeReloadCoords(sidecarDir, 5);
+    QPushButton* pRefresh = m_pControls->findChild<QPushButton*>(
+            QStringLiteral("CrateMapRefresh"));
+    ASSERT_NE(pRefresh, nullptr);
+    QTest::mouseClick(pRefresh, Qt::LeftButton);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), 5);
 }
 
 TEST_F(CrateGalaxyUiTest, MapControlsHeightTracksLayoutMinimumInBothStatusStates) {

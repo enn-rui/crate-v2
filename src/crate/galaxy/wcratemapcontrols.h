@@ -36,6 +36,7 @@ class WCrateMapControls final : public QWidget {
     QPushButton* m_pHaloButton;
     QPushButton* m_pTrailButton;
     QPushButton* m_pKnobButton;
+    QPushButton* m_pRefreshButton;
     QLabel* m_pLayoutStatus;
     std::unique_ptr<ControlObject> m_pLayoutCO;
     std::unique_ptr<ControlObject> m_pColorCO;
@@ -43,6 +44,7 @@ class WCrateMapControls final : public QWidget {
     std::unique_ptr<ControlPushButton> m_pHaloCO;
     std::unique_ptr<ControlPushButton> m_pTrailCO;
     std::unique_ptr<ControlPushButton> m_pKnobCO;
+    std::unique_ptr<ControlPushButton> m_pReloadCO;
     std::unique_ptr<ControlObject> m_pLayoutDegradedCO;
 };
 

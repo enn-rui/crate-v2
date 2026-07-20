@@ -309,6 +309,13 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
                 }
             });
 
+    m_pReloadProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_reload"), this);
+    m_pReloadProxy->connectValueChanged(this, [this](double value) {
+        if (value != 0.0) {
+            reloadSidecars();
+        }
+    });
+
     // Browse knob -> [Library],MoveVertical (stock encoder the FLX4 already
     // drives). When knob focus is MAP we step the galaxy cursor; TABLE leaves
     // the stock library scroll untouched.
@@ -339,19 +346,83 @@ void WCrateGalaxy::populate() {
         return;
     }
 
+    if (!reloadSidecars()) {
+        auto* pText = m_pScene->addSimpleText(
+                QStringLiteral("galaxy: sidecars unavailable"));
+        pText->setBrush(m_palette.ink);
+    }
+}
+
+bool WCrateGalaxy::reloadSidecars() {
+    const QString sidecarDir = m_pConfig->getValue(
+            ConfigKey("[Crate]", "sidecar_dir"), QString());
+    if (sidecarDir.isEmpty()) {
+        qInfo() << "galaxy sidecar reload skipped: sidecar_dir is empty";
+        return false;
+    }
+
     CrateSidecars sidecars(sidecarDir);
     if (!sidecars.load()) {
-        auto* pText = m_pScene->addSimpleText(
-                QStringLiteral("galaxy: ") + sidecars.lastError());
-        pText->setBrush(m_palette.ink);
-        kLogger.warning() << "sidecar load failed:" << sidecars.lastError();
-        return;
+        qInfo() << "galaxy sidecar reload kept prior scene:" << sidecars.lastError();
+        return false;
     }
-    m_nodes = sidecars.nodes();
+    rebuildScene(sidecars.nodes());
+    m_lastSidecarModified = QFileInfo(
+            QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite"))).lastModified();
+    ++m_sidecarRebuildCount;
+    kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
+    return true;
+}
+
+void WCrateGalaxy::reloadSidecarsIfChanged() {
+    const QString sidecarDir = m_pConfig->getValue(
+            ConfigKey("[Crate]", "sidecar_dir"), QString());
+    const QFileInfo umapInfo(QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite")));
+    if (umapInfo.lastModified() != m_lastSidecarModified) {
+        reloadSidecars();
+    }
+}
+
+void WCrateGalaxy::rebuildScene(const QVector<GalaxyNode>& nodes) {
+    if (m_pLayoutAnimation->state() != QAbstractAnimation::Stopped) {
+        m_pLayoutAnimation->stop();
+    }
+    for (QGraphicsItem* pItem : m_pScene->items()) {
+        if (pItem != m_pCursorRing) {
+            delete pItem;
+        }
+    }
+    m_dots.clear();
+    m_halos.clear();
+    m_pills.clear();
+    m_clusterLabels.clear();
+    m_artistLabels.clear();
+    m_trackLabels.clear();
+    m_scatterPositions.clear();
+    m_nodeByRelpath.clear();
+    m_subsetNodes.clear();
+    m_subsetActive = false;
+    m_hoveredNode = -1;
+    resetWalk();
+    m_playTrail.clear();
+    m_trailDeviceLines.clear();
+    m_trailDeviceColors.clear();
+    m_plexusSegments.clear();
+    m_plexusDeviceLines.clear();
+    m_plexusDeviceColors.clear();
+    m_plexusDeviceWidths.clear();
+    m_deckPlexusScores.clear();
+    m_deckPlayingNodes.clear();
+    m_deckIsPlaying.clear();
+    m_sonicVectors = SonicVectors();
+    m_vectorsLoadAttempted = false;
+    m_nodes = nodes;
     if (m_nodes.isEmpty()) {
         auto* pText = m_pScene->addSimpleText(
                 QStringLiteral("galaxy: no analyzed tracks yet"));
         pText->setBrush(m_palette.ink);
+        m_pScene->setSceneRect(pText->boundingRect());
+        viewport()->update();
         return;
     }
     m_nodeByRelpath.reserve(m_nodes.size());
@@ -414,7 +485,10 @@ void WCrateGalaxy::populate() {
     } else if (m_layoutMode != LayoutMode::Scatter) {
         setLayoutMode(m_layoutMode, false);
     }
-    kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
+    recomputeSubsetFromModel();
+    updateMixabilityHalos();
+    rebuildLabelCache();
+    rebuildOverlayCache();
     applyHaloVisuals();
 }
 
@@ -2472,6 +2546,7 @@ void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
 
 void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
     QGraphicsView::showEvent(pEvent);
+    reloadSidecarsIfChanged();
     if (!m_initialFitDone && !m_pScene->items().isEmpty()) {
         fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
         m_fitScale = transform().m11();
@@ -2505,6 +2580,11 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
         }
         rebuildLabelCache();
     }
+}
+
+void WCrateGalaxy::focusInEvent(QFocusEvent* pEvent) {
+    QGraphicsView::focusInEvent(pEvent);
+    reloadSidecarsIfChanged();
 }
 
 } // namespace crate

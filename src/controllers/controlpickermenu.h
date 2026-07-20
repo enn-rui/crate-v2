@@ -115,6 +115,10 @@ class ControlPickerMenu : public QMenu {
             const QString& title,
             const QString& helpText,
             QMenu* pMenu);
+    void addCrateControl(const QString& control,
+            const QString& title,
+            const QString& helpText,
+            QMenu* pMenu);
 
     int addAvailableControl(const ConfigKey& key, const QString& title, const QString& description);
 

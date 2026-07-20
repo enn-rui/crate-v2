@@ -67,6 +67,7 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
           m_pHaloButton(new QPushButton(QStringLiteral("PLEXUS"), this)),
           m_pTrailButton(new QPushButton(QStringLiteral("TRAIL"), this)),
           m_pKnobButton(new QPushButton(this)),
+          m_pRefreshButton(new QPushButton(QStringLiteral("REFRESH"), this)),
           m_pLayoutStatus(new ElidingLabel(this)),
           m_pLayoutCO(std::make_unique<ControlObject>(
                   ConfigKey("[Crate]", "galaxy_layout_control"))),
@@ -80,6 +81,8 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
                   ConfigKey("[Crate]", "galaxy_trail"))),
           m_pKnobCO(std::make_unique<ControlPushButton>(
                   ConfigKey("[Crate]", "knob_focus"))),
+          m_pReloadCO(std::make_unique<ControlPushButton>(
+                  ConfigKey("[Crate]", "galaxy_reload"))),
           m_pLayoutDegradedCO(std::make_unique<ControlObject>(
                   ConfigKey("[Crate]", "galaxy_layout_degraded_count"))) {
     setObjectName(QStringLiteral("CrateMapControls"));
@@ -132,6 +135,10 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
     pMain->addLayout(pButtons);
     pMain->addWidget(m_pTrailButton);
     pMain->addWidget(m_pKnobButton);
+    m_pRefreshButton->setObjectName(QStringLiteral("CrateMapRefresh"));
+    m_pRefreshButton->setFocusPolicy(Qt::NoFocus);
+    m_pRefreshButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    pMain->addWidget(m_pRefreshButton);
     m_pLayoutStatus->setObjectName(QStringLiteral("CrateMapLayoutStatus"));
     m_pLayoutStatus->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     m_pLayoutStatus->setFixedHeight(fontMetrics().height());
@@ -142,6 +149,7 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
     m_pHaloCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pTrailCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pKnobCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
+    m_pReloadCO->setButtonMode(mixxx::control::ButtonMode::Push);
     m_pLayoutCO->set(savedLayout(m_pConfig));
     m_pColorCO->set(savedColor(m_pConfig));
     m_p3dCO->set(m_pConfig->getValue(ConfigKey("[Crate]", "galaxy_3d"), 0));
@@ -163,6 +171,11 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
             this, [this](bool checked) {
                 syncKnob(checked ? 1.0 : 0.0);
                 m_pKnobCO->set(checked ? 1.0 : 0.0);
+            });
+    connect(m_pRefreshButton, &QPushButton::clicked,
+            this, [this] {
+                m_pReloadCO->set(1.0);
+                m_pReloadCO->set(0.0);
             });
     connect(m_pLayoutCO.get(), &ControlObject::valueChanged,
             this, &WCrateMapControls::syncLayout);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QDateTime>
 #include <QGraphicsView>
 #include <QHash>
 #include <QLineF>
@@ -135,6 +136,7 @@ class WCrateGalaxy : public QGraphicsView {
     bool testLeadersSuppressed() const { return leadersSuppressed(); }
     bool testLeaderGeometrySane() const;
     int testLabelRebuildCount() const { return m_labelRebuildCount; }
+    int testSidecarRebuildCount() const { return m_sidecarRebuildCount; }
     void testPanBy(int dx, int dy) { scrollContentsBy(dx, dy); }
     QVector<QRectF> testLabelRects() const;
     QStringList testTrackLabelRelpaths() const;
@@ -166,6 +168,7 @@ class WCrateGalaxy : public QGraphicsView {
     void resizeEvent(QResizeEvent* pEvent) override;
     void scrollContentsBy(int dx, int dy) override;
     void showEvent(QShowEvent* pEvent) override;
+    void focusInEvent(QFocusEvent* pEvent) override;
 
   private:
     enum class ColorMode {
@@ -189,6 +192,9 @@ class WCrateGalaxy : public QGraphicsView {
     };
 
     void populate();
+    bool reloadSidecars();
+    void reloadSidecarsIfChanged();
+    void rebuildScene(const QVector<GalaxyNode>& nodes);
     void updateColors();
     void setColorMode(ColorMode mode);
     void setLayoutMode(LayoutMode mode, bool animate = true);
@@ -285,6 +291,8 @@ class WCrateGalaxy : public QGraphicsView {
     QVector<MapLabel> m_trackLabels;
     QTimer* m_pLabelRebuildTimer = nullptr;
     int m_labelRebuildCount = 0;
+    int m_sidecarRebuildCount = 0;
+    QDateTime m_lastSidecarModified;
     QString m_musicRoot;
     ColorMode m_colorMode = ColorMode::Cluster;
     ValueRange m_tempoRange;
@@ -352,6 +360,7 @@ class WCrateGalaxy : public QGraphicsView {
     ControlProxy* m_pHaloProxy = nullptr;
     ControlProxy* m_pTrailProxy = nullptr;
     ControlProxy* m_pKnobFocusProxy = nullptr;
+    ControlProxy* m_pReloadProxy = nullptr;
     ControlProxy* m_pMoveVerticalProxy = nullptr;
 };
 
