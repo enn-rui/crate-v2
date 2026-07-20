@@ -115,6 +115,21 @@ class CrateGalaxyUiTest : public ::testing::Test {
         return m_pConfig->getValue(ConfigKey("[Crate]", key), QString());
     }
 
+    // Drain any pending debounced label rebuilds deterministically. Fixed
+    // qWait(140) raced the 120ms debounce timer under full-suite load (the
+    // stale pending rebuild fired mid-assertion) — wait until the rebuild
+    // count is stable for a full debounce window instead.
+    void settleLabelRebuilds() {
+        int stable = 0;
+        for (int i = 0; i < 40 && stable < 2; ++i) {
+            const int count = m_pGalaxy->testLabelRebuildCount();
+            QTest::qWait(150);
+            QApplication::processEvents();
+            stable = (m_pGalaxy->testLabelRebuildCount() == count) ? stable + 1 : 0;
+        }
+        ASSERT_GE(stable, 2) << "label rebuilds never settled";
+    }
+
     void recreateGalaxy(bool mode3d, double debugZoom, bool dense = false,
             int syntheticNodes = 0) {
         m_pGalaxy.reset();
@@ -375,11 +390,15 @@ TEST_F(CrateGalaxyUiTest, TrailToggleClearsOnlyPaintCache) {
     EXPECT_EQ(m_pGalaxy->testPlayTrail().size(), 2);
 }
 
-TEST_F(CrateGalaxyUiTest, PlexusUsesPerDeckTopFortyAndClearsStoppedDeck) {
+TEST_F(CrateGalaxyUiTest, PlexusGradesLoadedStoppedDeckAndClearsOnUnload) {
     ASSERT_GT(m_pGalaxy->testNodeCount(), 2);
     ControlObject deck1Play(ConfigKey("[Channel1]", "play"));
     ControlObject deck2Play(ConfigKey("[Channel2]", "play"));
-    ControlObject::set(ConfigKey("[Channel1]", "play"), 1.0);
+    ControlObject deck1Loaded(ConfigKey("[Channel1]", "track_loaded"));
+    ControlObject deck2Loaded(ConfigKey("[Channel2]", "track_loaded"));
+    ControlObject::set(ConfigKey("[Channel1]", "track_loaded"), 1.0);
+    ControlObject::set(ConfigKey("[Channel2]", "track_loaded"), 1.0);
+    ControlObject::set(ConfigKey("[Channel1]", "play"), 0.0);
     ControlObject::set(ConfigKey("[Channel2]", "play"), 1.0);
     PlayerInfo::instance().setTrackInfo(PlayerManager::groupForDeck(0),
             Track::newTemporary(QDir(QStringLiteral("Z:/music")).filePath(
@@ -397,6 +416,18 @@ TEST_F(CrateGalaxyUiTest, PlexusUsesPerDeckTopFortyAndClearsStoppedDeck) {
             EXPECT_LE(score, 1.0);
         }
     }
+    ASSERT_GT(m_pGalaxy->testPlexusSegmentCount(), 0);
+    const int stoppedLineAlpha = m_pGalaxy->testPlexusLineAlpha(0);
+    const int stoppedEndpoint = m_pGalaxy->testPlexusScores(0).constBegin().key();
+    const int stoppedRingAlpha = m_pGalaxy->testPlexusRingAlpha(stoppedEndpoint);
+    EXPECT_GT(stoppedLineAlpha, 0);
+    EXPECT_GT(stoppedRingAlpha, 0);
+    ControlObject::set(ConfigKey("[Channel1]", "play"), 1.0);
+    m_pGalaxy->testRefreshPlexus();
+    const int playingLineAlpha = m_pGalaxy->testPlexusLineAlpha(0);
+    const int playingRingAlpha = m_pGalaxy->testPlexusRingAlpha(stoppedEndpoint);
+    EXPECT_NEAR(stoppedLineAlpha, playingLineAlpha * 0.65, 1.0);
+    EXPECT_NEAR(stoppedRingAlpha, playingRingAlpha * 0.65, 1.0);
     QPushButton* pPlexus = m_pControls->findChild<QPushButton*>(QStringLiteral("CrateMapHalo"));
     ASSERT_NE(pPlexus, nullptr);
     EXPECT_EQ(pPlexus->text(), QStringLiteral("PLEXUS"));
@@ -405,7 +436,8 @@ TEST_F(CrateGalaxyUiTest, PlexusUsesPerDeckTopFortyAndClearsStoppedDeck) {
     EXPECT_EQ(m_pGalaxy->testPlexusSegmentCount(), 0);
     QTest::mouseClick(pPlexus, Qt::LeftButton);
     QApplication::processEvents();
-    ControlObject::set(ConfigKey("[Channel2]", "play"), 0.0);
+    ControlObject::set(ConfigKey("[Channel2]", "track_loaded"), 0.0);
+    PlayerInfo::instance().setTrackInfo(PlayerManager::groupForDeck(1), TrackPointer());
     m_pGalaxy->testRefreshPlexus();
     EXPECT_TRUE(m_pGalaxy->testPlexusScores(1).isEmpty());
 }
@@ -559,12 +591,32 @@ TEST_F(CrateGalaxyUiTest, LabelLayersShareCollisionSpace) {
     EXPECT_LE(rects.size(), 220);
 }
 
-TEST_F(CrateGalaxyUiTest, PanDoesNotRecomputeLabelSet) {
+TEST_F(CrateGalaxyUiTest, SmallPanDoesNotRecomputeLabelSetAfterSettle) {
     recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
+    settleLabelRebuilds();
     const int before = m_pGalaxy->testLabelRebuildCount();
-    m_pGalaxy->testPanBy(17, -11);
+    const QRectF visible = m_pGalaxy->mapToScene(
+            m_pGalaxy->viewport()->rect()).boundingRect();
+    m_pGalaxy->centerOn(visible.center() + QPointF(visible.width() * 0.10, 0.0));
     QApplication::processEvents();
     EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+    QTest::qWait(140);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+}
+
+TEST_F(CrateGalaxyUiTest, LargePanRecomputesLabelsOnceAfterSettle) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
+    settleLabelRebuilds();
+    const int before = m_pGalaxy->testLabelRebuildCount();
+    const QRectF visible = m_pGalaxy->mapToScene(
+            m_pGalaxy->viewport()->rect()).boundingRect();
+    m_pGalaxy->centerOn(visible.center() + QPointF(visible.width() * 0.35, 0.0));
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+    QTest::qWait(140);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 1);
 }
 
 TEST_F(CrateGalaxyUiTest, ResizeDebouncesLabelRecompute) {

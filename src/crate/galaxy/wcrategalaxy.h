@@ -109,6 +109,10 @@ class WCrateGalaxy : public QGraphicsView {
     int testTrailSegmentCount() const { return m_trailDeviceLines.size(); }
     QVector<int> testPlayTrail() const { return m_playTrail; }
     int testPlexusSegmentCount() const { return m_plexusDeviceLines.size(); }
+    int testPlexusLineAlpha(int index) const {
+        return m_plexusDeviceColors.value(index).alpha();
+    }
+    int testPlexusRingAlpha(int node) const;
     int testPlexusDeckCount() const { return m_deckPlexusScores.size(); }
     QHash<int, double> testPlexusScores(int deck) const {
         return m_deckPlexusScores.value(deck);
@@ -306,6 +310,7 @@ class WCrateGalaxy : public QGraphicsView {
         int from = -1;
         int to = -1;
         double score = 0.0;
+        bool playing = false;
     };
     QVector<PlexusSegment> m_plexusSegments;
     QVector<QLineF> m_plexusDeviceLines;
@@ -313,10 +318,12 @@ class WCrateGalaxy : public QGraphicsView {
     QVector<qreal> m_plexusDeviceWidths;
     QHash<int, QHash<int, double>> m_deckPlexusScores;
     QHash<int, int> m_deckPlayingNodes;
+    QHash<int, bool> m_deckIsPlaying;
     QHash<QString, int> m_nodeByRelpath;
     QSet<int> m_subsetNodes;
     bool m_subsetActive = false;
     QPointer<QAbstractItemModel> m_pSubsetModel;
+    QRectF m_labelBuiltViewportSceneRect;
 
     // Table-jump-on-load observation (test seam; see requestTableJumpToCursor).
     int m_tableJumpRequests = 0;

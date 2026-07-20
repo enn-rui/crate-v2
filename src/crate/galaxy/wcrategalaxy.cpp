@@ -541,6 +541,7 @@ QString WCrateGalaxy::relpathForLocation(const QString& location) const {
 
 void WCrateGalaxy::updateMixabilityHalos() {
     m_deckPlayingNodes.clear();
+    m_deckIsPlaying.clear();
     m_deckPlexusScores.clear();
     m_plexusSegments.clear();
     if (!m_halosEnabled || m_nodes.isEmpty()) {
@@ -564,13 +565,15 @@ void WCrateGalaxy::updateMixabilityHalos() {
     if (!debugSeed.isEmpty()) {
         requested.append(QDir::fromNativeSeparators(debugSeed));
     } else {
+        const QVector<bool> loaded = deckLoadedStates();
         const QVector<bool> playing = deckPlayingStates();
-        requested.resize(playing.size());
-        for (int deck = 0; deck < playing.size(); ++deck) {
-            if (playing[deck]) {
+        requested.resize(loaded.size());
+        for (int deck = 0; deck < loaded.size(); ++deck) {
+            if (loaded[deck]) {
                 const TrackPointer pTrack = PlayerInfo::instance().getTrackInfo(
                         PlayerManager::groupForDeck(deck));
                 requested[deck] = pTrack ? relpathForLocation(pTrack->getLocation()) : QString();
+                m_deckIsPlaying.insert(deck, playing.value(deck, false));
             }
         }
     }
@@ -610,7 +613,8 @@ void WCrateGalaxy::updateMixabilityHalos() {
         ranked.resize(qMin(40, ranked.size()));
         for (const auto& entry : std::as_const(ranked)) {
             m_deckPlexusScores[deck].insert(entry.second, entry.first);
-            m_plexusSegments.append({deck, playingIndex, entry.second, entry.first});
+            m_plexusSegments.append({deck, playingIndex, entry.second, entry.first,
+                    m_deckIsPlaying.value(deck, false)});
         }
     }
     applyHaloVisuals();
@@ -659,7 +663,10 @@ void WCrateGalaxy::applyHaloVisuals() {
         if (visible) {
             QColor color = ringDeck % 2 == 0
                     ? m_palette.accentDeckA : m_palette.accentDeckB;
-            color.setAlpha(ringDeck >= 2 ? 105 : qRound(80 + 110 * ringScore));
+            const double activityAlpha =
+                    m_deckIsPlaying.value(ringDeck, false) ? 1.0 : 0.65;
+            color.setAlpha(qRound(activityAlpha *
+                    (ringDeck >= 2 ? 105 : qRound(80 + 110 * ringScore))));
             pHalo->setBrush(Qt::NoBrush);
             pHalo->setPen(QPen(color, 1.0 + ringScore));
         }
@@ -1246,6 +1253,11 @@ void WCrateGalaxy::testPlayingTrackChanged(const QString& relpath) {
     appendTrailRelpath(relpath);
 }
 
+int WCrateGalaxy::testPlexusRingAlpha(int node) const {
+    QGraphicsEllipseItem* pHalo = m_halos.value(node, nullptr);
+    return pHalo && pHalo->isVisible() ? pHalo->pen().color().alpha() : 0;
+}
+
 void WCrateGalaxy::rebuildOverlayCache() {
     m_trailDeviceLines.clear();
     m_trailDeviceColors.clear();
@@ -1274,7 +1286,9 @@ void WCrateGalaxy::rebuildOverlayCache() {
             const double strength = qBound(0.0, (segment.score - 0.5) / 0.5, 1.0);
             QColor color = segment.deck % 2 == 0
                     ? m_palette.accentDeckA : m_palette.accentDeckB;
-            color.setAlpha(qRound((segment.deck >= 2 ? 0.6 : 1.0) * (24 + 180 * strength)));
+            const double activityAlpha = segment.playing ? 1.0 : 0.65;
+            color.setAlpha(qRound(activityAlpha *
+                    (segment.deck >= 2 ? 0.6 : 1.0) * (24 + 180 * strength)));
             m_plexusDeviceLines.append(QLineF(mapFromScene(m_dots[segment.from]->pos()),
                     mapFromScene(m_dots[segment.to]->pos())));
             m_plexusDeviceColors.append(color);
@@ -1465,6 +1479,15 @@ void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
 void WCrateGalaxy::scrollContentsBy(int dx, int dy) {
     QGraphicsView::scrollContentsBy(dx, dy);
     rebuildOverlayCache();
+    if (!m_labelBuiltViewportSceneRect.isValid()) {
+        return;
+    }
+    const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
+    const QPointF motion = visible.center() - m_labelBuiltViewportSceneRect.center();
+    if (qAbs(motion.x()) > m_labelBuiltViewportSceneRect.width() * 0.25 ||
+            qAbs(motion.y()) > m_labelBuiltViewportSceneRect.height() * 0.25) {
+        scheduleLabelCacheRebuild();
+    }
 }
 
 void WCrateGalaxy::scheduleLabelCacheRebuild() {
@@ -1537,6 +1560,7 @@ QString WCrateGalaxy::clusterName(int clusterId, const QVector<int>& members) co
 
 void WCrateGalaxy::rebuildLabelCache() {
     ++m_labelRebuildCount;
+    m_labelBuiltViewportSceneRect = mapToScene(viewport()->rect()).boundingRect();
     if (m_nodes.isEmpty() || m_dots.size() != m_nodes.size()) {
         return;
     }
