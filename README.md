@@ -1,3 +1,18 @@
+# Crate (alpha)
+
+**Crate is an ALPHA-stage fork of [Mixxx](https://github.com/mixxxdj/mixxx)**: the
+Mixxx engine underneath, a rekordbox-style experience on top, plus a sonic galaxy
+map of your library (embedding-based - tracks that sound alike sit near each
+other), smart crates, and one-click local analysis.
+
+- Start here: [SHARE.md](SHARE.md) - install, analyze your library, controllers.
+- Expect rough edges and breaking changes; this is a personal project shared as-is.
+- Like Mixxx, Crate is GPL-licensed; this repo is the complete source.
+
+Everything below is the upstream Mixxx README.
+
+---
+
 # Mixxx
 
 [![GitHub latest tag](https://img.shields.io/github/tag/mixxxdj/mixxx.svg)](https://mixxx.org/download)

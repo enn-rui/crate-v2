@@ -1105,8 +1105,8 @@ TEST_F(CrateGalaxyUiTest, LocationResolvesUnderAnyRootSpelling) {
     const QStringList spellings = {
             QStringLiteral("Z:/") + relpath,
             QStringLiteral("Z:\\") + QString(relpath).replace('/', '\\'),
-            QStringLiteral("//192.168.5.203/media/") + relpath,
-            QStringLiteral("\\\\192.168.5.203\\media\\") +
+            QStringLiteral("//192.0.2.10/media/") + relpath,
+            QStringLiteral("\\\\192.0.2.10\\media\\") +
                     QString(relpath).replace('/', '\\'),
             QStringLiteral("D:/some/other/mount/") + relpath,
             QStringLiteral("Z:/") + relpath.toUpper(),

@@ -1,4 +1,8 @@
-# Crate — friend quickstart
+# Crate — quickstart
+
+**ALPHA SOFTWARE.** Crate is a young project under heavy active development.
+Expect rough edges, breaking changes between builds, and features that assume a
+particular setup. Back up anything you care about before pointing Crate at it.
 
 Crate is a DJ app built on the Mixxx engine: a rekordbox-style layout, a sonic
 galaxy map of your library (tracks that sound alike sit near each other), smart
@@ -10,8 +14,8 @@ off the map.
 Download the latest `.msi` from this repo's **Releases** page and run it.
 
 Honest caveat: the installer is not code-signed yet, so Windows SmartScreen will
-warn about an "unknown publisher." Click **More info -> Run anyway**. You have
-access to this repo, so you can read every line that went into the build.
+warn about an "unknown publisher." Click **More info -> Run anyway**. The full
+source is right here in this repo if you want to read what went into the build.
 
 Windows x64 only for now.
 
@@ -61,5 +65,6 @@ is on.
 
 ## 5. Getting help
 
-Something broken or confusing? Tell the person who gave you access — this is a
-small private build and feedback goes straight into the next round.
+Something broken or confusing? Open an issue on this repo (or tell whoever
+pointed you here). This is an alpha — feedback goes straight into the next
+round, and so do breaking changes.

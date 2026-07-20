@@ -362,7 +362,7 @@ TEST(CrateGrabFeature, AbsentWhenUrlUnsetPresentWhenSet) {
     EXPECT_FALSE(crate::GrabFeature::isConfigured(pConfig));
 
     pConfig->setValue(ConfigKey("[Crate]", "grab_service_url"),
-            QStringLiteral("http://192.168.5.203:8078"));
+            QStringLiteral("http://192.0.2.10:8078"));
     EXPECT_TRUE(crate::GrabFeature::isConfigured(pConfig));
 
     // Whitespace-only is treated as unset.

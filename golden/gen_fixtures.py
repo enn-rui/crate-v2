@@ -5,16 +5,22 @@ subset of the real library and emits golden.json — the acceptance contract eve
 intelligence slice must match (bit-exact centered vectors; 1e-6 scalars; exact ranked
 order). Re-runnable; fixtures + JSON are committed into the fork under golden/.
 
-Usage: python gen_fixtures.py  (from anywhere; paths are absolute below)
+Developer-only tool. Point CRATE_DEV_SIDECARS at a dev sidecar dir and
+CRATE_V1_PATH at a Crate v1 checkout (the reference implementation), then:
+    python gen_fixtures.py
 """
 import json
+import os
 import shutil
 import sqlite3
 import struct
 import sys
 from pathlib import Path
 
-DEV_SIDECARS = Path(r"C:\Users\ryanl\Desktop\AGENTIC\crate-v2\devdata\.crate")
+if not os.environ.get("CRATE_DEV_SIDECARS") or not os.environ.get("CRATE_V1_PATH"):
+    sys.exit("gen_fixtures is a developer-only tool: set CRATE_DEV_SIDECARS "
+             "(dev sidecar dir) and CRATE_V1_PATH (Crate v1 checkout) first")
+DEV_SIDECARS = Path(os.environ["CRATE_DEV_SIDECARS"])
 OUT = Path(__file__).resolve().parent / "out"
 FIX_ROOT = OUT / "fixture_lib"          # acts as lib_root; sidecars in .crate/
 FIX_SIDE = FIX_ROOT / ".crate"
@@ -22,7 +28,7 @@ FIX_DB = OUT / "crate.db"
 GOLDEN = OUT / "golden.json"
 N_TRACKS = 30
 
-sys.path.insert(0, r"C:\Users\ryanl\Desktop\AGENTIC\apps\crate")
+sys.path.insert(0, os.environ["CRATE_V1_PATH"])
 
 
 def f64hex(x: float) -> str:
