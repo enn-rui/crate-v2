@@ -7,7 +7,7 @@ $VenvDir = Join-Path $AnalysisDir ".venv-analysis"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 
 function Find-Uv {
-    # NOTE: every external command in here must pipe to Out-Host — in PowerShell a
+    # NOTE: every external command in here must pipe to Out-Host. In PowerShell a
     # function's return value is its whole pipeline output, so a bare `winget install`
     # or `uv --version` pollutes the returned path with banner text and the caller
     # then tries to execute that text as a command.
@@ -22,7 +22,7 @@ function Find-Uv {
         & $Winget.Source install --id astral-sh.uv --exact --accept-package-agreements --accept-source-agreements | Out-Host
     }
     # A fresh winget install lands in WinGet\Links, which this session's PATH may not
-    # include yet — probe the known location before declaring failure.
+    # include yet. Probe the known location before declaring failure.
     $UvCommand = Get-Command uv -ErrorAction SilentlyContinue
     if ($null -ne $UvCommand) { return $UvCommand.Source }
     $WingetLink = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\uv.exe"
@@ -39,7 +39,8 @@ function Find-Uv {
 
 $Uv = Find-Uv
 Write-Host "Creating isolated analysis environment at $VenvDir"
-& $Uv venv $VenvDir
+& $Uv venv --managed-python --python 3.13 $VenvDir
+if ($LASTEXITCODE -ne 0) { throw "Python 3.13 environment creation failed" }
 
 $HasNvidia = $false
 $NvidiaSmi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
@@ -57,7 +58,8 @@ if ($HasNvidia) {
     if ($LASTEXITCODE -ne 0) {
         Write-Host "CUDA torch install failed; recreating the environment and falling back to CPU"
         Remove-Item -LiteralPath $VenvDir -Recurse -Force
-        & $Uv venv $VenvDir
+        & $Uv venv --managed-python --python 3.13 $VenvDir
+        if ($LASTEXITCODE -ne 0) { throw "Python 3.13 environment recreation failed" }
         & $Uv pip install --python $VenvPython torch torchaudio --index-url https://download.pytorch.org/whl/cpu
     }
 } else {

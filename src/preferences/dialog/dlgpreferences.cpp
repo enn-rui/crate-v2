@@ -124,7 +124,8 @@ DlgPreferences::DlgPreferences(
             "ic_preferences_library.svg");
 
     addPageWidget(PreferencesPage(
-                          new DlgPrefCrate(this, m_pConfig),
+                          new DlgPrefCrate(
+                                  this, m_pConfig, pLibrary->trackCollectionManager()),
                           new QTreeWidgetItem(contentsTreeWidget, QTreeWidgetItem::Type)),
             tr("Crate"),
             "ic_preferences_library.svg");

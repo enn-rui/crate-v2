@@ -57,3 +57,27 @@ TEST_F(CratePrefsTest, AutomaticThreadsRemovesOverride) {
     page.slotUpdate();
     EXPECT_EQ(page.findChild<QSpinBox*>(QStringLiteral("analyzerThreads"))->value(), 0);
 }
+
+TEST_F(CratePrefsTest, AnalysisDefaultsSidecarWithoutClobbering) {
+    DlgPrefCrate page(nullptr, config());
+    page.findChild<QLineEdit*>(QStringLiteral("musicRoot"))->setText(QStringLiteral("D:/music"));
+    QString musicRoot;
+    QString sidecarDir;
+    ASSERT_TRUE(page.prepareAnalysisDirectories(&musicRoot, &sidecarDir));
+    EXPECT_EQ(musicRoot, QStringLiteral("D:/music"));
+    EXPECT_EQ(sidecarDir, QStringLiteral("D:/music/.crate"));
+    EXPECT_EQ(config()->getValue(ConfigKey("[Crate]", "sidecar_dir"), QString()),
+            QStringLiteral("D:/music/.crate"));
+}
+
+TEST_F(CratePrefsTest, AnalysisPreservesConfiguredSidecar) {
+    config()->setValue(ConfigKey("[Crate]", "sidecar_dir"), QStringLiteral("E:/sidecars"));
+    DlgPrefCrate page(nullptr, config());
+    page.findChild<QLineEdit*>(QStringLiteral("musicRoot"))->setText(QStringLiteral("D:/music"));
+    QString musicRoot;
+    QString sidecarDir;
+    ASSERT_TRUE(page.prepareAnalysisDirectories(&musicRoot, &sidecarDir));
+    EXPECT_EQ(sidecarDir, QStringLiteral("E:/sidecars"));
+    EXPECT_EQ(config()->getValue(ConfigKey("[Crate]", "sidecar_dir"), QString()),
+            QStringLiteral("E:/sidecars"));
+}

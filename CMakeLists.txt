@@ -2586,6 +2586,23 @@ if(NOT ANDROID)
     DESTINATION "${MIXXX_INSTALL_DATADIR}"
   )
 
+  # Self-contained Crate galaxy analysis tools. Runtime-created environments and
+  # caches are intentionally excluded by only packaging the source entry points.
+  install(
+    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tools/analysis/"
+    DESTINATION "${MIXXX_INSTALL_DATADIR}/tools/analysis"
+    COMPONENT crate-analysis
+    FILES_MATCHING
+    PATTERN ".venv-analysis" EXCLUDE
+    PATTERN "__pycache__" EXCLUDE
+    PATTERN "*.py"
+    PATTERN "requirements-analysis.txt"
+    PATTERN "setup.ps1"
+    PATTERN "setup.sh"
+    PATTERN "analyze.ps1"
+    PATTERN "analyze.cmd"
+  )
+
   # Translation files
   install(
     DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/res/translations"

@@ -15,6 +15,8 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+#include "library/trackcollection.h"
+#include "library/trackcollectionmanager.h"
 #include "moc_dlgprefcrate.cpp"
 
 namespace {
@@ -34,8 +36,12 @@ QLabel* note(const QString& text) {
 }
 } // namespace
 
-DlgPrefCrate::DlgPrefCrate(QWidget* pParent, UserSettingsPointer pConfig)
-        : DlgPreferencePage(pParent), m_pConfig(std::move(pConfig)) {
+DlgPrefCrate::DlgPrefCrate(QWidget* pParent,
+        UserSettingsPointer pConfig,
+        TrackCollectionManager* pTrackCollectionManager)
+        : DlgPreferencePage(pParent),
+          m_pConfig(std::move(pConfig)),
+          m_pTrackCollectionManager(pTrackCollectionManager) {
     auto* pLayout = new QVBoxLayout(this);
 
     auto* pLibrary = new QGroupBox(tr("Library data"), this);
@@ -98,10 +104,9 @@ QString DlgPrefCrate::findAnalysisScript() const {
     const QString relativePath = QStringLiteral("tools/analysis/analyze.ps1");
     const QDir resourceDir(m_pConfig->getResourcePath());
     const QStringList candidates{
-            resourceDir.absoluteFilePath(QStringLiteral("../") + relativePath),
+            resourceDir.absoluteFilePath(relativePath),
             QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(relativePath),
-            QDir(QCoreApplication::applicationDirPath())
-                    .absoluteFilePath(QStringLiteral("../") + relativePath),
+            resourceDir.absoluteFilePath(QStringLiteral("../tools/analysis/analyze.ps1")),
     };
     for (const QString& candidate : candidates) {
         const QFileInfo info(candidate);
@@ -112,6 +117,30 @@ QString DlgPrefCrate::findAnalysisScript() const {
     return QString();
 }
 
+bool DlgPrefCrate::prepareAnalysisDirectories(
+        QString* pMusicRoot, QString* pSidecarDir) {
+    *pMusicRoot = m_pMusicRoot->text().trimmed();
+    if (pMusicRoot->isEmpty() && m_pTrackCollectionManager) {
+        const QStringList libraryDirectories =
+                m_pTrackCollectionManager->internalCollection()->getRootDirStrings();
+        if (!libraryDirectories.isEmpty()) {
+            *pMusicRoot = libraryDirectories.first();
+        }
+    }
+    if (pMusicRoot->isEmpty()) {
+        m_pAnalysisStatus->setText(tr("add a music folder first"));
+        return false;
+    }
+
+    *pSidecarDir = m_pConfig->getValue(kSidecarDir, QString()).trimmed();
+    if (pSidecarDir->isEmpty()) {
+        *pSidecarDir = QDir(*pMusicRoot).filePath(QStringLiteral(".crate"));
+        m_pConfig->setValue(kSidecarDir, *pSidecarDir);
+        m_pSidecarDir->setText(*pSidecarDir);
+    }
+    return true;
+}
+
 void DlgPrefCrate::launchAnalysis() {
     const QString script = findAnalysisScript();
     if (script.isEmpty()) {
@@ -119,29 +148,42 @@ void DlgPrefCrate::launchAnalysis() {
         return;
     }
 
-    QStringList arguments{
+    QString musicRoot;
+    QString sidecarDir;
+    if (!prepareAnalysisDirectories(&musicRoot, &sidecarDir)) {
+        return;
+    }
+
+    const QDir analysisDir = QFileInfo(script).absoluteDir();
+    const QString setupScript = analysisDir.absoluteFilePath(QStringLiteral("setup.ps1"));
+    const bool needsSetup =
+            !analysisDir.exists(QStringLiteral(".venv-analysis/Scripts/python.exe"));
+    const auto quotePowerShell = [](QString value) {
+        return QStringLiteral("'") +
+                value.replace(QLatin1Char('\''), QStringLiteral("''")) +
+                QStringLiteral("'");
+    };
+    QString command;
+    if (needsSetup) {
+        command = QStringLiteral("& %1; if (-not $?) { exit 1 }; ")
+                          .arg(quotePowerShell(setupScript));
+    }
+    command += QStringLiteral("& %1 -Root %2 -Out %3")
+                       .arg(quotePowerShell(script),
+                               quotePowerShell(musicRoot),
+                               quotePowerShell(sidecarDir));
+    const QStringList arguments{
             QStringLiteral("-NoExit"),
             QStringLiteral("-ExecutionPolicy"),
             QStringLiteral("Bypass"),
-            QStringLiteral("-File"),
-            script,
+            QStringLiteral("-Command"),
+            command,
     };
-    const QString musicRoot = m_pMusicRoot->text().trimmed();
-    if (!musicRoot.isEmpty()) {
-        arguments.append(QStringLiteral("-Root"));
-        arguments.append(musicRoot);
-    } else {
-        arguments = {
-                QStringLiteral("-NoExit"),
-                QStringLiteral("-Command"),
-                tr("Write-Host 'Set Music library in Crate preferences, or run analyze.ps1 -Root <music folder>.'"),
-        };
-    }
 
     if (QProcess::startDetached(QStringLiteral("powershell.exe"), arguments)) {
         m_pAnalysisStatus->setText(tr(
-                "analysis started in a separate window - use the MAP refresh "
-                "(or restart) when it finishes."));
+                "analysis running in a separate window - the map refreshes itself "
+                "when it finishes."));
     } else {
         m_pAnalysisStatus->setText(tr("analysis could not be started"));
     }

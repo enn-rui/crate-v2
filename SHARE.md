@@ -22,35 +22,24 @@ scan finish — your tracks appear in the table. BPM and key analysis starts
 automatically in the background on first launch (it only analyzes tracks that
 need it).
 
-## 3. Build your galaxy (one-time setup, then one command)
+## 3. Build your galaxy
 
-The MAP view needs audio analysis that runs outside the app. From the repo's
-`tools/analysis/` folder, in PowerShell:
+Open **Preferences > Crate** and click **Analyze library**. On the first run it
+sets itself up and downloads the audio model (about a gigabyte, one time). The
+map appears when analysis finishes; it refreshes itself when you return to Crate.
 
-```
-.\setup.ps1
-```
-
-One-time environment setup. Expect a large download (PyTorch, plus an audio
-model of about a gigabyte on first analysis). If you have an NVIDIA GPU it will
-be used automatically; otherwise everything works on CPU.
-
-Then, whenever you add music:
-
-```
-.\analyze.ps1 -Root "C:\path\to\your\music"
-```
-
-Rough timing: about 30-40 minutes per 1000 tracks on CPU, minutes on a decent
-GPU. Re-runs are incremental — only new tracks are analyzed.
+Rough timing: about 30-40 minutes per 1000 tracks on CPU, or minutes on a decent
+NVIDIA GPU. Re-runs are incremental — only new tracks are analyzed.
 
 The audio model is MuQ-MuLan by Tencent AI Lab (CC-BY-NC 4.0 — personal,
 non-commercial use; downloaded from Hugging Face on first run, never bundled).
 
-When it finishes, set **Preferences > Crate > sidecar folder** to the `.crate`
-folder inside your music folder (first time only), then hit the **REFRESH** row
-in the MAP sidebar (or restart). Your galaxy appears: every dot is a track,
-neighborhoods are sounds.
+### Advanced/manual analysis
+
+Power users can run `setup.ps1`, then `analyze.ps1 -Root "C:\path\to\music"`
+from the installed `tools/analysis` folder. Linux and macOS users can try
+`setup.sh` and run `analyze_all.py` from its environment; those paths are
+best-effort for now.
 
 ## 4. Controllers
 
