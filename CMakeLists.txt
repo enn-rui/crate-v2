@@ -1488,6 +1488,7 @@ add_library(
   src/library/trackloader.cpp
   src/library/trackmodeliterator.cpp
   src/library/trackprocessing.cpp
+  src/crate/export/rekordboxxml.cpp
   src/library/trackset/baseplaylistfeature.cpp
   src/library/trackset/basetracksetfeature.cpp
   src/library/trackset/crate/cratefeature.cpp
@@ -2923,6 +2924,7 @@ if(BUILD_TESTING)
     src/test/coverartcache_test.cpp
     src/test/coverartutils_test.cpp
     src/test/cratestorage_test.cpp
+    src/test/crate_rekordbox_xml_test.cpp
     src/test/crate_fx_routing_test.cpp
     src/test/crate_galaxy_ui_test.cpp
     src/test/crate_golden_test.cpp

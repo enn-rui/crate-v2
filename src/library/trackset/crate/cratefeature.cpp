@@ -3,11 +3,13 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QStandardPaths>
 #include <algorithm>
 #include <vector>
 
 #include "analyzer/analyzerscheduledtrack.h"
+#include "crate/export/rekordboxxml.h"
 #include "library/export/trackexportwizard.h"
 #include "library/library.h"
 #include "library/library_prefs.h"
@@ -24,6 +26,7 @@
 #include "util/defs.h"
 #include "util/dnd.h"
 #include "util/file.h"
+#include "util/versionstore.h"
 #include "widget/wlibrary.h"
 #include "widget/wlibrarysidebar.h"
 #include "widget/wlibrarytextbrowser.h"
@@ -128,6 +131,12 @@ void CrateFeature::initActions() {
             &QAction::triggered,
             this,
             &CrateFeature::slotExportTrackFiles);
+    m_pExportRekordboxXmlAction = make_parented<QAction>(tr("Export rekordbox XML"), this);
+    connect(m_pExportRekordboxXmlAction.get(), &QAction::triggered,
+            this, &CrateFeature::slotExportRekordboxXml);
+    m_pExportAllRekordboxXmlAction = make_parented<QAction>(tr("Export All Crates as rekordbox XML"), this);
+    connect(m_pExportAllRekordboxXmlAction.get(), &QAction::triggered,
+            this, &CrateFeature::slotExportAllRekordboxXml);
 #ifdef __ENGINEPRIME__
     m_pExportAllCratesAction = make_parented<QAction>(tr("Export to Engine DJ"), this);
     connect(m_pExportAllCratesAction.get(),
@@ -365,6 +374,7 @@ void CrateFeature::onRightClick(const QPoint& globalPos) {
     menu.addAction(m_pCreateCrateAction.get());
     menu.addSeparator();
     menu.addAction(m_pCreateImportPlaylistAction.get());
+    menu.addAction(m_pExportAllRekordboxXmlAction.get());
 #ifdef __ENGINEPRIME__
     menu.addSeparator();
     menu.addAction(m_pExportAllCratesAction.get());
@@ -409,6 +419,7 @@ void CrateFeature::onRightClickChild(
     menu.addAction(m_pImportPlaylistAction.get());
     menu.addAction(m_pExportPlaylistAction.get());
     menu.addAction(m_pExportTrackFilesAction.get());
+    menu.addAction(m_pExportRekordboxXmlAction.get());
 #ifdef __ENGINEPRIME__
     menu.addAction(m_pExportCrateAction.get());
 #endif
@@ -836,6 +847,72 @@ void CrateFeature::slotExportPlaylist() {
                 playlistItems,
                 useRelativePath);
     }
+}
+
+void CrateFeature::slotExportRekordboxXml() {
+    const CrateId crateId = crateIdFromIndex(m_lastRightClickedIndex);
+    Crate crate;
+    if (m_pTrackCollection->crates().readCrateById(crateId, &crate)) {
+        exportRekordboxXml({crateId}, crate.getName());
+    }
+}
+
+void CrateFeature::slotExportAllRekordboxXml() {
+    QList<CrateId> crateIds;
+    auto crates = m_pTrackCollection->crates().selectCrates();
+    Crate crate;
+    while (crates.populateNext(&crate)) {
+        crateIds.append(crate.getId());
+    }
+    exportRekordboxXml(crateIds, QStringLiteral("Crate crates"));
+}
+
+void CrateFeature::exportRekordboxXml(
+        const QList<CrateId>& crateIds, const QString& suggestedName) {
+    QString lastDirectory = m_pConfig->getValue(
+            kConfigKeyLastImportExportCrateDirectoryKey,
+            QStandardPaths::writableLocation(QStandardPaths::MusicLocation));
+    const QString fileLocation = getFilePathWithVerifiedExtensionFromFileDialog(
+            tr("Export rekordbox XML"),
+            lastDirectory.append("/").append(suggestedName),
+            tr("rekordbox XML (*.xml)"),
+            tr("rekordbox XML (*.xml)"));
+    if (fileLocation.isEmpty()) {
+        return;
+    }
+    m_pConfig->set(kConfigKeyLastImportExportCrateDirectoryKey,
+            ConfigValue(QFileInfo(fileLocation).absoluteDir().canonicalPath()));
+    QList<mixxx::RekordboxXmlExport::Playlist> playlists;
+    for (const CrateId crateId : crateIds) {
+        Crate crate;
+        if (!m_pTrackCollection->crates().readCrateById(crateId, &crate)) {
+            continue;
+        }
+        auto model = std::make_unique<CrateTableModel>(
+                this, m_pLibrary->trackCollectionManager());
+        model->selectCrate(crateId);
+        model->select();
+        QList<TrackPointer> tracks;
+        for (int row = 0; row < model->rowCount(); ++row) {
+            if (auto track = model->getTrack(model->index(row, 0))) {
+                tracks.append(track);
+            }
+        }
+        playlists.append(qMakePair(crate.getName(), tracks));
+    }
+    const auto result = mixxx::RekordboxXmlExport::write(
+            playlists, fileLocation, VersionStore::version());
+    if (!result.ok) {
+        QMessageBox::warning(nullptr, tr("rekordbox XML Export Failed"), result.error);
+        return;
+    }
+    QMessageBox::information(nullptr,
+            tr("rekordbox XML Export Complete"),
+            tr("Exported %1 tracks, %2 cues, and %3 tempo anchors; %4 track files were missing.")
+                    .arg(result.tracksWritten)
+                    .arg(result.cuesWritten)
+                    .arg(result.tempoAnchorsWritten)
+                    .arg(result.tracksMissing));
 }
 
 void CrateFeature::slotExportTrackFiles() {
