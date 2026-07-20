@@ -1,6 +1,5 @@
 #include "skin/legacy/launchimage.h"
 
-#include <QDate>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
@@ -10,60 +9,32 @@
 
 #include "moc_launchimage.cpp"
 
-namespace {
-bool isIn2024ChristmasHolidays() {
-    auto currentDate = QDate::currentDate();
-    return (currentDate.month() == 12 && currentDate.day() >= 24) ||
-            (currentDate.month() == 1 && currentDate.day() <= 6);
-}
-} // namespace
-
 LaunchImage::LaunchImage(QWidget* pParent, const QString& styleSheet)
         : QWidget(pParent) {
-    if (isIn2024ChristmasHolidays()) {
+    if (styleSheet.isEmpty()) {
+        // Crate launch screen: the library galaxy mark + wordmark on the
+        // galaxy ground, deck-blue progress. Asset is 2x for hidpi.
         setStyleSheet(
-                "LaunchImage { background-color: #202020; }"
+                "LaunchImage { background-color: #0b0d12; }"
                 "QLabel { "
-                "image: url(:/images/mixxx-icon-logo-christmas.svg);"
+                "image: url(:/images/crate_launch.png);"
                 "padding:0;"
                 "margin:0;"
                 "border:none;"
                 "min-width: 236px;"
-                "min-height: 48px;"
+                "min-height: 300px;"
                 "max-width: 236px;"
-                "max-height: 48px;"
+                "max-height: 300px;"
                 "}"
                 "QProgressBar {"
-                "background-color: #202020; "
+                "background-color: #222630; "
                 "border:none;"
                 "min-width: 236px;"
                 "min-height: 3px;"
                 "max-width: 236px;"
                 "max-height: 3px;"
                 "}"
-                "QProgressBar::chunk { background-color: #f3efed; }");
-    } else if (styleSheet.isEmpty()) {
-        setStyleSheet(
-                "LaunchImage { background-color: #202020; }"
-                "QLabel { "
-                "image: url(:/images/mixxx-icon-logo-symbolic.svg);"
-                "padding:0;"
-                "margin:0;"
-                "border:none;"
-                "min-width: 236px;"
-                "min-height: 48px;"
-                "max-width: 236px;"
-                "max-height: 48px;"
-                "}"
-                "QProgressBar {"
-                "background-color: #202020; "
-                "border:none;"
-                "min-width: 236px;"
-                "min-height: 3px;"
-                "max-width: 236px;"
-                "max-height: 3px;"
-                "}"
-                "QProgressBar::chunk { background-color: #f3efed; }");
+                "QProgressBar::chunk { background-color: #64a0ff; }");
     } else {
         setStyleSheet(styleSheet);
     }
