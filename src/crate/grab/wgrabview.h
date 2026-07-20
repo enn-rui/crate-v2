@@ -7,6 +7,7 @@
 #include <QWidget>
 
 #include "crate/grab/grabmodels.h"
+#include "library/libraryview.h"
 #include "preferences/usersettings.h"
 
 class QLabel;
@@ -27,7 +28,11 @@ namespace crate {
 
 class GrabClient;
 
-class WGrabView final : public QWidget {
+// WLibrary::registerView() only mounts widgets that implement LibraryView (it
+// dynamic_casts and silently drops anything else), so the interface is
+// load-bearing: without it the sidebar click switches to a view that was never
+// added and nothing happens.
+class WGrabView final : public QWidget, public LibraryView {
     Q_OBJECT
   public:
     WGrabView(QWidget* pParent, UserSettingsPointer pConfig);
@@ -36,6 +41,14 @@ class WGrabView final : public QWidget {
     // Called when the sidebar item is (re)activated: re-checks reachability and
     // refreshes the queue.
     void onActivated();
+
+    // LibraryView
+    void onShow() override {
+        onActivated();
+    }
+    bool hasFocus() const override {
+        return QWidget::hasFocus();
+    }
 
   private slots:
     void onSearchClicked();

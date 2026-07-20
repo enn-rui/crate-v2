@@ -29,6 +29,7 @@
 #include "crate/grab/grabmodels.h"
 #include "crate/grab/wgrabview.h"
 #include "preferences/usersettings.h"
+#include "widget/wlibrary.h"
 
 namespace {
 
@@ -640,6 +641,34 @@ TEST(CrateGrabView, UnreachableServiceShowsQuietStateNoCrash) {
     // unreachable host takes as long as that timeout on this platform.
     ASSERT_TRUE(waitFor([&]() { return !pQuery->isEnabled(); }, 12000));
     EXPECT_FALSE(pQuery->isEnabled());
+}
+
+// ---- Feature mounting -------------------------------------------------------
+
+// Regression: WLibrary::registerView() silently rejects widgets that don't
+// implement LibraryView, so a WGrabView that is "just a QWidget" never mounts
+// and the sidebar GRAB click does nothing. This test goes through the real
+// mounting path (bindLibraryWidget on a real WLibrary) and asserts the view
+// actually becomes the current library page.
+TEST(CrateGrabFeature, ViewMountsInWLibraryAndActivates) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    UserSettingsPointer pConfig = makeConfig(dir);
+    pConfig->setValue(ConfigKey("[Crate]", "grab_service_url"),
+            QStringLiteral("http://127.0.0.1:1")); // never reached; ping is async
+
+    WLibrary wlib(nullptr);
+    crate::GrabFeature feature(nullptr, pConfig);
+    feature.bindLibraryWidget(&wlib, nullptr);
+
+    wlib.switchToView(QStringLiteral("CrateGrab"));
+    auto* pMounted = qobject_cast<crate::WGrabView*>(wlib.currentWidget());
+    ASSERT_NE(pMounted, nullptr)
+            << "GRAB view was not registered/mounted in WLibrary";
+    EXPECT_NE(wlib.getActiveView(), nullptr);
+    // The mounted page is a fully built view (search box present).
+    EXPECT_NE(pMounted->findChild<QLineEdit*>(QStringLiteral("GrabQuery")),
+            nullptr);
 }
 
 } // namespace

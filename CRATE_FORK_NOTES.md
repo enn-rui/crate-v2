@@ -33,6 +33,10 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 - identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,
   src/dialog/dlgaboutdlg.ui, src/mixxx.rc, src/util/cmdlineargs.cpp,
   src/util/versionstore.cpp
+- App-wide font seam (2026-07-19, wave 7): src/coreservices.cpp (+include QFont; after
+  FontUtils::initializeFonts, QApplication::setFont("IBM Plex Mono") at the current
+  default point size so dialogs/preferences stop rendering the OS default font; skin QSS
+  still wins where it specifies fonts. Small, additive; low merge risk.)
 - Crate splash/packaged logo: res/images/mixxx_logo.svg (flat #05060a field with
   monochrome CRATE wordmark; intentionally replaces upstream Mixxx branding)
 - Skin identity de-grey (2026-07-19): res/images/library/*.svg recolored to Crate mono

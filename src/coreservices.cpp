@@ -1,6 +1,7 @@
 #include "coreservices.h"
 
 #include <QApplication>
+#include <QFont>
 #include <QFileDialog>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -514,6 +515,17 @@ void CoreServices::initialize(QApplication* pApp) {
     emit initializationProgressUpdate(0, tr("fonts"));
 
     FontUtils::initializeFonts(resourcePath); // takes a long time
+
+    // Crate identity: the skin stylesheet only reaches skin widgets, so
+    // dialogs (preferences, track properties, popups) would otherwise render
+    // in the OS default font. Setting the application font here — after the
+    // bundled IBM Plex Mono TTFs are registered — makes every top-level
+    // window inherit it; the skin QSS still wins wherever it specifies fonts.
+    {
+        QFont crateFont(QStringLiteral("IBM Plex Mono"));
+        crateFont.setPointSizeF(QApplication::font().pointSizeF());
+        QApplication::setFont(crateFont);
+    }
 
     emit initializationProgressUpdate(10, tr("database"));
     m_pDbConnectionPool = MixxxDb(pConfig).connectionPool();

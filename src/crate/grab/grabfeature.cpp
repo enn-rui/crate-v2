@@ -4,6 +4,7 @@
 #include "crate/grab/grabclient.h"
 #include "crate/grab/wgrabview.h"
 #include "moc_grabfeature.cpp"
+#include "util/assert.h"
 #include "widget/wlibrary.h"
 
 namespace {
@@ -37,7 +38,13 @@ void GrabFeature::bindLibraryWidget(WLibrary* pLibraryWidget,
     if (pKeyboard) {
         m_pView->installEventFilter(pKeyboard);
     }
-    pLibraryWidget->registerView(kViewName, m_pView);
+    const bool registered = pLibraryWidget->registerView(kViewName, m_pView);
+    // registerView rejects (and never mounts) widgets that don't implement
+    // LibraryView; a false here means the sidebar click will do nothing.
+    VERIFY_OR_DEBUG_ASSERT(registered) {
+        qWarning() << "GrabFeature: WLibrary refused to register" << kViewName
+                   << "- the GRAB view will not appear";
+    }
 }
 
 void GrabFeature::activate() {
