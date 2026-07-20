@@ -36,7 +36,10 @@
 #include "crate/cull/cullclient.h"
 #include "crate/grab/grabclient.h"
 #include "crate/intelligence/scores.h"
+#include "crate/system/systemcrates.h"
+#include "library/dao/trackdao.h"
 #include "library/library.h"
+#include "library/trackcollection.h"
 #include "library/trackcollectionmanager.h"
 #include "library/trackmodel.h"
 #include "mixer/playerinfo.h"
@@ -161,6 +164,33 @@ QColor rampColor(bool tempo, double fraction) {
         return QColor::fromHsvF(0.66 * (1.0 - f), 0.72, 1.0);
     }
     return QColor::fromHsvF(0.5 * (1.0 - f) + 0.08 * f, 0.7, 1.0);
+}
+
+// Match a library location against a casefolded (forward-slash) relpath index by
+// walking the location's path suffixes. Root-agnostic, exactly like
+// WCrateGalaxy::relpathForLocation: the full relative path incl. filename makes a
+// false hit practically impossible, and any drive/UNC spelling resolves.
+int matchNodeIndex(const QString& location, const QHash<QString, int>& byRelpath) {
+    if (location.isEmpty() || byRelpath.isEmpty()) {
+        return -1;
+    }
+    const QString path =
+            QDir::cleanPath(QFileInfo(QString(location).replace(
+                                              QLatin1Char('\\'), QLatin1Char('/')))
+                                    .absoluteFilePath())
+                    .toCaseFolded();
+    int from = 0;
+    while (true) {
+        const int slash = path.indexOf(QLatin1Char('/'), from);
+        if (slash < 0) {
+            return -1;
+        }
+        const auto it = byRelpath.constFind(path.mid(slash + 1));
+        if (it != byRelpath.constEnd()) {
+            return *it;
+        }
+        from = slash + 1;
+    }
 }
 
 } // namespace
@@ -388,12 +418,82 @@ bool WCrateGalaxy::reloadSidecars() {
         qInfo() << "galaxy sidecar reload kept prior scene:" << sidecars.lastError();
         return false;
     }
-    rebuildScene(sidecars.nodes());
+    QVector<GalaxyNode> nodes = sidecars.nodes();
+    excludeDemotedNodes(&nodes);
+    rebuildScene(nodes);
     m_lastSidecarModified = QFileInfo(
             QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite"))).lastModified();
     ++m_sidecarRebuildCount;
     kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
     return true;
+}
+
+void WCrateGalaxy::excludeDemotedNodes(QVector<GalaxyNode>* pNodes) const {
+    if (pNodes->isEmpty()) {
+        return;
+    }
+    // Tests inject demoted relpaths directly (no library fixture); production
+    // resolves them from the reserved "Demoted" crate.
+    QSet<QString> demotedRelpaths = m_testDemotedRelpaths;
+    if (demotedRelpaths.isEmpty() && m_pLibrary != nullptr) {
+        demotedRelpaths = libraryDemotedRelpaths(*pNodes);
+    }
+    if (demotedRelpaths.isEmpty()) {
+        return;
+    }
+    QVector<GalaxyNode> kept;
+    kept.reserve(pNodes->size());
+    for (const GalaxyNode& node : std::as_const(*pNodes)) {
+        if (!demotedRelpaths.contains(
+                    QDir::fromNativeSeparators(node.relpath).toCaseFolded())) {
+            kept.append(node);
+        }
+    }
+    *pNodes = kept;
+}
+
+QSet<QString> WCrateGalaxy::libraryDemotedRelpaths(
+        const QVector<GalaxyNode>& nodes) const {
+    QSet<QString> result;
+    if (m_pLibrary == nullptr) {
+        return result;
+    }
+    TrackCollectionManager* pTcm = m_pLibrary->trackCollectionManager();
+    if (pTcm == nullptr) {
+        return result;
+    }
+    TrackCollection* pCollection = pTcm->internalCollection();
+    if (pCollection == nullptr) {
+        return result;
+    }
+    const QSet<TrackId> demoted = SystemCrates(pCollection).demotedTrackIds();
+    if (demoted.isEmpty()) {
+        return result;
+    }
+    QHash<QString, int> byRelpath;
+    byRelpath.reserve(nodes.size());
+    for (int i = 0; i < nodes.size(); ++i) {
+        byRelpath.insert(
+                QDir::fromNativeSeparators(nodes[i].relpath).toCaseFolded(), i);
+    }
+    for (const TrackId& trackId : demoted) {
+        const int index = matchNodeIndex(
+                pCollection->getTrackDAO().getTrackLocation(trackId), byRelpath);
+        if (index >= 0) {
+            result.insert(
+                    QDir::fromNativeSeparators(nodes[index].relpath).toCaseFolded());
+        }
+    }
+    return result;
+}
+
+void WCrateGalaxy::testSetDemotedRelpaths(const QSet<QString>& relpaths) {
+    m_testDemotedRelpaths.clear();
+    for (const QString& relpath : relpaths) {
+        m_testDemotedRelpaths.insert(
+                QDir::fromNativeSeparators(relpath).toCaseFolded());
+    }
+    reloadSidecars();
 }
 
 void WCrateGalaxy::reloadSidecarsIfChanged() {
@@ -1081,6 +1181,26 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
                     });
             client->cull(relpath);
         });
+        if (m_pLibrary != nullptr) {
+            TrackCollectionManager* pTcm = m_pLibrary->trackCollectionManager();
+            const QString location = resolveMusicPath(m_nodes[node].relpath);
+            const QList<TrackId> ids =
+                    pTcm->resolveTrackIdsFromLocations({location});
+            if (!ids.isEmpty()) {
+                const bool demoted = SystemCrates(pTcm->internalCollection())
+                                             .isDemoted(ids.first());
+                QAction* pDemote = menu.addAction(demoted
+                                ? tr("Restore to rotation")
+                                : tr("Demote from rotation"));
+                connect(pDemote, &QAction::triggered, this, [this, ids, demoted] {
+                    SystemCrates(m_pLibrary->trackCollectionManager()
+                                         ->internalCollection())
+                            .setDemoted(ids, !demoted);
+                    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 1.0);
+                    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
+                });
+            }
+        }
         menu.addSeparator();
     }
     const int clusterId = clusterLabelAt(pEvent->pos());

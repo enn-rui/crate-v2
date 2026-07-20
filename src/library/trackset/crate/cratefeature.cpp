@@ -10,6 +10,7 @@
 
 #include "analyzer/analyzerscheduledtrack.h"
 #include "crate/export/rekordboxxml.h"
+#include "crate/system/systemcrates.h"
 #include "library/export/trackexportwizard.h"
 #include "library/library.h"
 #include "library/library_prefs.h"
@@ -577,6 +578,11 @@ QModelIndex CrateFeature::rebuildChildModel(CrateId selectedCrateId) {
             m_pTrackCollection->crates().selectCrateSummaries());
     CrateSummary crateSummary;
     while (crateSummaries.populateNext(&crateSummary)) {
+        // Crate v2 reserves "Demoted"/"Reviewed" for rotation state; keep them
+        // out of the normal crate list (they get dedicated surfaces instead).
+        if (crate::SystemCrates::isReservedCrateName(crateSummary.getName())) {
+            continue;
+        }
         modelRows.push_back(newTreeItemForCrateSummary(crateSummary));
         if (selectedCrateId == crateSummary.getId()) {
             // save index for selection
@@ -600,13 +606,17 @@ QModelIndex CrateFeature::rebuildChildModel(CrateId selectedCrateId) {
 void CrateFeature::updateChildModel(const QSet<CrateId>& updatedCrateIds) {
     const CrateStorage& crateStorage = m_pTrackCollection->crates();
     for (const CrateId& crateId : updatedCrateIds) {
-        QModelIndex index = indexFromCrateId(crateId);
-        VERIFY_OR_DEBUG_ASSERT(index.isValid()) {
-            continue;
-        }
         CrateSummary crateSummary;
         VERIFY_OR_DEBUG_ASSERT(
                 crateStorage.readCrateSummaryById(crateId, &crateSummary)) {
+            continue;
+        }
+        // Reserved rotation crates have no sidebar row; nothing to repaint.
+        if (crate::SystemCrates::isReservedCrateName(crateSummary.getName())) {
+            continue;
+        }
+        QModelIndex index = indexFromCrateId(crateId);
+        VERIFY_OR_DEBUG_ASSERT(index.isValid()) {
             continue;
         }
         updateTreeItemForCrateSummary(

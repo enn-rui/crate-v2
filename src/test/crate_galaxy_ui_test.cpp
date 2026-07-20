@@ -1395,4 +1395,27 @@ TEST_F(CrateGalaxyUiTest, MapLoadRequestsTableJumpToLoadedTrack) {
     EXPECT_EQ(ControlObject::get(ConfigKey("[Channel1]", "LoadSelectedTrack")), 0.0);
 }
 
+TEST_F(CrateGalaxyUiTest, DemotedTracksAreExcludedFromTheScene) {
+    const int before = m_pGalaxy->testNodeCount();
+    ASSERT_GT(before, 1);
+    const QString relpath = m_pGalaxy->testNodeRelpath(0);
+    ASSERT_FALSE(relpath.isEmpty());
+
+    // Demoting a track drops it from the scene entirely: since dots, labels,
+    // plexus, halos and the subset all derive from m_nodes, a filtered node is
+    // absent from every layer.
+    m_pGalaxy->testSetDemotedRelpaths({relpath});
+    QApplication::processEvents();
+
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), before - 1);
+    for (int i = 0; i < m_pGalaxy->testNodeCount(); ++i) {
+        EXPECT_NE(m_pGalaxy->testNodeRelpath(i), relpath);
+    }
+
+    // Restoring brings the node back.
+    m_pGalaxy->testSetDemotedRelpaths({});
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), before);
+}
+
 } // namespace

@@ -102,6 +102,9 @@ class WCrateGalaxy : public QGraphicsView {
     int testProjectedNodeAt(const QPoint& viewportPos) const;
     void testApplySubsetByRelpaths(const QSet<QString>& relpaths);
     void testClearSubset();
+    // Inject the set of demoted relpaths (no library fixture needed) and rebuild;
+    // the injected tracks must then be absent from the scene entirely.
+    void testSetDemotedRelpaths(const QSet<QString>& relpaths);
     QString testLayoutMode() const;
     QString testColorMode() const;
     GalaxyPalette testPalette() const { return m_palette; }
@@ -207,6 +210,11 @@ class WCrateGalaxy : public QGraphicsView {
     void populate();
     bool reloadSidecars();
     void reloadSidecarsIfChanged();
+    // Drop tracks that are members of the reserved "Demoted" crate before the
+    // scene is built, so they are absent from every layer (dots, labels, plexus,
+    // halos, subset). Resolved from the library, or from a test-injected set.
+    void excludeDemotedNodes(QVector<GalaxyNode>* pNodes) const;
+    QSet<QString> libraryDemotedRelpaths(const QVector<GalaxyNode>& nodes) const;
     void rebuildScene(const QVector<GalaxyNode>& nodes);
     void updateColors();
     void setColorMode(ColorMode mode);
@@ -349,6 +357,9 @@ class WCrateGalaxy : public QGraphicsView {
     QHash<int, int> m_deckPlayingNodes;
     QHash<int, bool> m_deckIsPlaying;
     QHash<QString, int> m_nodeByRelpath;
+    // Test-only override of the demoted relpath set (casefolded, forward slashes).
+    // Empty in production, where demoted tracks come from the library.
+    QSet<QString> m_testDemotedRelpaths;
     QSet<int> m_subsetNodes;
     bool m_subsetActive = false;
     QPointer<QAbstractItemModel> m_pSubsetModel;

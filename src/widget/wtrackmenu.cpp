@@ -5,6 +5,7 @@
 #include <QInputDialog>
 #include <QList>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QModelIndex>
 #include <QVBoxLayout>
 
@@ -12,6 +13,9 @@
 #include "analyzer/analyzersilence.h"
 #include "analyzer/analyzertrack.h"
 #include "control/controlobject.h"
+#include "crate/cull/cullclient.h"
+#include "crate/grab/grabclient.h"
+#include "crate/system/systemcrates.h"
 #include "library/coverartutils.h"
 #include "library/dao/trackschema.h"
 #include "library/dlgtagfetcher.h"
@@ -370,6 +374,15 @@ void WTrackMenu::createActions() {
                 &WTrackMenu::slotRemoveFromDisk);
     }
 
+    if (featureIsEnabled(Feature::CrateRotation)) {
+        // Label is toggled per selection in updateMenus().
+        m_pDemoteAct = make_parented<QAction>(tr("Demote from rotation"), this);
+        connect(m_pDemoteAct, &QAction::triggered, this, &WTrackMenu::slotDemoteToggle);
+
+        m_pCullToTrashAct = make_parented<QAction>(tr("Cull to trash"), this);
+        connect(m_pCullToTrashAct, &QAction::triggered, this, &WTrackMenu::slotCullToTrash);
+    }
+
     if (featureIsEnabled(Feature::Metadata)) {
         m_pStarRatingAction = make_parented<WStarRatingAction>(this);
         m_pStarRatingAction->setObjectName("RatingAction");
@@ -656,6 +669,10 @@ void WTrackMenu::setupActions() {
         addMenu(m_pCrateMenu);
     }
 
+    if (featureIsEnabled(Feature::CrateRotation)) {
+        addAction(m_pDemoteAct);
+    }
+
     if (featureIsEnabled(Feature::Remove)) {
         if (m_pTrackModel->hasCapabilities(TrackModel::Capability::Remove)) {
             addAction(m_pRemoveAct);
@@ -799,6 +816,10 @@ void WTrackMenu::setupActions() {
         m_pRemoveFromDiskMenu->addAction(m_pRemoveFromDiskAct);
         addMenu(m_pRemoveFromDiskMenu);
 #endif
+    }
+
+    if (featureIsEnabled(Feature::CrateRotation)) {
+        addAction(m_pCullToTrashAct);
     }
 
     if (featureIsEnabled(Feature::FileBrowser)) {
@@ -1255,6 +1276,28 @@ void WTrackMenu::updateMenus() {
 
     if (featureIsEnabled(Feature::Properties)) {
         m_pPropertiesAct->setEnabled(true);
+    }
+
+    if (featureIsEnabled(Feature::CrateRotation)) {
+        const TrackIdList trackIds = getTrackIds();
+        const bool haveSelection = m_pLibrary != nullptr && !trackIds.isEmpty();
+        // Toggle the label to "Restore" only when every selected track is
+        // already demoted; a mixed selection reads as "Demote" and demotes all.
+        bool allDemoted = haveSelection;
+        if (haveSelection) {
+            crate::SystemCrates systemCrates(
+                    m_pLibrary->trackCollectionManager()->internalCollection());
+            for (const TrackId& trackId : trackIds) {
+                if (!systemCrates.isDemoted(trackId)) {
+                    allDemoted = false;
+                    break;
+                }
+            }
+        }
+        m_pDemoteAct->setText(allDemoted ? tr("Restore to rotation")
+                                         : tr("Demote from rotation"));
+        m_pDemoteAct->setEnabled(haveSelection);
+        m_pCullToTrashAct->setEnabled(haveSelection);
     }
 
     if (featureIsEnabled(Feature::FindOnWeb)) {
@@ -2971,6 +3014,101 @@ void WTrackMenu::slotPurge() {
     }
     m_pTrackModel->purgeTracks(getTrackIndices());
     emit restoreCurrentViewStateOrIndex();
+}
+
+void WTrackMenu::slotDemoteToggle() {
+    if (!m_pLibrary) {
+        return;
+    }
+    const TrackIdList trackIds = getTrackIds();
+    if (trackIds.isEmpty()) {
+        return;
+    }
+    crate::SystemCrates systemCrates(
+            m_pLibrary->trackCollectionManager()->internalCollection());
+    bool allDemoted = true;
+    for (const TrackId& trackId : trackIds) {
+        if (!systemCrates.isDemoted(trackId)) {
+            allDemoted = false;
+            break;
+        }
+    }
+    // Restore only when the whole selection is already demoted; otherwise demote.
+    systemCrates.setDemoted(trackIds, !allDemoted);
+    // Drop/return the affected dots on the map.
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 1.0);
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
+}
+
+void WTrackMenu::slotCullToTrash() {
+    if (!m_pLibrary) {
+        return;
+    }
+    const QList<TrackRef> trackRefs = getTrackRefs();
+    if (trackRefs.isEmpty()) {
+        return;
+    }
+    const QString baseUrl = crate::GrabClient::configuredBaseUrl(m_pConfig);
+    if (baseUrl.isEmpty()) {
+        QMessageBox::warning(this,
+                tr("Cull to Trash"),
+                tr("The trash service is not configured. Set it in Crate "
+                   "preferences."));
+        return;
+    }
+    // Resolve each selected track to a music-root-relative path (root-agnostic:
+    // the library may spell the same share as a mapped drive or UNC path).
+    const QString musicRoot =
+            m_pConfig->getValue(ConfigKey("[Crate]", "music_root"), QString());
+    QStringList paths;
+    QHash<QString, TrackRef> refByRelpath;
+    for (const TrackRef& trackRef : trackRefs) {
+        paths.append(trackRef.getLocation());
+        const QString relpath = crate::CullClient::relpathForLocation(
+                trackRef.getLocation(), musicRoot);
+        if (!relpath.isEmpty()) {
+            refByRelpath.insert(relpath, trackRef);
+        }
+    }
+    if (refByRelpath.isEmpty()) {
+        QMessageBox::warning(this,
+                tr("Cull to Trash"),
+                tr("Could not resolve the file against the configured music "
+                   "library. Set the music library in Crate preferences."));
+        return;
+    }
+    if (QMessageBox::question(this,
+                tr("Cull to Trash"),
+                tr("Move to Trash?\n\n%1").arg(paths.join(QChar('\n'))),
+                QMessageBox::Cancel | QMessageBox::Yes,
+                QMessageBox::Cancel) != QMessageBox::Yes) {
+        return;
+    }
+    auto* pClient = new crate::CullClient(
+            baseUrl, crate::GrabClient::configuredToken(m_pConfig), this);
+    // Purge locally ONLY for the tracks the service actually trashed; a failure
+    // leaves the library untouched and reports a distinct, plain-language error.
+    connect(pClient,
+            &crate::CullClient::cullSucceeded,
+            this,
+            [this, refByRelpath](const QString& relpath) {
+                const auto it = refByRelpath.find(relpath);
+                if (it != refByRelpath.constEnd()) {
+                    m_pLibrary->trackCollectionManager()->purgeTracks(
+                            QList<TrackRef>{it.value()});
+                }
+                ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 1.0);
+                ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
+            });
+    connect(pClient,
+            &crate::CullClient::cullFailed,
+            this,
+            [this](const QString& error) {
+                QMessageBox::warning(this, tr("Cull to Trash"), error);
+            });
+    for (auto it = refByRelpath.constBegin(); it != refByRelpath.constEnd(); ++it) {
+        pClient->cull(it.key());
+    }
 }
 
 void WTrackMenu::clearTrackSelection() {

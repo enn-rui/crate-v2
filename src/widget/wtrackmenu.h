@@ -59,11 +59,14 @@ class WTrackMenu : public QMenu {
         SelectInLibrary = 1 << 15,
         Analyze = 1 << 16,
         FindOnWeb = 1 << 17,
+        // Crate v2 rotation actions: "Cull to trash" (box trash) and
+        // "Demote/Restore from rotation" (reserved "Demoted" crate).
+        CrateRotation = 1 << 18,
         TrackModelFeatures = Remove | HideUnhidePurge,
         All = AutoDJ | LoadTo | Playlist | Crate | Remove | Metadata | Reset | Analyze |
                 BPM | Color | HideUnhidePurge | RemoveFromDisk | FileBrowser |
                 Properties | SearchRelated | UpdateReplayGainFromPregain | SelectInLibrary |
-                FindOnWeb
+                FindOnWeb | CrateRotation
     };
     Q_DECLARE_FLAGS(Features, Feature)
 
@@ -200,6 +203,10 @@ class WTrackMenu : public QMenu {
     void slotUnhide();
     void slotPurge();
 
+    // Crate v2 rotation
+    void slotCullToTrash();
+    void slotDemoteToggle();
+
   private:
     void closeEvent(QCloseEvent* event) override;
     // This getter verifies that m_pTrackModel is set when
@@ -327,6 +334,10 @@ class WTrackMenu : public QMenu {
     parented_ptr<QAction> m_pUnhideAct;
     parented_ptr<QAction> m_pPurgeAct;
     parented_ptr<QAction> m_pRemoveFromDiskAct;
+
+    // Crate v2 rotation actions
+    parented_ptr<QAction> m_pDemoteAct;
+    parented_ptr<QAction> m_pCullToTrashAct;
 
     // Show track-editor action
     parented_ptr<QAction> m_pPropertiesAct;
