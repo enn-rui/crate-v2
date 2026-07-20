@@ -44,6 +44,9 @@ Then, whenever you add music:
 Rough timing: about 30-40 minutes per 1000 tracks on CPU, minutes on a decent
 GPU. Re-runs are incremental — only new tracks are analyzed.
 
+The audio model is MuQ-MuLan by Tencent AI Lab (CC-BY-NC 4.0 — personal,
+non-commercial use; downloaded from Hugging Face on first run, never bundled).
+
 When it finishes, set **Preferences > Crate > sidecar folder** to the `.crate`
 folder inside your music folder (first time only), then hit the **REFRESH** row
 in the MAP sidebar (or restart). Your galaxy appears: every dot is a track,
