@@ -6,9 +6,10 @@
 # real errors, not a wall of gcc/clang warning fatalities. Tighten later.
 name: crate-crossplatform
 
+# 2026-07-19: push trigger removed after the free Actions minutes ran out mid-wave
+# (three full Ubuntu runs + the day's Windows runs drained the month). Dispatch-only
+# until quota resets or a self-hosted runner on the box takes Linux duty (wave 7).
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       macos:
