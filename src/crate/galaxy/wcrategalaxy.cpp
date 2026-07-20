@@ -239,6 +239,8 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_knobFocusMap = mapFocus;
 
     m_pLayoutProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_layout_control"), this);
+    m_pLayoutDegradedProxy = new ControlProxy(
+            ConfigKey("[Crate]", "galaxy_layout_degraded_count"), this);
     m_pColorProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_color_control"), this);
     m_p3dProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_3d"), this);
     m_pHaloProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_halos"), this);
@@ -254,6 +256,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_pKnobFocusProxy->connectValueChanged(
             this, [this](double value) { setKnobFocusMap(value != 0.0); });
     m_pLayoutProxy->set(static_cast<int>(m_layoutMode));
+    publishLayoutDegradation(m_layoutMode);
     m_pColorProxy->set(static_cast<int>(m_colorMode));
     m_p3dProxy->set(m_3dMode ? 1.0 : 0.0);
     m_pHaloProxy->set(m_halosEnabled ? 1.0 : 0.0);
@@ -779,7 +782,11 @@ QVector<QPointF> WCrateGalaxy::layoutTarget(LayoutMode mode) const {
     }
     if (mode == LayoutMode::BpmSerpentine) {
         QVector<int> order;
-        for (int i = 0; i < m_nodes.size(); ++i) if (m_nodes[i].bpm > 0.0) order.append(i);
+        for (int i = 0; i < m_nodes.size(); ++i) {
+            if (m_nodes[i].bpm > 0.0 && std::isfinite(m_nodes[i].bpm)) {
+                order.append(i);
+            }
+        }
         std::sort(order.begin(), order.end(), [this](int a, int b) { return m_nodes[a].bpm < m_nodes[b].bpm; });
         for (int rank = 0; rank < order.size(); ++rank) {
             const double f = rank / qMax(1.0, static_cast<double>(order.size() - 1));
@@ -787,25 +794,51 @@ QVector<QPointF> WCrateGalaxy::layoutTarget(LayoutMode mode) const {
                     0.07 * kSceneSpan * std::sin(f * 2.0 * M_PI * 2.6 + 1.3);
             target[order[rank]] = QPointF((0.08 + 0.84 * f) * kSceneSpan, y);
         }
-        for (int i = 0; i < m_nodes.size(); ++i) if (!(m_nodes[i].bpm > 0.0)) target[i] = QPointF(0.5 * kSceneSpan, 0.97 * kSceneSpan);
+        for (int i = 0; i < m_nodes.size(); ++i) {
+            if (!(m_nodes[i].bpm > 0.0) || !std::isfinite(m_nodes[i].bpm)) {
+                target[i] = QPointF(0.5 * kSceneSpan, 0.97 * kSceneSpan);
+            }
+        }
         return separate(target, 0.97);
     }
-    int hits = 0;
     for (int i = 0; i < m_nodes.size(); ++i) {
         if (m_nodes[i].hasArtistPosition) {
             target[i] = QPointF((m_nodes[i].artistX + normal() * 0.018) * kSceneSpan,
                     (m_nodes[i].artistY + normal() * 0.018) * kSceneSpan);
-            ++hits;
         } else {
             target[i] = QPointF((0.04 + normal() * 0.02) * kSceneSpan,
                     (0.96 + normal() * 0.02) * kSceneSpan);
         }
     }
-    return hits >= qMax(3, m_nodes.size() / 4) ? separate(target, 0.95) : m_scatterPositions;
+    return separate(target, 0.95);
+}
+
+int WCrateGalaxy::layoutDegradedCount(LayoutMode mode) const {
+    static const QRegularExpression camelot(
+            QStringLiteral("^\\s*(1[0-2]|[1-9])([AB])\\s*$"),
+            QRegularExpression::CaseInsensitiveOption);
+    int count = 0;
+    for (const GalaxyNode& node : m_nodes) {
+        if ((mode == LayoutMode::KeyWheel && !camelot.match(node.keyCamelot).hasMatch()) ||
+                (mode == LayoutMode::BpmSerpentine &&
+                        (!(node.bpm > 0.0) || !std::isfinite(node.bpm))) ||
+                (mode == LayoutMode::Artist && !node.hasArtistPosition)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void WCrateGalaxy::publishLayoutDegradation(LayoutMode mode) {
+    if (m_pLayoutDegradedProxy) {
+        m_pLayoutDegradedProxy->set(layoutDegradedCount(mode));
+    }
 }
 
 void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
-    if (m_3dMode) return;
+    if (m_3dMode) {
+        set3dMode(false);
+    }
     // The displayed coordinate space changed, so the walk's nearest-neighbor
     // metric and history no longer apply — reset.
     resetWalk();
@@ -820,6 +853,7 @@ void WCrateGalaxy::setLayoutMode(LayoutMode mode, bool animate) {
     }
     const QVector<QPointF> start = [&] { QVector<QPointF> p; for (auto* dot : m_dots) p.append(dot->pos()); return p; }();
     const QVector<QPointF> target = layoutTarget(mode);
+    publishLayoutDegradation(mode);
     m_pLayoutAnimation->stop();
     disconnect(m_pLayoutAnimation, nullptr, this, nullptr);
     if (!animate) { applyPositions(target); return; }
@@ -1245,11 +1279,12 @@ void WCrateGalaxy::updatePills() {
     const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
     const double margin = 190.0 / qMax(transform().m11(), 0.001);
     const QRectF nearby = visible.adjusted(-margin, -margin, margin, margin);
+    const bool showAll = zoom >= kPillFadeEnd;
     QVector<int> candidates;
     if (lodOpacity > 0.0) {
         for (int i = 0; i < m_dots.size(); ++i) {
             if (nodeSelectable(i) && (!m_3dMode || m_nodes[i].has3d) &&
-                    nearby.contains(m_dots[i]->pos())) {
+                    (showAll ? visible : nearby).contains(m_dots[i]->pos())) {
                 candidates.append(i);
             }
         }
@@ -1269,6 +1304,10 @@ void WCrateGalaxy::updatePills() {
     QVector<QRect> occupiedRects;
     const auto tryAdd = [&](int index) {
         if (index < 0 || index >= m_dots.size() || wanted.contains(index)) {
+            return;
+        }
+        if (showAll) {
+            wanted.insert(index);
             return;
         }
         const QPoint anchor = mapFromScene(m_dots[index]->pos());
@@ -1747,6 +1786,22 @@ QPointF WCrateGalaxy::testNodeDisplayPos(int index) const {
 
 bool WCrateGalaxy::testNodeVisible(int index) const {
     return nodeSelectable(index);
+}
+
+int WCrateGalaxy::testVisibleSelectableNodeCount() const {
+    const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
+    int count = 0;
+    for (int i = 0; i < m_dots.size(); ++i) {
+        if (nodeSelectable(i) && (!m_3dMode || m_nodes[i].has3d) &&
+                visible.contains(m_dots[i]->pos())) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void WCrateGalaxy::testSetAllNodeDisplayPositions(const QPointF& position) {
+    applyPositions(QVector<QPointF>(m_nodes.size(), position));
 }
 
 QString WCrateGalaxy::testNodeRelpath(int index) const {

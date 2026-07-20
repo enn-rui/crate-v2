@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPainter>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
@@ -11,6 +12,19 @@
 #include "control/controlpushbutton.h"
 
 namespace {
+
+class ElidingLabel final : public QLabel {
+  public:
+    using QLabel::QLabel;
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setPen(palette().color(foregroundRole()));
+        painter.drawText(rect(), alignment(),
+                fontMetrics().elidedText(text(), Qt::ElideRight, width()));
+    }
+};
 
 constexpr int kScatter = 0;
 constexpr int kKeyWheel = 1;
@@ -21,6 +35,8 @@ constexpr int kCluster = 0;
 constexpr int kKey = 1;
 constexpr int kTempo = 2;
 constexpr int kEnergy = 3;
+constexpr int kBaseHeight = 184;
+constexpr int kStatusHeight = 204;
 
 int savedLayout(const UserSettingsPointer& pConfig) {
     const QString value = pConfig->getValue(
@@ -52,6 +68,7 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
           m_p3dButton(new QPushButton(QStringLiteral("3D"), this)),
           m_pHaloButton(new QPushButton(QStringLiteral("HALO"), this)),
           m_pKnobButton(new QPushButton(this)),
+          m_pLayoutStatus(new ElidingLabel(this)),
           m_pLayoutCO(std::make_unique<ControlObject>(
                   ConfigKey("[Crate]", "galaxy_layout_control"))),
           m_pColorCO(std::make_unique<ControlObject>(
@@ -61,11 +78,13 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
           m_pHaloCO(std::make_unique<ControlPushButton>(
                   ConfigKey("[Crate]", "galaxy_halos"))),
           m_pKnobCO(std::make_unique<ControlPushButton>(
-                  ConfigKey("[Crate]", "knob_focus"))) {
+                  ConfigKey("[Crate]", "knob_focus"))),
+          m_pLayoutDegradedCO(std::make_unique<ControlObject>(
+                  ConfigKey("[Crate]", "galaxy_layout_degraded_count"))) {
     setObjectName(QStringLiteral("CrateMapControls"));
     // Tall enough for stacked label-over-combo rows; the label-beside-combo
     // variant clipped current-item text at sidebar width ("Scat"/"Clus").
-    setFixedHeight(184);
+    setFixedHeight(kBaseHeight);
 
     auto* pMain = new QVBoxLayout(this);
     pMain->setContentsMargins(8, 6, 8, 7);
@@ -111,6 +130,11 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
     m_pKnobButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     pMain->addLayout(pButtons);
     pMain->addWidget(m_pKnobButton);
+    m_pLayoutStatus->setObjectName(QStringLiteral("CrateMapLayoutStatus"));
+    m_pLayoutStatus->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    m_pLayoutStatus->setFixedHeight(fontMetrics().height());
+    m_pLayoutStatus->hide();
+    pMain->addWidget(m_pLayoutStatus);
 
     m_p3dCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pHaloCO->setButtonMode(mixxx::control::ButtonMode::Toggle);
@@ -144,11 +168,14 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
             this, &WCrateMapControls::syncHalos);
     connect(m_pKnobCO.get(), &ControlObject::valueChanged,
             this, &WCrateMapControls::syncKnob);
+    connect(m_pLayoutDegradedCO.get(), &ControlObject::valueChanged,
+            this, &WCrateMapControls::syncLayoutStatus);
     syncLayout(m_pLayoutCO->get());
     syncColor(m_pColorCO->get());
     sync3d(m_p3dCO->get());
     syncHalos(m_pHaloCO->get());
     syncKnob(m_pKnobCO->get());
+    syncLayoutStatus(m_pLayoutDegradedCO->get());
 }
 
 WCrateMapControls::~WCrateMapControls() = default;
@@ -156,7 +183,7 @@ WCrateMapControls::~WCrateMapControls() = default;
 void WCrateMapControls::syncLayout(double value) {
     const QSignalBlocker blocker(m_pLayoutCombo);
     m_pLayoutCombo->setCurrentIndex(qBound(0, qRound(value), 3));
-    m_pLayoutCombo->setEnabled(m_p3dCO->get() == 0.0);
+    syncLayoutStatus(m_pLayoutDegradedCO->get());
 }
 
 void WCrateMapControls::syncColor(double value) {
@@ -167,7 +194,29 @@ void WCrateMapControls::syncColor(double value) {
 void WCrateMapControls::sync3d(double value) {
     const QSignalBlocker blocker(m_p3dButton);
     m_p3dButton->setChecked(value != 0.0);
-    m_pLayoutCombo->setEnabled(value == 0.0);
+}
+
+void WCrateMapControls::syncLayoutStatus(double value) {
+    const int count = qMax(0, qRound(value));
+    QString status;
+    if (count > 0) {
+        switch (m_pLayoutCombo->currentIndex()) {
+        case kKeyWheel:
+            status = QStringLiteral("%1 tracks missing key - piled at edge").arg(count);
+            break;
+        case kBpmSerpentine:
+            status = QStringLiteral("%1 tracks missing bpm - piled at edge").arg(count);
+            break;
+        case kArtist:
+            status = QStringLiteral("artist positions missing for %1 tracks").arg(count);
+            break;
+        default:
+            break;
+        }
+    }
+    m_pLayoutStatus->setText(status);
+    m_pLayoutStatus->setVisible(!status.isEmpty());
+    setFixedHeight(status.isEmpty() ? kBaseHeight : kStatusHeight);
 }
 
 void WCrateMapControls::syncHalos(double value) {

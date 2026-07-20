@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QLabel>
 #include <QPointF>
 #include <QPushButton>
 #include <QSet>
@@ -101,7 +102,7 @@ class CrateGalaxyUiTest : public ::testing::Test {
         return m_pConfig->getValue(ConfigKey("[Crate]", key), QString());
     }
 
-    void recreateGalaxy(bool mode3d, double debugZoom) {
+    void recreateGalaxy(bool mode3d, double debugZoom, bool dense = false) {
         m_pGalaxy.reset();
         const QString sidecarDir = m_tmp.filePath(QStringLiteral("sidecars"));
         ASSERT_TRUE(QDir().mkpath(sidecarDir));
@@ -133,6 +134,11 @@ class CrateGalaxyUiTest : public ::testing::Test {
         m_pGalaxy->resize(900, 700);
         m_pGalaxy->show();
         QApplication::processEvents();
+        if (dense) {
+            m_pGalaxy->testSetAllNodeDisplayPositions(QPointF(500.0, 500.0));
+            m_pGalaxy->centerOn(QPointF(500.0, 500.0));
+            QApplication::processEvents();
+        }
     }
 
     int pillCount() const {
@@ -194,6 +200,65 @@ TEST_F(CrateGalaxyUiTest, ColorComboChangesGalaxyForEveryChoice) {
     EXPECT_EQ(configValue("galaxy_color_mode"), QStringLiteral("cluster"));
 }
 
+TEST_F(CrateGalaxyUiTest, ColorModePersistsAcrossReconstruction) {
+    auto* pCombo = m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapColor"));
+    ASSERT_NE(pCombo, nullptr);
+    pCombo->setCurrentIndex(2);
+    QApplication::processEvents();
+    ASSERT_EQ(configValue("galaxy_color_mode"), QStringLiteral("tempo"));
+
+    m_pGalaxy.reset();
+    m_pControls.reset();
+    m_pControls = std::make_unique<crate::WCrateMapControls>(nullptr, m_pConfig);
+    m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(nullptr, nullptr, m_pConfig);
+    QApplication::processEvents();
+
+    EXPECT_EQ(m_pGalaxy->testColorMode(), QStringLiteral("tempo"));
+    EXPECT_EQ(m_pControls->findChild<QComboBox*>(
+                      QStringLiteral("CrateMapColor"))->currentIndex(),
+            2);
+}
+
+TEST_F(CrateGalaxyUiTest, LayoutPickWhile3dExits3dAndAppliesLayout) {
+    QPushButton* p3d = m_pControls->findChild<QPushButton*>(QStringLiteral("CrateMap3d"));
+    QComboBox* pLayout = m_pControls->findChild<QComboBox*>(
+            QStringLiteral("CrateMapLayout"));
+    ASSERT_NE(p3d, nullptr);
+    ASSERT_NE(pLayout, nullptr);
+    QTest::mouseClick(p3d, Qt::LeftButton);
+    QApplication::processEvents();
+    ASSERT_TRUE(m_pGalaxy->test3dMode());
+    ASSERT_TRUE(pLayout->isEnabled());
+
+    pLayout->setCurrentIndex(1);
+    QApplication::processEvents();
+
+    EXPECT_FALSE(m_pGalaxy->test3dMode());
+    EXPECT_EQ(m_pGalaxy->testLayoutMode(), QStringLiteral("key"));
+    EXPECT_EQ(configValue("galaxy_3d"), QStringLiteral("0"));
+    EXPECT_EQ(configValue("galaxy_layout"), QStringLiteral("key"));
+}
+
+TEST_F(CrateGalaxyUiTest, ArtistLayoutReportsMissingPositions) {
+    QComboBox* pLayout = m_pControls->findChild<QComboBox*>(
+            QStringLiteral("CrateMapLayout"));
+    QLabel* pStatus = m_pControls->findChild<QLabel*>(
+            QStringLiteral("CrateMapLayoutStatus"));
+    ASSERT_NE(pLayout, nullptr);
+    ASSERT_NE(pStatus, nullptr);
+    pLayout->setCurrentIndex(3);
+    QApplication::processEvents();
+    EXPECT_TRUE(pStatus->isVisible());
+    EXPECT_EQ(pStatus->text(),
+            QStringLiteral("artist positions missing for %1 tracks")
+                    .arg(m_pGalaxy->testNodeCount()));
+
+    pLayout->setCurrentIndex(0);
+    QApplication::processEvents();
+    EXPECT_FALSE(pStatus->isVisible());
+    EXPECT_TRUE(pStatus->text().isEmpty());
+}
+
 TEST_F(CrateGalaxyUiTest, Clicking3dTogglesGalaxyBothWays) {
     QPushButton* p3d = m_pControls->findChild<QPushButton*>(QStringLiteral("CrateMap3d"));
     ASSERT_NE(p3d, nullptr);
@@ -239,11 +304,16 @@ TEST_F(CrateGalaxyUiTest, RestoresAllSidebarStateFromConfig) {
     EXPECT_EQ(m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapColor"))->currentIndex(), 3);
 }
 
-TEST_F(CrateGalaxyUiTest, ZoomedIn3dShowsCulledPills) {
-    recreateGalaxy(/*mode3d=*/true, /*debugZoom=*/4.0);
-    const int count = pillCount();
-    EXPECT_GT(count, 0);
-    EXPECT_LT(count, 40);
+TEST_F(CrateGalaxyUiTest, FullZoomShowsAllVisibleSelectableNodePills) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
+    ASSERT_GT(m_pGalaxy->testVisibleSelectableNodeCount(), 1);
+    EXPECT_EQ(pillCount(), m_pGalaxy->testVisibleSelectableNodeCount());
+}
+
+TEST_F(CrateGalaxyUiTest, BelowFullZoomStillCullsDensePills) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/2.5, /*dense=*/true);
+    ASSERT_GT(m_pGalaxy->testVisibleSelectableNodeCount(), 1);
+    EXPECT_LT(pillCount(), m_pGalaxy->testVisibleSelectableNodeCount());
 }
 
 TEST_F(CrateGalaxyUiTest, ZoomedOut3dHidesLodPills) {

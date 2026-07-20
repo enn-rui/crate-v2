@@ -93,6 +93,8 @@ class WCrateGalaxy : public QGraphicsView {
     bool test3dMode() const { return m_3dMode; }
     bool testHalosEnabled() const { return m_halosEnabled; }
     bool testKnobFocusMap() const { return m_knobFocusMap; }
+    int testVisibleSelectableNodeCount() const;
+    void testSetAllNodeDisplayPositions(const QPointF& position);
     // Deck-load context-menu labels for a node (empty if the node is not
     // selectable / ghosted). Playing decks are annotated "(playing)".
     QStringList testDeckLoadLabels(int nodeIndex) const;
@@ -144,6 +146,8 @@ class WCrateGalaxy : public QGraphicsView {
     void setColorMode(ColorMode mode);
     void setLayoutMode(LayoutMode mode, bool animate = true);
     QVector<QPointF> layoutTarget(LayoutMode mode) const;
+    int layoutDegradedCount(LayoutMode mode) const;
+    void publishLayoutDegradation(LayoutMode mode);
     QVector<QPointF> separate(const QVector<QPointF>& positions, double shrink) const;
     void applyPositions(const QVector<QPointF>& positions);
     QColor nodeColor(const GalaxyNode& node) const;
@@ -247,6 +251,7 @@ class WCrateGalaxy : public QGraphicsView {
     // already drives.
     std::unique_ptr<ControlPushButton> m_pGalaxyLoadCO;
     ControlProxy* m_pLayoutProxy = nullptr;
+    ControlProxy* m_pLayoutDegradedProxy = nullptr;
     ControlProxy* m_pColorProxy = nullptr;
     ControlProxy* m_p3dProxy = nullptr;
     ControlProxy* m_pHaloProxy = nullptr;
