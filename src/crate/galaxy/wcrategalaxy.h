@@ -131,6 +131,9 @@ class WCrateGalaxy : public QGraphicsView {
     QColor testClusterColor(int clusterId) const;
     QString testClusterName(int clusterId) const;
     void testRebuildLabels() { rebuildLabelCache(); }
+    void testScaleWithoutRebuild(double factor) { scale(factor, factor); }
+    bool testLeadersSuppressed() const { return leadersSuppressed(); }
+    bool testLeaderGeometrySane() const;
     int testLabelRebuildCount() const { return m_labelRebuildCount; }
     void testPanBy(int dx, int dy) { scrollContentsBy(dx, dy); }
     QVector<QRectF> testLabelRects() const;
@@ -198,6 +201,7 @@ class WCrateGalaxy : public QGraphicsView {
     static ValueRange percentileRange(const QVector<double>& values);
     QString resolveMusicPath(const QString& relpath) const;
     void rebuildLabelCache();
+    bool leadersSuppressed() const;
     void scheduleLabelCacheRebuild();
     void updateLabelOpacities();
     void updateHoverCard();
@@ -324,6 +328,7 @@ class WCrateGalaxy : public QGraphicsView {
     bool m_subsetActive = false;
     QPointer<QAbstractItemModel> m_pSubsetModel;
     QRectF m_labelBuiltViewportSceneRect;
+    qreal m_labelBuiltTransformScale = 0.0;
 
     // Table-jump-on-load observation (test seam; see requestTableJumpToCursor).
     int m_tableJumpRequests = 0;

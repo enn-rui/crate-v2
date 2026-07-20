@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QString>
@@ -118,6 +119,8 @@ class GrabStubServer : public QTcpServer {
     QJsonArray queue;
     bool pingOk = true;
     bool pingSlskd = true;
+    bool enforcePingToken = false;
+    QByteArray expectedToken;
 
     // Recorded requests.
     QString lastMethod;
@@ -210,6 +213,11 @@ class GrabStubServer : public QTcpServer {
             return QJsonDocument(queue).toJson(QJsonDocument::Compact);
         } else if (method == "GET" && path == "/api/ping") {
             ++pingCount;
+            if (enforcePingToken && lastToken != expectedToken) {
+                m_responseStatus = 401;
+                obj.insert(QStringLiteral("error"), QStringLiteral("unauthorized"));
+                return QJsonDocument(obj).toJson(QJsonDocument::Compact);
+            }
             obj.insert(QStringLiteral("ok"), pingOk);
             obj.insert(QStringLiteral("slskd"), pingSlskd);
         } else {
@@ -220,7 +228,8 @@ class GrabStubServer : public QTcpServer {
 
     void writeResponse(QTcpSocket* pSocket, const QByteArray& payload) {
         QByteArray response;
-        response += "HTTP/1.1 200 OK\r\n";
+        response += (m_responseStatus == 401 ? "HTTP/1.1 401 Unauthorized\r\n"
+                                            : "HTTP/1.1 200 OK\r\n");
         response += "Content-Type: application/json\r\n";
         response += "Content-Length: " + QByteArray::number(payload.size()) + "\r\n";
         response += "Connection: close\r\n\r\n";
@@ -228,7 +237,10 @@ class GrabStubServer : public QTcpServer {
         pSocket->write(response);
         pSocket->flush();
         pSocket->disconnectFromHost();
+        m_responseStatus = 200;
     }
+
+    int m_responseStatus = 200;
 };
 
 // ---- Model / helper tests (no network) --------------------------------------
@@ -522,6 +534,24 @@ TEST(CrateGrabClient, PingReportsReachabilityAndSlskd) {
     EXPECT_FALSE(slskd);
 }
 
+TEST(CrateGrabClient, WrongTokenReportsAuthRejectedNotUnreachable) {
+    GrabStubServer stub;
+    ASSERT_TRUE(stub.start());
+    stub.enforcePingToken = true;
+    stub.expectedToken = QByteArrayLiteral("right-token");
+
+    GrabClient client(stub.baseUrl(), QStringLiteral("wrong-token"), nullptr);
+    bool rejected = false;
+    bool pinged = false;
+    QObject::connect(&client, &GrabClient::pingAuthRejected,
+            [&]() { rejected = true; });
+    QObject::connect(&client, &GrabClient::pingResult,
+            [&](bool, bool) { pinged = true; });
+    client.ping();
+    ASSERT_TRUE(waitFor([&]() { return rejected; }));
+    EXPECT_FALSE(pinged);
+}
+
 TEST(CrateGrabClient, UnreachableServiceReportsNotReachableWithoutHang) {
     // Bind a server, capture its port, then close it -> a port with no listener.
     quint16 deadPort = 0;
@@ -614,6 +644,30 @@ TEST(CrateGrabView, SearchFillsTableAndGrabQueuesSelection) {
     const QJsonArray keys = body.value(QStringLiteral("keys")).toArray();
     ASSERT_EQ(keys.size(), 1);
     EXPECT_EQ(keys.at(0).toString(), QStringLiteral("k1"));
+}
+
+TEST(CrateGrabView, WrongTokenShowsRejectedTokenMessage) {
+    GrabStubServer stub;
+    ASSERT_TRUE(stub.start());
+    stub.enforcePingToken = true;
+    stub.expectedToken = QByteArrayLiteral("right-token");
+
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    UserSettingsPointer pConfig = makeConfig(dir);
+    pConfig->setValue(ConfigKey("[Crate]", "grab_service_url"), stub.baseUrl());
+    pConfig->setValue(ConfigKey("[Crate]", "grab_service_token"),
+            QStringLiteral("wrong-token"));
+    crate::WGrabView view(nullptr, pConfig);
+    auto* pStatus = view.findChild<QLabel*>(QStringLiteral("GrabStatus"));
+    ASSERT_NE(pStatus, nullptr);
+    ASSERT_TRUE(waitFor([&]() {
+        return pStatus->text().contains(QStringLiteral("rejected the token"));
+    }));
+    EXPECT_FALSE(pStatus->text().contains(QStringLiteral("not reachable")));
+    auto* pSearch = view.findChild<QPushButton*>(QStringLiteral("GrabSearch"));
+    ASSERT_NE(pSearch, nullptr);
+    EXPECT_FALSE(pSearch->isEnabled());
 }
 
 TEST(CrateGrabView, UnreachableServiceShowsQuietStateNoCrash) {

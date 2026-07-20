@@ -69,8 +69,6 @@
                   <CrateMapControls>
                     <ObjectName>CrateMapControls</ObjectName>
                     <SizePolicy>me,f</SizePolicy>
-                    <MinimumSize>150,184</MinimumSize>
-                    <MaximumSize>-1,184</MaximumSize>
                   </CrateMapControls>
                 </Children>
               </WidgetGroup>

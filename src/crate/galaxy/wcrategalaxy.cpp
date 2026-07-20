@@ -1034,24 +1034,26 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     // device-space label offset is cached, but pan/zoom can move its scene
     // anchor between debounced cache rebuilds.
     QHash<QRgb, QVector<QLineF>> leaderBatches;
-    for (const MapLabel& label : std::as_const(m_trackLabels)) {
-        if (!label.hasLeader || label.nodeIndex < 0) {
-            continue;
+    if (!leadersSuppressed()) {
+        for (const MapLabel& label : std::as_const(m_trackLabels)) {
+            if (!label.hasLeader || label.nodeIndex < 0) {
+                continue;
+            }
+            const QPointF dotCenter = mapFromScene(label.sceneAnchor);
+            const QRectF labelRect(dotCenter + label.pixmapOffset, label.logicalSize);
+            const QPointF labelEdge(qBound(labelRect.left(), dotCenter.x(), labelRect.right()),
+                    qBound(labelRect.top(), dotCenter.y(), labelRect.bottom()));
+            QLineF leader(dotCenter, labelEdge);
+            const QRectF dotRect = mapFromScene(
+                    m_dots[label.nodeIndex]->sceneBoundingRect()).boundingRect();
+            const qreal dotRadius = qMax(dotRect.width(), dotRect.height()) * 0.5;
+            if (leader.length() > dotRadius) {
+                leader.setP1(leader.pointAt(dotRadius / leader.length()));
+            }
+            QColor leaderColor(label.color);
+            leaderColor.setAlphaF(0.40 * label.opacity);
+            leaderBatches[leaderColor.rgba()].append(leader);
         }
-        const QPointF dotCenter = mapFromScene(label.sceneAnchor);
-        const QRectF labelRect(dotCenter + label.pixmapOffset, label.logicalSize);
-        const QPointF labelEdge(qBound(labelRect.left(), dotCenter.x(), labelRect.right()),
-                qBound(labelRect.top(), dotCenter.y(), labelRect.bottom()));
-        QLineF leader(dotCenter, labelEdge);
-        const QRectF dotRect = mapFromScene(
-                m_dots[label.nodeIndex]->sceneBoundingRect()).boundingRect();
-        const qreal dotRadius = qMax(dotRect.width(), dotRect.height()) * 0.5;
-        if (leader.length() > dotRadius) {
-            leader.setP1(leader.pointAt(dotRadius / leader.length()));
-        }
-        QColor leaderColor(label.color);
-        leaderColor.setAlphaF(0.40 * label.opacity);
-        leaderBatches[leaderColor.rgba()].append(leader);
     }
     for (auto it = leaderBatches.constBegin(); it != leaderBatches.constEnd(); ++it) {
         pPainter->setPen(QPen(QColor::fromRgba(it.key()), 1.0));
@@ -1561,6 +1563,7 @@ QString WCrateGalaxy::clusterName(int clusterId, const QVector<int>& members) co
 void WCrateGalaxy::rebuildLabelCache() {
     ++m_labelRebuildCount;
     m_labelBuiltViewportSceneRect = mapToScene(viewport()->rect()).boundingRect();
+    m_labelBuiltTransformScale = transform().m11();
     if (m_nodes.isEmpty() || m_dots.size() != m_nodes.size()) {
         return;
     }
@@ -2341,6 +2344,29 @@ int WCrateGalaxy::testTrackLabelLeaderCount() const {
 bool WCrateGalaxy::testTrackLabelHasLeader(int index) const {
     return index >= 0 && index < m_trackLabels.size() &&
             m_trackLabels[index].hasLeader;
+}
+
+bool WCrateGalaxy::leadersSuppressed() const {
+    constexpr qreal kScaleEpsilon = 1e-6;
+    return qAbs(transform().m11() - m_labelBuiltTransformScale) > kScaleEpsilon;
+}
+
+bool WCrateGalaxy::testLeaderGeometrySane() const {
+    for (const MapLabel& label : m_trackLabels) {
+        if (!label.hasLeader || label.nodeIndex < 0) {
+            continue;
+        }
+        const QPointF dotCenter = mapFromScene(label.sceneAnchor);
+        const QRectF labelRect(dotCenter + label.pixmapOffset, label.logicalSize);
+        const QPointF labelEdge(qBound(labelRect.left(), dotCenter.x(), labelRect.right()),
+                qBound(labelRect.top(), dotCenter.y(), labelRect.bottom()));
+        constexpr qreal kEpsilon = 1e-6;
+        return qAbs(labelEdge.x() - labelRect.left()) < kEpsilon ||
+                qAbs(labelEdge.x() - labelRect.right()) < kEpsilon ||
+                qAbs(labelEdge.y() - labelRect.top()) < kEpsilon ||
+                qAbs(labelEdge.y() - labelRect.bottom()) < kEpsilon;
+    }
+    return false;
 }
 
 QColor WCrateGalaxy::testClusterColor(int clusterId) const {

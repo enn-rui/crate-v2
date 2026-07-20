@@ -184,8 +184,26 @@ void GrabClient::refreshQueue() {
 
 void GrabClient::ping() {
     QNetworkReply* pReply = m_network.get(makeRequest(QStringLiteral("/api/ping")));
+    connect(pReply, &QNetworkReply::errorOccurred, this, [this, pReply]() {
+        const int status = pReply->attribute(
+                QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if ((status == 401 || status == 403) &&
+                !pReply->property("grabAuthRejected").toBool()) {
+            pReply->setProperty("grabAuthRejected", true);
+            emit pingAuthRejected();
+        }
+    });
     connect(pReply, &QNetworkReply::finished, this, [this, pReply]() {
         pReply->deleteLater();
+        if (pReply->property("grabAuthRejected").toBool()) {
+            return;
+        }
+        const int status = pReply->attribute(
+                QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status == 401 || status == 403) {
+            emit pingAuthRejected();
+            return;
+        }
         if (pReply->error() != QNetworkReply::NoError) {
             emit pingResult(false, false);
             return;

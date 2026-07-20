@@ -35,8 +35,6 @@ constexpr int kCluster = 0;
 constexpr int kKey = 1;
 constexpr int kTempo = 2;
 constexpr int kEnergy = 3;
-constexpr int kBaseHeight = 210;
-constexpr int kStatusHeight = 230;
 
 int savedLayout(const UserSettingsPointer& pConfig) {
     const QString value = pConfig->getValue(
@@ -85,9 +83,7 @@ WCrateMapControls::WCrateMapControls(QWidget* pParent, UserSettingsPointer pConf
           m_pLayoutDegradedCO(std::make_unique<ControlObject>(
                   ConfigKey("[Crate]", "galaxy_layout_degraded_count"))) {
     setObjectName(QStringLiteral("CrateMapControls"));
-    // Tall enough for stacked label-over-combo rows; the label-beside-combo
-    // variant clipped current-item text at sidebar width ("Scat"/"Clus").
-    setFixedHeight(kBaseHeight);
+    setMinimumWidth(150);
 
     auto* pMain = new QVBoxLayout(this);
     pMain->setContentsMargins(8, 6, 8, 7);
@@ -229,7 +225,8 @@ void WCrateMapControls::syncLayoutStatus(double value) {
     }
     m_pLayoutStatus->setText(status);
     m_pLayoutStatus->setVisible(!status.isEmpty());
-    setFixedHeight(status.isEmpty() ? kBaseHeight : kStatusHeight);
+    layout()->invalidate();
+    setFixedHeight(layout()->minimumSize().height());
 }
 
 void WCrateMapControls::syncHalos(double value) {

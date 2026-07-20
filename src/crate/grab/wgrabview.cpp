@@ -146,6 +146,8 @@ WGrabView::WGrabView(QWidget* pParent, UserSettingsPointer pConfig)
     connect(m_pClient, &GrabClient::queueReady, this, &WGrabView::onQueueReady);
     connect(m_pClient, &GrabClient::queueFailed, this, &WGrabView::onQueueFailed);
     connect(m_pClient, &GrabClient::pingResult, this, &WGrabView::onPingResult);
+    connect(m_pClient, &GrabClient::pingAuthRejected,
+            this, &WGrabView::onPingAuthRejected);
 
     setStatus(QStringLiteral("type an artist and hit SEARCH."));
     // Check reachability up front so a dead service is obvious immediately.
@@ -337,6 +339,15 @@ void WGrabView::onPingResult(bool reachable, bool slskdOnline) {
         m_pQueuePoll->start();
     }
     m_pClient->refreshQueue();
+}
+
+void WGrabView::onPingAuthRejected() {
+    m_reachable = false;
+    setControlsEnabled(false);
+    m_pQueuePoll->stop();
+    setStatus(QStringLiteral(
+            "grab service rejected the token - check the GRAB token in "
+            "Preferences > Crate."));
 }
 
 void WGrabView::setControlsEnabled(bool enabled) {

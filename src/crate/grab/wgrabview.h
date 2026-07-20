@@ -64,6 +64,7 @@ class WGrabView final : public QWidget, public LibraryView {
     void onQueueReady(const QVector<crate::GrabQueueItem>& items);
     void onQueueFailed(const QString& error);
     void onPingResult(bool reachable, bool slskdOnline);
+    void onPingAuthRejected();
     void tickElapsed();
 
   private:

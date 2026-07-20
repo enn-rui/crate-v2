@@ -14,6 +14,7 @@
 #include <QGraphicsScene>
 #include <QElapsedTimer>
 #include <QLabel>
+#include <QLayout>
 #include <QPointF>
 #include <QPushButton>
 #include <QSet>
@@ -221,6 +222,21 @@ TEST_F(CrateGalaxyUiTest, LayoutComboChangesGalaxyForEveryChoice) {
     QTest::keyClick(pCombo, Qt::Key_Home);
     QApplication::processEvents();
     EXPECT_EQ(configValue("galaxy_layout"), QStringLiteral("scatter"));
+}
+
+TEST_F(CrateGalaxyUiTest, MapControlsHeightTracksLayoutMinimumInBothStatusStates) {
+    auto* pLayout = m_pControls->layout();
+    ASSERT_NE(pLayout, nullptr);
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_layout_degraded_count"), 0.0);
+    QApplication::processEvents();
+    EXPECT_GE(m_pControls->height(), pLayout->minimumSize().height());
+
+    auto* pCombo = m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapLayout"));
+    ASSERT_NE(pCombo, nullptr);
+    pCombo->setCurrentIndex(2);
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_layout_degraded_count"), 4.0);
+    QApplication::processEvents();
+    EXPECT_GE(m_pControls->height(), pLayout->minimumSize().height());
 }
 
 TEST(CrateGalaxyPalette, DefaultsRemainTerminalAndCustomColorsApply) {
@@ -564,6 +580,12 @@ TEST_F(CrateGalaxyUiTest, DisplacedTrackRecordsLeaderButHomeTrackDoesNot) {
     EXPECT_GT(m_pGalaxy->testTrackLabelLeaderCount(), 0);
     EXPECT_LT(m_pGalaxy->testTrackLabelLeaderCount(),
             m_pGalaxy->testLabelCount(2));
+    EXPECT_TRUE(m_pGalaxy->testLeaderGeometrySane());
+    EXPECT_FALSE(m_pGalaxy->testLeadersSuppressed());
+    m_pGalaxy->testScaleWithoutRebuild(2.0);
+    EXPECT_TRUE(m_pGalaxy->testLeadersSuppressed());
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_FALSE(m_pGalaxy->testLeadersSuppressed());
 }
 
 TEST_F(CrateGalaxyUiTest, DeepZoomTrackCapGrowsBeyondLegacyCombinedCap) {

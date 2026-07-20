@@ -67,6 +67,7 @@ class GrabClient final : public QObject {
     void queueReady(const QVector<crate::GrabQueueItem>& items);
     void queueFailed(const QString& error);
     void pingResult(bool reachable, bool slskdOnline);
+    void pingAuthRejected();
 
   private:
     QNetworkRequest makeRequest(const QString& path) const;
