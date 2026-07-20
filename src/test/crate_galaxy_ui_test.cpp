@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QPointF>
 #include <QPushButton>
@@ -114,7 +115,8 @@ class CrateGalaxyUiTest : public ::testing::Test {
         return m_pConfig->getValue(ConfigKey("[Crate]", key), QString());
     }
 
-    void recreateGalaxy(bool mode3d, double debugZoom, bool dense = false) {
+    void recreateGalaxy(bool mode3d, double debugZoom, bool dense = false,
+            int syntheticNodes = 0) {
         m_pGalaxy.reset();
         const QString sidecarDir = m_tmp.filePath(QStringLiteral("sidecars"));
         ASSERT_TRUE(QDir().mkpath(sidecarDir));
@@ -132,6 +134,19 @@ class CrateGalaxyUiTest : public ::testing::Test {
             db.setDatabaseName(QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite")));
             ASSERT_TRUE(db.open());
             QSqlQuery query(db);
+            if (syntheticNodes > 0) {
+                ASSERT_TRUE(db.transaction());
+                query.prepare(QStringLiteral(
+                        "INSERT OR REPLACE INTO coords(relpath, x, y) VALUES(?, ?, ?)"));
+                for (int i = 0; i < syntheticNodes; ++i) {
+                    query.bindValue(0, QStringLiteral("music/dj/Artist %1/Track %2.flac")
+                                               .arg(i % 75).arg(i));
+                    query.bindValue(1, (i % 50) / 49.0);
+                    query.bindValue(2, (i / 50) / 30.0);
+                    ASSERT_TRUE(query.exec());
+                }
+                ASSERT_TRUE(db.commit());
+            }
             ASSERT_TRUE(query.exec(QStringLiteral("DROP TABLE IF EXISTS coords3d")));
             ASSERT_TRUE(query.exec(QStringLiteral(
                     "CREATE TABLE coords3d AS SELECT relpath, x, y, "
@@ -485,6 +500,62 @@ TEST_F(CrateGalaxyUiTest, TrackTextCollisionIsStableAndUsesClusterColor) {
         const int clusterId = m_pGalaxy->testLabelClusterId(2, i);
         EXPECT_EQ(m_pGalaxy->testLabelColor(2, i),
                 m_pGalaxy->testClusterColor(clusterId));
+    }
+}
+
+TEST_F(CrateGalaxyUiTest, LabelLayersShareCollisionSpace) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/1.6);
+    const QVector<QRectF> rects = m_pGalaxy->testLabelRects();
+    ASSERT_GT(rects.size(), 1);
+    for (int i = 0; i < rects.size(); ++i) {
+        for (int j = i + 1; j < rects.size(); ++j) {
+            EXPECT_FALSE(rects[i].adjusted(-2, -2, 2, 2).intersects(rects[j]));
+        }
+    }
+    EXPECT_LE(rects.size(), 220);
+}
+
+TEST_F(CrateGalaxyUiTest, PanDoesNotRecomputeLabelSet) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
+    const int before = m_pGalaxy->testLabelRebuildCount();
+    m_pGalaxy->testPanBy(17, -11);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+}
+
+TEST_F(CrateGalaxyUiTest, ResizeDebouncesLabelRecompute) {
+    const int before = m_pGalaxy->testLabelRebuildCount();
+    m_pGalaxy->resize(910, 700);
+    m_pGalaxy->resize(920, 700);
+    m_pGalaxy->resize(930, 700);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+    QTest::qWait(140);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 1);
+}
+
+TEST_F(CrateGalaxyUiTest, LabelRecomputeMeetsPerformanceGate) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/false,
+            /*syntheticNodes=*/1500);
+    ASSERT_GE(m_pGalaxy->testNodeCount(), 1500);
+    QElapsedTimer timer;
+    timer.start();
+    m_pGalaxy->testRebuildLabels();
+    const qint64 elapsedMs = timer.elapsed();
+    RecordProperty("label_recompute_ms", elapsedMs);
+    EXPECT_LT(elapsedMs, 25);
+}
+
+TEST_F(CrateGalaxyUiTest, DeepZoomLabelsAreNested) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0);
+    const QStringList beforeList = m_pGalaxy->testTrackLabelRelpaths();
+    const QSet<QString> before(beforeList.cbegin(), beforeList.cend());
+    ASSERT_FALSE(before.isEmpty());
+    m_pGalaxy->testScaleAndRebuild(1.5);
+    const QStringList after = m_pGalaxy->testTrackLabelRelpaths();
+    for (const QString& relpath : before) {
+        EXPECT_TRUE(after.contains(relpath)) << relpath.toStdString();
     }
 }
 

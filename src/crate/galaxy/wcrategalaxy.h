@@ -6,6 +6,7 @@
 #include <QLineF>
 #include <QPointer>
 #include <QPointF>
+#include <QPixmap>
 #include <QSet>
 #include <QStringList>
 #include <QVector>
@@ -27,6 +28,7 @@ class QGraphicsScene;
 class QPainter;
 class QGraphicsEllipseItem;
 class QVariantAnimation;
+class QTimer;
 class QAbstractItemModel;
 
 namespace crate {
@@ -123,6 +125,11 @@ class WCrateGalaxy : public QGraphicsView {
     QColor testClusterColor(int clusterId) const;
     QString testClusterName(int clusterId) const;
     void testRebuildLabels() { rebuildLabelCache(); }
+    int testLabelRebuildCount() const { return m_labelRebuildCount; }
+    void testPanBy(int dx, int dy) { scrollContentsBy(dx, dy); }
+    QVector<QRectF> testLabelRects() const;
+    QStringList testTrackLabelRelpaths() const;
+    void testScaleAndRebuild(double factor) { scale(factor, factor); rebuildLabelCache(); }
     QString testNodeArtist(int index) const;
     void testSetNodeDisplayPosition(int index, const QPointF& position);
     void testSetAllNodeDisplayPositions(const QPointF& position);
@@ -185,6 +192,8 @@ class WCrateGalaxy : public QGraphicsView {
     static ValueRange percentileRange(const QVector<double>& values);
     QString resolveMusicPath(const QString& relpath) const;
     void rebuildLabelCache();
+    void scheduleLabelCacheRebuild();
+    void updateLabelOpacities();
     void updateHoverCard();
     QString clusterName(int clusterId, const QVector<int>& members) const;
     QString artistForNode(const GalaxyNode& node) const;
@@ -250,8 +259,10 @@ class WCrateGalaxy : public QGraphicsView {
     QHash<int, QGraphicsItem*> m_pills;
     struct MapLabel {
         QString text;
-        QPointF center;
-        QRectF rect;
+        QPointF sceneAnchor;
+        QPointF pixmapOffset;
+        QSizeF logicalSize;
+        QPixmap pixmap;
         QColor color;
         int pixelSize = 10;
         qreal opacity = 1.0;
@@ -261,6 +272,8 @@ class WCrateGalaxy : public QGraphicsView {
     QVector<MapLabel> m_clusterLabels;
     QVector<MapLabel> m_artistLabels;
     QVector<MapLabel> m_trackLabels;
+    QTimer* m_pLabelRebuildTimer = nullptr;
+    int m_labelRebuildCount = 0;
     QString m_musicRoot;
     ColorMode m_colorMode = ColorMode::Cluster;
     ValueRange m_tempoRange;
