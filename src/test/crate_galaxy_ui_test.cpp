@@ -224,6 +224,7 @@ class CrateGalaxyUiTest : public ::testing::Test {
             m_pGalaxy->centerOn(QPointF(500.0, 500.0));
             QApplication::processEvents();
         }
+        settleLabelRebuilds();
     }
 
     int pillCount() const {
@@ -295,6 +296,51 @@ TEST_F(CrateGalaxyUiTest, UnchangedSidecarMtimeDoesNotRebuildOnRepeatedFocusChec
         QApplication::processEvents();
     }
     EXPECT_EQ(m_pGalaxy->testSidecarRebuildCount(), rebuilds);
+}
+
+TEST_F(CrateGalaxyUiTest, IdenticalSubsetDoesNotRebuildLabels) {
+    settleLabelRebuilds();
+    QSet<QString> subset{m_pGalaxy->testNodeRelpath(0),
+            m_pGalaxy->testNodeRelpath(1)};
+    m_pGalaxy->testApplySubsetByRelpaths(subset);
+    settleLabelRebuilds();
+    const int rebuilds = m_pGalaxy->testLabelRebuildCount();
+    m_pGalaxy->testApplySubsetByRelpaths(subset);
+    QTest::qWait(160);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
+}
+
+TEST_F(CrateGalaxyUiTest, ChangedSubsetBurstDebouncesToOneLabelRebuild) {
+    settleLabelRebuilds();
+    const int rebuilds = m_pGalaxy->testLabelRebuildCount();
+    m_pGalaxy->testApplySubsetByRelpaths({m_pGalaxy->testNodeRelpath(0)});
+    m_pGalaxy->testApplySubsetByRelpaths({m_pGalaxy->testNodeRelpath(1)});
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
+    QTest::qWait(160);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds + 1);
+}
+
+TEST_F(CrateGalaxyUiTest, InitialPopulateFailureReportsAndRetries) {
+    m_pGalaxy.reset();
+    const QString sidecarDir = m_tmp.filePath(QStringLiteral("initially-missing"));
+    m_pConfig->setValue(ConfigKey("[Crate]", "sidecar_dir"), sidecarDir);
+    m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
+            nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
+    EXPECT_TRUE(m_pGalaxy->testPopulateFailed());
+    EXPECT_TRUE(m_pGalaxy->testPopulateRetryScheduled());
+    EXPECT_EQ(m_pGalaxy->testStatusText(), QStringLiteral("galaxy: sidecars unavailable"));
+
+    ASSERT_TRUE(QDir().mkpath(sidecarDir));
+    const QDir source(goldenSidecarDir());
+    for (const QString& name : source.entryList(QDir::Files)) {
+        ASSERT_TRUE(QFile::copy(source.filePath(name), QDir(sidecarDir).filePath(name)));
+    }
+    m_pGalaxy->testFirePopulateRetry();
+    EXPECT_FALSE(m_pGalaxy->testPopulateFailed());
+    EXPECT_FALSE(m_pGalaxy->testPopulateRetryScheduled());
+    EXPECT_GT(m_pGalaxy->testNodeCount(), 0);
 }
 
 TEST_F(CrateGalaxyUiTest, RefreshButtonUsesReloadControl) {
@@ -605,6 +651,15 @@ TEST_F(CrateGalaxyUiTest, ClusterAutoNameUsesFilingArtistsRenameWinsAndNoiseExcl
     EXPECT_EQ(m_pGalaxy->testClusterName(8), QStringLiteral("Perreo district"));
     EXPECT_TRUE(m_pGalaxy->testLabelTexts(0).contains(
             QStringLiteral("Perreo district")));
+}
+
+TEST_F(CrateGalaxyUiTest, SavedClusterNameSurvivesSidecarReload) {
+    m_pConfig->setValue(ConfigKey("[Crate]", "cluster_name_8"),
+            QStringLiteral("Saved district"));
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 1.0);
+    ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
+    settleLabelRebuilds();
+    EXPECT_TRUE(m_pGalaxy->testLabelTexts(0).contains(QStringLiteral("Saved district")));
 }
 
 TEST_F(CrateGalaxyUiTest, ArtistClumpingEmitsEachMultiTrackRegionOnly) {

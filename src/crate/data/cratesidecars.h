@@ -47,6 +47,8 @@ class CrateSidecars {
     }
 
   private:
+    QString snapshotPath(const QString& fileName, bool required);
+
     QString m_dir;
     QString m_lastError;
     QVector<GalaxyNode> m_nodes;

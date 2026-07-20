@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QGraphicsView>
 #include <QHash>
 #include <QLineF>
@@ -144,6 +145,10 @@ class WCrateGalaxy : public QGraphicsView {
     int testLabelDropCount() const { return m_labelDropCount; }
     int testLabelRebuildCount() const { return m_labelRebuildCount; }
     int testSidecarRebuildCount() const { return m_sidecarRebuildCount; }
+    bool testPopulateFailed() const { return m_populateFailed; }
+    bool testPopulateRetryScheduled() const;
+    void testFirePopulateRetry();
+    QString testStatusText() const;
     void testPanBy(int dx, int dy) { scrollContentsBy(dx, dy); }
     QVector<QRectF> testLabelRects() const;
     QStringList testTrackLabelRelpaths() const;
@@ -210,6 +215,7 @@ class WCrateGalaxy : public QGraphicsView {
     void populate();
     bool reloadSidecars();
     void reloadSidecarsIfChanged();
+    void schedulePopulateRetry();
     // Drop tracks that are members of the reserved "Demoted" crate before the
     // scene is built, so they are absent from every layer (dots, labels, plexus,
     // halos, subset). Resolved from the library, or from a test-injected set.
@@ -313,11 +319,15 @@ class WCrateGalaxy : public QGraphicsView {
     QTimer* m_pLabelRebuildTimer = nullptr;
     int m_labelRebuildCount = 0;
     int m_labelDropCount = 0;
+    QElapsedTimer m_labelDropLogTimer;
     int m_lastDoubleClickNode = -1;
     int m_lastContextMenuNode = -1;
     int m_lastRightClickNode = -1;
     int m_sidecarRebuildCount = 0;
     QDateTime m_lastSidecarModified;
+    QElapsedTimer m_lastSidecarReloadAttempt;
+    QTimer* m_pPopulateRetryTimer = nullptr;
+    bool m_populateFailed = false;
     QString m_musicRoot;
     ColorMode m_colorMode = ColorMode::Cluster;
     ValueRange m_tempoRange;

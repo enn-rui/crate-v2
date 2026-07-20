@@ -299,6 +299,17 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_pLabelRebuildTimer->setInterval(120);
     connect(m_pLabelRebuildTimer, &QTimer::timeout,
             this, &WCrateGalaxy::rebuildLabelCache);
+    m_pPopulateRetryTimer = new QTimer(this);
+    m_pPopulateRetryTimer->setSingleShot(true);
+    m_pPopulateRetryTimer->setInterval(10000);
+    connect(m_pPopulateRetryTimer, &QTimer::timeout, this, [this] {
+        if (!reloadSidecars()) {
+            schedulePopulateRetry();
+        }
+    });
+    if (m_populateFailed) {
+        schedulePopulateRetry();
+    }
 
     // Cursor highlight: a hollow mono ring, distinct from the now-playing dot
     // (filled white) and the mixability halos (blue radial glow). Kept above
@@ -399,9 +410,18 @@ void WCrateGalaxy::populate() {
     }
 
     if (!reloadSidecars()) {
+        qWarning() << "galaxy sidecars unavailable in" << sidecarDir;
         auto* pText = m_pScene->addSimpleText(
                 QStringLiteral("galaxy: sidecars unavailable"));
         pText->setBrush(m_palette.ink);
+        m_populateFailed = true;
+        schedulePopulateRetry();
+    }
+}
+
+void WCrateGalaxy::schedulePopulateRetry() {
+    if (m_pPopulateRetryTimer) {
+        m_pPopulateRetryTimer->start();
     }
 }
 
@@ -415,7 +435,8 @@ bool WCrateGalaxy::reloadSidecars() {
 
     CrateSidecars sidecars(sidecarDir);
     if (!sidecars.load()) {
-        qInfo() << "galaxy sidecar reload kept prior scene:" << sidecars.lastError();
+        qWarning() << "galaxy sidecar reload kept prior scene in" << sidecarDir
+                   << ':' << sidecars.lastError();
         return false;
     }
     QVector<GalaxyNode> nodes = sidecars.nodes();
@@ -424,6 +445,10 @@ bool WCrateGalaxy::reloadSidecars() {
     m_lastSidecarModified = QFileInfo(
             QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite"))).lastModified();
     ++m_sidecarRebuildCount;
+    m_populateFailed = false;
+    if (m_pPopulateRetryTimer) {
+        m_pPopulateRetryTimer->stop();
+    }
     kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
     return true;
 }
@@ -496,7 +521,35 @@ void WCrateGalaxy::testSetDemotedRelpaths(const QSet<QString>& relpaths) {
     reloadSidecars();
 }
 
+bool WCrateGalaxy::testPopulateRetryScheduled() const {
+    return m_pPopulateRetryTimer && m_pPopulateRetryTimer->isActive();
+}
+
+void WCrateGalaxy::testFirePopulateRetry() {
+    if (m_pPopulateRetryTimer) {
+        m_pPopulateRetryTimer->stop();
+    }
+    if (!reloadSidecars()) {
+        schedulePopulateRetry();
+    }
+}
+
+QString WCrateGalaxy::testStatusText() const {
+    for (QGraphicsItem* pItem : m_pScene->items()) {
+        if (auto* pText = qgraphicsitem_cast<QGraphicsSimpleTextItem*>(pItem)) {
+            return pText->text();
+        }
+    }
+    return {};
+}
+
 void WCrateGalaxy::reloadSidecarsIfChanged() {
+    constexpr qint64 kReloadCooldownMs = 15000;
+    if (m_lastSidecarReloadAttempt.isValid() &&
+            m_lastSidecarReloadAttempt.elapsed() < kReloadCooldownMs) {
+        return;
+    }
+    m_lastSidecarReloadAttempt.restart();
     const QString sidecarDir = m_pConfig->getValue(
             ConfigKey("[Crate]", "sidecar_dir"), QString());
     const QFileInfo umapInfo(QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite")));
@@ -665,8 +718,13 @@ void WCrateGalaxy::applySubset(const QSet<QString>& relpaths, bool active) {
             nodes.insert(*it);
         }
     }
-    m_subsetActive = active && nodes.size() != m_nodes.size();
-    m_subsetNodes = m_subsetActive ? std::move(nodes) : QSet<int>();
+    const bool subsetActive = active && nodes.size() != m_nodes.size();
+    const QSet<int> subsetNodes = subsetActive ? nodes : QSet<int>();
+    if (m_subsetActive == subsetActive && m_subsetNodes == subsetNodes) {
+        return;
+    }
+    m_subsetActive = subsetActive;
+    m_subsetNodes = subsetNodes;
     if (m_hoveredNode >= 0 && !nodeInSubset(m_hoveredNode)) {
         setHoveredNode(-1);
     }
@@ -678,7 +736,7 @@ void WCrateGalaxy::applySubset(const QSet<QString>& relpaths, bool active) {
         update3dProjection();
     } else {
         applyHaloVisuals();
-        rebuildLabelCache();
+        scheduleLabelCacheRebuild();
         updateCursorVisual();
     }
 }
@@ -914,7 +972,7 @@ void WCrateGalaxy::updateColors() {
     } else {
         applyHaloVisuals();
     }
-    rebuildLabelCache();
+    scheduleLabelCacheRebuild();
     viewport()->update();
 }
 
@@ -944,7 +1002,7 @@ void WCrateGalaxy::applyPositions(const QVector<QPointF>& positions) {
         m_halos[i]->setPos(positions[i]);
     }
     updateCursorVisual();
-    rebuildLabelCache();
+    scheduleLabelCacheRebuild();
     rebuildOverlayCache();
     viewport()->update();
 }
@@ -1220,7 +1278,7 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
             if (ok && !name.isEmpty()) {
                 m_pConfig->setValue(ConfigKey("[Crate]",
                         QStringLiteral("cluster_name_%1").arg(clusterId)), name);
-                rebuildLabelCache();
+                scheduleLabelCacheRebuild();
             }
         });
         menu.addSeparator();
@@ -1497,7 +1555,7 @@ void WCrateGalaxy::set3dMode(bool enabled) {
         m_p3dProxy->set(enabled ? 1.0 : 0.0);
     }
     applyHaloVisuals();
-    rebuildLabelCache();
+    scheduleLabelCacheRebuild();
     viewport()->update();
 }
 
@@ -1663,7 +1721,8 @@ void WCrateGalaxy::update3dProjection() {
     }
     applyHaloVisuals();
     updateCursorVisual();
-    rebuildLabelCache();
+    updateHoverCard();
+    scheduleLabelCacheRebuild();
     rebuildOverlayCache();
     viewport()->update();
 }
@@ -2090,7 +2149,9 @@ void WCrateGalaxy::rebuildLabelCache() {
     for (MapLabel& label : pendingArtistLabels) {
         place(std::move(label), &m_artistLabels);
     }
-    if (m_labelDropCount > 0) {
+    if (m_labelDropCount > 0 &&
+            (!m_labelDropLogTimer.isValid() || m_labelDropLogTimer.elapsed() >= 5000)) {
+        m_labelDropLogTimer.restart();
         qInfo() << "Crate galaxy label rebuild dropped" << m_labelDropCount
                 << "track labels after ring-search exhaustion;"
                 << m_trackLabels.size() << "placed from" << visible.size()
@@ -2847,7 +2908,7 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
         // the debug zoom) changed the view transform — every cached device
         // position is stale at first paint without this. Wheel/resize/scroll
         // paths rebuild themselves; the initial fit must too.
-        rebuildLabelCache();
+        scheduleLabelCacheRebuild();
         rebuildOverlayCache();
         // Proof/debug hook (matches the other galaxy_debug_* keys): when knob
         // focus is MAP, seed a cursor on show so the highlight is visible in a
@@ -2860,7 +2921,7 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
             stepCursorForward();
             stepCursorForward();
         }
-        rebuildLabelCache();
+        scheduleLabelCacheRebuild();
     }
 }
 

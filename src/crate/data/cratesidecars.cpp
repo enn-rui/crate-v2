@@ -1,12 +1,17 @@
 #include "crate/data/cratesidecars.h"
 
+#include <QCryptographicHash>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QRegularExpression>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QTemporaryFile>
 #include <QUuid>
 
 namespace {
@@ -36,12 +41,103 @@ void closeAndRemove(QSqlDatabase* db) {
     QSqlDatabase::removeDatabase(name);
 }
 
+bool validateSqlite(const QString& path) {
+    QSqlDatabase db = openRo(path);
+    if (!db.isOpen()) {
+        return false;
+    }
+    QSqlQuery query(db);
+    const bool ok = query.exec(QStringLiteral("PRAGMA quick_check")) &&
+            query.next() && query.value(0).toString() == QStringLiteral("ok");
+    closeAndRemove(&db);
+    return ok;
+}
+
 } // namespace
 
 namespace crate {
 
 CrateSidecars::CrateSidecars(const QString& dir)
         : m_dir(dir) {
+}
+
+QString CrateSidecars::snapshotPath(const QString& fileName, bool required) {
+    const QFileInfo sourceInfo(QDir(m_dir).filePath(fileName));
+    const QByteArray sourceKey = QDir(m_dir).absolutePath().toUtf8();
+    const QString cacheKey = QString::fromLatin1(
+            QCryptographicHash::hash(sourceKey, QCryptographicHash::Sha256).toHex().left(20));
+    const QString cacheDir = QDir(QStandardPaths::writableLocation(
+            QStandardPaths::CacheLocation))
+                                     .filePath(QStringLiteral("crate-sidecars/") + cacheKey);
+    if (!QDir().mkpath(cacheDir)) {
+        m_lastError = QStringLiteral("sidecar cache directory unavailable: ") + cacheDir;
+        return {};
+    }
+    const QString cachedPath = QDir(cacheDir).filePath(fileName);
+    const QFileInfo cachedInfo(cachedPath);
+    if (!sourceInfo.exists()) {
+        if (cachedInfo.exists() && validateSqlite(cachedPath)) {
+            return cachedPath;
+        }
+        if (required) {
+            m_lastError = fileName + QStringLiteral(" not readable in ") + m_dir;
+        }
+        return {};
+    }
+    if (cachedInfo.exists() && cachedInfo.lastModified() == sourceInfo.lastModified() &&
+            validateSqlite(cachedPath)) {
+        return cachedPath;
+    }
+
+    QTemporaryFile staged(QDir(cacheDir).filePath(QStringLiteral("snapshot-XXXXXX.sqlite")));
+    if (!staged.open()) {
+        m_lastError = QStringLiteral("unable to stage sidecar snapshot: ") + fileName;
+        return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+    }
+    QFile source(sourceInfo.absoluteFilePath());
+    if (!source.open(QIODevice::ReadOnly)) {
+        m_lastError = QStringLiteral("unable to copy sidecar: ") + sourceInfo.absoluteFilePath();
+        return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+    }
+    while (!source.atEnd()) {
+        const QByteArray chunk = source.read(1024 * 1024);
+        if (chunk.isEmpty() || staged.write(chunk) != chunk.size()) {
+            m_lastError = QStringLiteral("incomplete sidecar snapshot: ") + fileName;
+            return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+        }
+    }
+    staged.flush();
+    staged.close();
+    if (!validateSqlite(staged.fileName())) {
+        m_lastError = QStringLiteral("sidecar snapshot failed validation: ") + fileName;
+        return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+    }
+
+    QSaveFile destination(cachedPath);
+    if (!destination.open(QIODevice::WriteOnly)) {
+        m_lastError = QStringLiteral("unable to update sidecar cache: ") + cachedPath;
+        return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+    }
+    QFile validated(staged.fileName());
+    if (!validated.open(QIODevice::ReadOnly)) {
+        return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+    }
+    while (!validated.atEnd()) {
+        const QByteArray chunk = validated.read(1024 * 1024);
+        if (chunk.isEmpty() || destination.write(chunk) != chunk.size()) {
+            destination.cancelWriting();
+            return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+        }
+    }
+    if (!destination.commit()) {
+        m_lastError = QStringLiteral("unable to commit sidecar cache: ") + cachedPath;
+        return cachedInfo.exists() && validateSqlite(cachedPath) ? cachedPath : QString();
+    }
+    QFile cached(cachedPath);
+    cached.open(QIODevice::ReadWrite);
+    cached.setFileTime(sourceInfo.lastModified(), QFileDevice::FileModificationTime);
+    cached.close();
+    return cachedPath;
 }
 
 void CrateSidecars::parseTrackName(
@@ -81,9 +177,12 @@ void CrateSidecars::parseTrackName(
 bool CrateSidecars::load() {
     m_nodes.clear();
 
-    QSqlDatabase umap = openRo(QDir(m_dir).filePath(QStringLiteral("umap.sqlite")));
+    const QString umapPath = snapshotPath(QStringLiteral("umap.sqlite"), true);
+    QSqlDatabase umap = openRo(umapPath);
     if (!umap.isOpen()) {
-        m_lastError = QStringLiteral("umap.sqlite not readable in ") + m_dir;
+        if (m_lastError.isEmpty()) {
+            m_lastError = QStringLiteral("umap.sqlite not readable in ") + m_dir;
+        }
         return false;
     }
 
@@ -122,7 +221,7 @@ bool CrateSidecars::load() {
     }
     closeAndRemove(&umap);
 
-    QSqlDatabase clusters = openRo(QDir(m_dir).filePath(QStringLiteral("clusters.sqlite")));
+    QSqlDatabase clusters = openRo(snapshotPath(QStringLiteral("clusters.sqlite"), false));
     if (clusters.isOpen()) {
         QSqlQuery q(clusters);
         q.exec(QStringLiteral("SELECT relpath, cluster_id FROM clusters"));
@@ -135,7 +234,7 @@ bool CrateSidecars::load() {
         closeAndRemove(&clusters);
     }
 
-    QSqlDatabase features = openRo(QDir(m_dir).filePath(QStringLiteral("features.sqlite")));
+    QSqlDatabase features = openRo(snapshotPath(QStringLiteral("features.sqlite"), false));
     if (features.isOpen()) {
         QSqlQuery q(features);
         q.exec(QStringLiteral("SELECT relpath, bpm, key_camelot, energy FROM features"));
@@ -152,7 +251,7 @@ bool CrateSidecars::load() {
     }
 
     QHash<QString, QPair<double, double>> artistPositions;
-    QSqlDatabase artists = openRo(QDir(m_dir).filePath(QStringLiteral("artist_umap.sqlite")));
+    QSqlDatabase artists = openRo(snapshotPath(QStringLiteral("artist_umap.sqlite"), false));
     if (artists.isOpen()) {
         QSqlQuery q(artists);
         q.exec(QStringLiteral("SELECT artist, x, y FROM artists"));
