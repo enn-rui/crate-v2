@@ -1,9 +1,11 @@
 #include <gmock/gmock.h>
 
+#include <QFile>
 #include <QScopedPointer>
 
 #include "control/controlpotmeter.h"
 #include "control/controlpushbutton.h"
+#include "controllers/legacycontrollermappingfilehandler.h"
 #include "controllers/midi/legacymidicontrollermapping.h"
 #include "controllers/midi/midicontroller.h"
 #include "controllers/midi/midimessage.h"
@@ -100,9 +102,52 @@ class MidiControllerTest : public MixxxTest {
         m_pController->m_pScriptEngineLegacy->shutdown();
     }
 
+    void loadCrateFlx4Mapping() {
+        const QDir controllerDir(QStringLiteral(RESOURCE_FOLDER "/controllers"));
+        auto pMapping = LegacyControllerMappingFileHandler::loadMapping(
+                QFileInfo(controllerDir.filePath(
+                        QStringLiteral("Pioneer-DDJ-FLX4-Crate.midi.xml"))),
+                controllerDir);
+        ASSERT_TRUE(pMapping);
+        m_pMapping = std::dynamic_pointer_cast<LegacyMidiControllerMapping>(pMapping);
+        ASSERT_TRUE(m_pMapping);
+        m_pController->setMapping(m_pMapping);
+
+        QFile scriptFile(controllerDir.filePath(
+                QStringLiteral("Pioneer-DDJ-FLX4-Crate-script.js")));
+        ASSERT_TRUE(scriptFile.open(QIODevice::ReadOnly));
+        ASSERT_FALSE(evaluateAndAssert(QString::fromUtf8(scriptFile.readAll())));
+    }
+
     std::shared_ptr<LegacyMidiControllerMapping> m_pMapping;
     QScopedPointer<MockMidiController> m_pController;
 };
+
+TEST_F(MidiControllerTest, CrateFlx4ShiftBrowsePressTogglesKnobFocus) {
+    ControlPushButton knobFocus(ConfigKey("[Crate]", "knob_focus"));
+    knobFocus.setButtonMode(mixxx::control::ButtonMode::Toggle);
+    ControlPushButton moveFocusBackward(ConfigKey("[Library]", "MoveFocusBackward"));
+    loadCrateFlx4Mapping();
+
+    ASSERT_DOUBLE_EQ(0.0, knobFocus.get());
+    receivedShortMessage(0x90, 0x3F, 0x7F); // Deck 1 SHIFT press.
+    receivedShortMessage(0x96, 0x42, 0x7F); // SHIFT + browse encoder press.
+    EXPECT_DOUBLE_EQ(1.0, knobFocus.get());
+    EXPECT_DOUBLE_EQ(1.0, moveFocusBackward.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4ShiftDeck2LoadStrobesGalaxyReload) {
+    ControlPushButton galaxyReload(ConfigKey("[Crate]", "galaxy_reload"));
+    galaxyReload.setButtonMode(mixxx::control::ButtonMode::Push);
+    ControlPushButton loadSelectedTrack(ConfigKey("[Channel2]", "LoadSelectedTrack"));
+    loadCrateFlx4Mapping();
+
+    ASSERT_DOUBLE_EQ(0.0, galaxyReload.get());
+    receivedShortMessage(0x91, 0x3F, 0x7F); // Deck 2 SHIFT press.
+    receivedShortMessage(0x96, 0x47, 0x7F); // Deck 2 LOAD press.
+    EXPECT_DOUBLE_EQ(1.0, galaxyReload.get());
+    EXPECT_DOUBLE_EQ(1.0, loadSelectedTrack.get());
+}
 
 TEST_F(MidiControllerTest, ReceiveMessage_PushButtonCO_PushOnOff) {
     // Most MIDI controller send push-buttons as (NOTE_ON, 0x7F) for press and
