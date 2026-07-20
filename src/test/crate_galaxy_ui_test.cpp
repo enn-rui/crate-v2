@@ -132,6 +132,7 @@ class CrateGalaxyUiTest : public ::testing::Test {
             db.setDatabaseName(QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite")));
             ASSERT_TRUE(db.open());
             QSqlQuery query(db);
+            ASSERT_TRUE(query.exec(QStringLiteral("DROP TABLE IF EXISTS coords3d")));
             ASSERT_TRUE(query.exec(QStringLiteral(
                     "CREATE TABLE coords3d AS SELECT relpath, x, y, "
                     "((rowid % 7) - 3) * 0.1 AS z FROM coords")));
@@ -140,7 +141,7 @@ class CrateGalaxyUiTest : public ::testing::Test {
         QSqlDatabase::removeDatabase(connectionName);
         m_pConfig->setValue(ConfigKey("[Crate]", "sidecar_dir"), sidecarDir);
         m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_3d"), mode3d ? 1 : 0);
-        m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_debug_zoom"), debugZoom);
+        m_pConfig->setValue(ConfigKey("[Crate]", "galaxy_test_zoom"), debugZoom);
         m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
                 nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
         m_pGalaxy->resize(900, 700);
@@ -413,21 +414,78 @@ TEST_F(CrateGalaxyUiTest, RestoresAllSidebarStateFromConfig) {
     EXPECT_EQ(m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapColor"))->currentIndex(), 3);
 }
 
-TEST_F(CrateGalaxyUiTest, FullZoomShowsAllVisibleSelectableNodePills) {
+TEST_F(CrateGalaxyUiTest, DeepZoomUsesTrackTextAndNoPersistentPills) {
     recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
     ASSERT_GT(m_pGalaxy->testVisibleSelectableNodeCount(), 1);
-    EXPECT_EQ(pillCount(), m_pGalaxy->testVisibleSelectableNodeCount());
+    EXPECT_EQ(pillCount(), 0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(0), 0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(1), 0);
+    EXPECT_GT(m_pGalaxy->testLabelCount(2), 0);
 }
 
-TEST_F(CrateGalaxyUiTest, BelowFullZoomStillCullsDensePills) {
-    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/2.5, /*dense=*/true);
-    ASSERT_GT(m_pGalaxy->testVisibleSelectableNodeCount(), 1);
-    EXPECT_LT(pillCount(), m_pGalaxy->testVisibleSelectableNodeCount());
+TEST_F(CrateGalaxyUiTest, ZoomThresholdsSelectMapLabelLayers) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/1.0);
+    EXPECT_GT(m_pGalaxy->testLabelCount(0), 0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(1), 0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(2), 0);
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/2.0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(0), 0);
+    EXPECT_GT(m_pGalaxy->testLabelCount(1), 0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(2), 0);
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(0), 0);
+    EXPECT_EQ(m_pGalaxy->testLabelCount(1), 0);
+    EXPECT_GT(m_pGalaxy->testLabelCount(2), 0);
 }
 
-TEST_F(CrateGalaxyUiTest, ZoomedOut3dHidesLodPills) {
+TEST_F(CrateGalaxyUiTest, ZoomedOut3dUsesProjectedClusterLabelsWithoutPills) {
     recreateGalaxy(/*mode3d=*/true, /*debugZoom=*/1.0);
     EXPECT_EQ(pillCount(), 0);
+    EXPECT_GT(m_pGalaxy->testLabelCount(0), 0);
+}
+
+TEST_F(CrateGalaxyUiTest, ClusterAutoNameUsesFilingArtistsRenameWinsAndNoiseExcluded) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/1.0);
+    EXPECT_EQ(m_pGalaxy->testClusterName(8), QStringLiteral("CRRDR"));
+    EXPECT_TRUE(m_pGalaxy->testClusterName(-1).isEmpty());
+    m_pConfig->setValue(ConfigKey("[Crate]", "cluster_name_8"),
+            QStringLiteral("Perreo district"));
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_EQ(m_pGalaxy->testClusterName(8), QStringLiteral("Perreo district"));
+    EXPECT_TRUE(m_pGalaxy->testLabelTexts(0).contains(
+            QStringLiteral("Perreo district")));
+}
+
+TEST_F(CrateGalaxyUiTest, ArtistClumpingEmitsEachMultiTrackRegionOnly) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/2.0);
+    QVector<int> gabba;
+    for (int i = 0; i < m_pGalaxy->testNodeCount(); ++i) {
+        if (m_pGalaxy->testNodeArtist(i) == QStringLiteral("DR. GABBA")) {
+            gabba.append(i);
+        }
+    }
+    ASSERT_EQ(gabba.size(), 4);
+    m_pGalaxy->testSetNodeDisplayPosition(gabba[0], QPointF(700, 900));
+    m_pGalaxy->testSetNodeDisplayPosition(gabba[1], QPointF(710, 900));
+    m_pGalaxy->testSetNodeDisplayPosition(gabba[2], QPointF(1300, 1100));
+    m_pGalaxy->testSetNodeDisplayPosition(gabba[3], QPointF(1310, 1100));
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_EQ(m_pGalaxy->testLabelTexts(1).count(QStringLiteral("DR. GABBA")), 2);
+    EXPECT_FALSE(m_pGalaxy->testLabelTexts(1).contains(
+            QStringLiteral("Benji Bassline")));
+}
+
+TEST_F(CrateGalaxyUiTest, TrackTextCollisionIsStableAndUsesClusterColor) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
+    const QStringList first = m_pGalaxy->testLabelTexts(2);
+    ASSERT_FALSE(first.isEmpty());
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_EQ(m_pGalaxy->testLabelTexts(2), first);
+    for (int i = 0; i < m_pGalaxy->testLabelCount(2); ++i) {
+        const int clusterId = m_pGalaxy->testLabelClusterId(2, i);
+        EXPECT_EQ(m_pGalaxy->testLabelColor(2, i),
+                m_pGalaxy->testClusterColor(clusterId));
+    }
 }
 
 TEST_F(CrateGalaxyUiTest, HoverAndOrbitKeep3dPillOnProjectedDot) {
@@ -605,6 +663,30 @@ TEST_F(CrateGalaxyUiTest, SubsetGhostsOnlyExcludedNodesWithoutMovingOrRebuilding
         EXPECT_EQ(m_pGalaxy->testNodeDisplayPos(i), positions[i]);
         EXPECT_EQ(m_pGalaxy->testDotItemIdentity(i), identities[i]);
     }
+}
+
+// Regression: a tiny subset (a 3-track crate — or the 3-track capture profile
+// that shipped this bug) must NOT erase the map's wayfinding. Cluster and
+// artist names are geography and ignore the subset; only track text is
+// subset-gated like the pills it replaced.
+TEST_F(CrateGalaxyUiTest, WayfindingLabelsSurviveTinySubset) {
+    const int count = m_pGalaxy->testNodeCount();
+    ASSERT_GT(count, 4);
+
+    m_pGalaxy->testRebuildLabels();
+    const int clusterLabelsFull = m_pGalaxy->testLabelCount(0);
+    ASSERT_GT(clusterLabelsFull, 0);
+
+    QSet<QString> subset;
+    for (int i = 0; i < 3; ++i) {
+        subset.insert(m_pGalaxy->testNodeRelpath(i));
+    }
+    m_pGalaxy->testApplySubsetByRelpaths(subset);
+    m_pGalaxy->testRebuildLabels();
+    EXPECT_EQ(m_pGalaxy->testLabelCount(0), clusterLabelsFull)
+            << "cluster names must not shrink when a subset ghosts the map";
+
+    m_pGalaxy->testClearSubset();
 }
 
 TEST_F(CrateGalaxyUiTest, WheelZoomIsClampedBothDirections) {

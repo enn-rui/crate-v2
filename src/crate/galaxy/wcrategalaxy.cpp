@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QActionGroup>
 #include <QContextMenuEvent>
+#include <QCursor>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
@@ -12,6 +13,9 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QStyle>
 #include <QRadialGradient>
 #include <QRegularExpression>
@@ -45,10 +49,11 @@ constexpr double kSceneSpan = 2000.0; // normalized coordinate span
 constexpr double kDotRadius = 3.5;    // px, transform-independent
 constexpr double kHaloRadius = 11.0;  // px, transform-independent
 constexpr double kCursorRingRadius = 8.5; // px, transform-independent
-constexpr double kPillFadeStart = 2.55;
-constexpr double kPillFadeEnd = 3.15;
-constexpr int kPillCellWidth = 180;
-constexpr int kPillCellHeight = 52;
+constexpr double kClusterFadeStart = 1.4;
+constexpr double kClusterFadeEnd = 1.8;
+constexpr double kArtistFadeOutStart = 2.9;
+constexpr double kArtistFadeOutEnd = 3.4;
+constexpr double kArtistClumpDistance = kSceneSpan * 0.06;
 constexpr double kGhostColorStrength = 0.20;
 class GalaxyPillItem final : public QGraphicsItem {
   public:
@@ -471,7 +476,7 @@ void WCrateGalaxy::applySubset(const QSet<QString>& relpaths, bool active) {
         update3dProjection();
     } else {
         applyHaloVisuals();
-        updatePills();
+        rebuildLabelCache();
         updateCursorVisual();
     }
 }
@@ -700,6 +705,7 @@ void WCrateGalaxy::updateColors() {
     } else {
         applyHaloVisuals();
     }
+    rebuildLabelCache();
     viewport()->update();
 }
 
@@ -729,7 +735,7 @@ void WCrateGalaxy::applyPositions(const QVector<QPointF>& positions) {
         m_halos[i]->setPos(positions[i]);
     }
     updateCursorVisual();
-    updatePills();
+    rebuildLabelCache();
     rebuildOverlayCache();
     viewport()->update();
 }
@@ -931,6 +937,28 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
         addDeckLoadActions(&menu, node);
         menu.addSeparator();
     }
+    const int clusterId = clusterLabelAt(pEvent->pos());
+    if (clusterId >= 0) {
+        QAction* pRename = menu.addAction(tr("Rename area..."));
+        connect(pRename, &QAction::triggered, this, [this, clusterId] {
+            QVector<int> members;
+            for (int i = 0; i < m_nodes.size(); ++i) {
+                if (nodeInSubset(i) && m_nodes[i].clusterId == clusterId) {
+                    members.append(i);
+                }
+            }
+            bool ok = false;
+            const QString name = QInputDialog::getText(this,
+                    tr("Rename area"), tr("Area name:"), QLineEdit::Normal,
+                    clusterName(clusterId, members), &ok).trimmed();
+            if (ok && !name.isEmpty()) {
+                m_pConfig->setValue(ConfigKey("[Crate]",
+                        QStringLiteral("cluster_name_%1").arg(clusterId)), name);
+                rebuildLabelCache();
+            }
+        });
+        menu.addSeparator();
+    }
     QActionGroup group(&menu);
     group.setExclusive(true);
     const auto addMode = [&](const QString& label, ColorMode mode) {
@@ -989,6 +1017,36 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
                 Qt::SolidLine, Qt::RoundCap));
         pPainter->drawLine(m_plexusDeviceLines[i]);
     }
+    const auto drawLabels = [pPainter, this](const QVector<MapLabel>& labels,
+                                    bool outline) {
+        for (const MapLabel& label : labels) {
+            QFont font(QStringLiteral("IBM Plex Mono"));
+            font.setStyleHint(QFont::Monospace);
+            font.setPixelSize(label.pixelSize);
+            font.setWeight(label.pixelSize >= 13 ? QFont::DemiBold : QFont::Normal);
+            pPainter->setFont(font);
+            QColor color(label.color);
+            color.setAlphaF(color.alphaF() * label.opacity);
+            const QPointF baseline(label.rect.left(),
+                    label.rect.top() + QFontMetrics(font).ascent());
+            if (outline) {
+                QPainterPath path;
+                path.addText(baseline, font, label.text);
+                QColor shadow(m_palette.ground);
+                shadow.setAlphaF(label.opacity);
+                pPainter->setPen(QPen(shadow, 2.0, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+                pPainter->setBrush(color);
+                pPainter->drawPath(path);
+            } else {
+                pPainter->setPen(color);
+                pPainter->drawText(baseline, label.text);
+            }
+        }
+    };
+    drawLabels(m_clusterLabels, false);
+    drawLabels(m_artistLabels, false);
+    drawLabels(m_trackLabels, true);
     pPainter->restore();
     if (m_colorMode == ColorMode::Cluster) {
         return;
@@ -1081,7 +1139,7 @@ void WCrateGalaxy::wheelEvent(QWheelEvent* pEvent) {
         if (m_3dMode) {
             update3dProjection();
         }
-        updatePills();
+        rebuildLabelCache();
         rebuildOverlayCache();
     }
     pEvent->accept();
@@ -1093,7 +1151,7 @@ void WCrateGalaxy::setHoveredNode(int index) {
     }
     if (m_hoveredNode != index) {
         m_hoveredNode = index;
-        updatePills();
+        updateHoverCard();
     }
 }
 
@@ -1129,7 +1187,7 @@ void WCrateGalaxy::set3dMode(bool enabled) {
         m_p3dProxy->set(enabled ? 1.0 : 0.0);
     }
     applyHaloVisuals();
-    updatePills();
+    rebuildLabelCache();
     viewport()->update();
 }
 
@@ -1288,7 +1346,7 @@ void WCrateGalaxy::update3dProjection() {
     }
     applyHaloVisuals();
     updateCursorVisual();
-    updatePills();
+    rebuildLabelCache();
     rebuildOverlayCache();
     viewport()->update();
 }
@@ -1385,79 +1443,225 @@ void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
     if (m_3dMode) {
         update3dProjection();
     }
-    updatePills();
+    rebuildLabelCache();
     rebuildOverlayCache();
 }
 
 void WCrateGalaxy::scrollContentsBy(int dx, int dy) {
     QGraphicsView::scrollContentsBy(dx, dy);
-    updatePills();
+    rebuildLabelCache();
     rebuildOverlayCache();
 }
 
-void WCrateGalaxy::updatePills() {
+QString WCrateGalaxy::artistForNode(const GalaxyNode& node) const {
+    if (!node.artist.trimmed().isEmpty()) {
+        return node.artist.trimmed();
+    }
+    const QStringList parts = QDir::fromNativeSeparators(node.relpath).split(
+            QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (parts.size() >= 3 && parts[0].compare(
+            QStringLiteral("music"), Qt::CaseInsensitive) == 0 &&
+            (parts[1].compare(QStringLiteral("dj"), Qt::CaseInsensitive) == 0 ||
+                    parts[1].compare(QStringLiteral("personal"),
+                            Qt::CaseInsensitive) == 0)) {
+        return parts[2];
+    }
+    return parts.size() >= 2 ? parts[1] : QString();
+}
+
+QString WCrateGalaxy::clusterName(int clusterId, const QVector<int>& members) const {
+    const QString saved = m_pConfig->getValue(ConfigKey("[Crate]",
+            QStringLiteral("cluster_name_%1").arg(clusterId)), QString()).trimmed();
+    if (!saved.isEmpty()) {
+        return saved;
+    }
+    QHash<QString, int> counts;
+    QHash<QString, QString> display;
+    for (int index : members) {
+        const QString artist = artistForNode(m_nodes[index]);
+        if (!artist.isEmpty()) {
+            const QString key = artist.toCaseFolded();
+            ++counts[key];
+            display.insert(key, artist);
+        }
+    }
+    QVector<QString> artists = counts.keys();
+    std::stable_sort(artists.begin(), artists.end(), [&counts](const QString& a,
+                                                        const QString& b) {
+        return counts[a] == counts[b] ? a < b : counts[a] > counts[b];
+    });
+    if (artists.isEmpty()) {
+        return tr("cluster %1").arg(clusterId);
+    }
+    if (artists.size() == 1 || counts[artists[0]] * 100 > members.size() * 60) {
+        return display[artists[0]];
+    }
+    return display[artists[0]] + QStringLiteral(" / ") + display[artists[1]];
+}
+
+void WCrateGalaxy::rebuildLabelCache() {
     if (m_nodes.isEmpty() || m_dots.size() != m_nodes.size()) {
         return;
     }
     const double zoom = m_fitScale > 0.0 ? transform().m11() / m_fitScale : 0.0;
-    const double lodOpacity = qBound(0.0,
-            (zoom - kPillFadeStart) / (kPillFadeEnd - kPillFadeStart), 1.0);
-    const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
-    const double margin = 190.0 / qMax(transform().m11(), 0.001);
-    const QRectF nearby = visible.adjusted(-margin, -margin, margin, margin);
-    const bool showAll = zoom >= kPillFadeEnd;
-    QVector<int> candidates;
-    if (lodOpacity > 0.0) {
-        for (int i = 0; i < m_dots.size(); ++i) {
-            if (nodeSelectable(i) && (!m_3dMode || m_nodes[i].has3d) &&
-                    (showAll ? visible : nearby).contains(m_dots[i]->pos())) {
-                candidates.append(i);
+    m_clusterLabels.clear();
+    m_artistLabels.clear();
+    m_trackLabels.clear();
+    // Two candidate sets: cluster/artist names are WAYFINDING — the map's
+    // regions keep their names even when a crate subset ghosts most dots
+    // (you don't delete city names while browsing one district). Track text
+    // stays subset-gated like the pills it replaced.
+    QVector<int> wayfinding;
+    QVector<int> visible;
+    const QRect viewportRect = viewport()->rect().adjusted(-30, -20, 30, 20);
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        if ((!m_3dMode || m_nodes[i].has3d) &&
+                viewportRect.contains(mapFromScene(m_dots[i]->pos()))) {
+            wayfinding.append(i);
+            if (nodeSelectable(i)) {
+                visible.append(i);
             }
         }
-        if (m_3dMode) {
-            std::stable_sort(candidates.begin(), candidates.end(), [this](int a, int b) {
-                return m_dots[a]->zValue() > m_dots[b]->zValue();
-            });
+    }
+    const auto makeLabel = [](const QString& text, const QPointF& center,
+                                   QColor color, int pixelSize, qreal opacity,
+                                   int clusterId, int nodeIndex) {
+        QFont font(QStringLiteral("IBM Plex Mono"));
+        font.setStyleHint(QFont::Monospace);
+        font.setPixelSize(pixelSize);
+        font.setWeight(pixelSize >= 13 ? QFont::DemiBold : QFont::Normal);
+        const QSize size = QFontMetrics(font).size(Qt::TextSingleLine, text);
+        MapLabel label{text, center,
+                QRectF(center.x() - size.width() * 0.5,
+                        center.y() - size.height() * 0.5,
+                        size.width(), size.height()),
+                color, pixelSize, opacity, clusterId, nodeIndex};
+        return label;
+    };
+
+    if (zoom < kClusterFadeEnd) {
+        QHash<int, QVector<int>> clusters;
+        int largest = 1;
+        for (int index : wayfinding) {
+            if (m_nodes[index].clusterId >= 0) {
+                clusters[m_nodes[index].clusterId].append(index);
+            }
+        }
+        for (const QVector<int>& members : std::as_const(clusters)) {
+            largest = qMax(largest, members.size());
+        }
+        const qreal opacity = 1.0 - qBound(0.0,
+                (zoom - kClusterFadeStart) /
+                        (kClusterFadeEnd - kClusterFadeStart), 1.0);
+        for (auto it = clusters.constBegin(); it != clusters.constEnd(); ++it) {
+            QPointF center;
+            for (int index : it.value()) center += mapFromScene(m_dots[index]->pos());
+            center /= it.value().size();
+            const double population = std::log1p(it.value().size()) /
+                    std::log1p(largest);
+            const int px = qRound(11.0 + 9.0 * population);
+            m_clusterLabels.append(makeLabel(clusterName(it.key(), it.value()),
+                    center, clusterColor(it.key()), px, opacity, it.key(), -1));
         }
     }
 
-    // Cull in viewport pixels because pills ignore the view transform. Reserve
-    // the hovered node first, then use front-to-back depth in 3D (or ascending
-    // node index in 2D) as stable priority.
-    // The rectangle check also prevents overlap across adjacent cell edges.
-    QSet<int> wanted;
-    QSet<QPair<int, int>> occupiedCells;
-    QVector<QRect> occupiedRects;
-    const auto tryAdd = [&](int index) {
-        if (index < 0 || index >= m_dots.size() || wanted.contains(index)) {
-            return;
+    if (zoom > kClusterFadeStart && zoom < kArtistFadeOutEnd) {
+        const qreal fadeIn = qBound(0.0, (zoom - kClusterFadeStart) /
+                (kClusterFadeEnd - kClusterFadeStart), 1.0);
+        const qreal fadeOut = 1.0 - qBound(0.0,
+                (zoom - kArtistFadeOutStart) /
+                        (kArtistFadeOutEnd - kArtistFadeOutStart), 1.0);
+        QHash<QString, QVector<int>> byArtist;
+        for (int index : wayfinding) {
+            const QString artist = artistForNode(m_nodes[index]);
+            if (!artist.isEmpty()) byArtist[artist.toCaseFolded()].append(index);
         }
-        if (showAll) {
-            wanted.insert(index);
-            return;
-        }
-        const QPoint anchor = mapFromScene(m_dots[index]->pos());
-        const QPair<int, int> cell(
-                qFloor(static_cast<double>(anchor.x()) / kPillCellWidth),
-                qFloor(static_cast<double>(anchor.y()) / kPillCellHeight));
-        const QRect pillRect(anchor.x() + 7, anchor.y() - 25, 172, 50);
-        if (occupiedCells.contains(cell)) {
-            return;
-        }
-        for (const QRect& occupied : std::as_const(occupiedRects)) {
-            if (occupied.intersects(pillRect)) {
-                return;
+        for (const QVector<int>& tracks : std::as_const(byArtist)) {
+            QVector<int> component(tracks.size());
+            for (int i = 0; i < component.size(); ++i) component[i] = i;
+            const auto root = [&component](int i) {
+                while (component[i] != i) i = component[i];
+                return i;
+            };
+            for (int a = 0; a < tracks.size(); ++a) {
+                for (int b = a + 1; b < tracks.size(); ++b) {
+                    const QPointF delta = m_dots[tracks[a]]->pos() -
+                            m_dots[tracks[b]]->pos();
+                    if (QPointF::dotProduct(delta, delta) <=
+                            kArtistClumpDistance * kArtistClumpDistance) {
+                        const int ra = root(a), rb = root(b);
+                        if (ra != rb) component[rb] = ra;
+                    }
+                }
+            }
+            QHash<int, QVector<int>> clumps;
+            for (int i = 0; i < tracks.size(); ++i) clumps[root(i)].append(tracks[i]);
+            for (const QVector<int>& clump : std::as_const(clumps)) {
+                if (clump.size() < 2) continue;
+                QPointF center;
+                QHash<int, int> clusterCounts;
+                for (int index : clump) {
+                    center += mapFromScene(m_dots[index]->pos());
+                    ++clusterCounts[m_nodes[index].clusterId];
+                }
+                center /= clump.size();
+                int dominant = -1, count = -1;
+                for (auto it = clusterCounts.constBegin(); it != clusterCounts.constEnd(); ++it) {
+                    if (it.value() > count || (it.value() == count && it.key() < dominant)) {
+                        dominant = it.key(); count = it.value();
+                    }
+                }
+                m_artistLabels.append(makeLabel(artistForNode(m_nodes[clump[0]]), center,
+                        clusterColor(dominant), qBound(9, 9 + clump.size() / 3, 12),
+                        0.78 * qMin(fadeIn, fadeOut), dominant, -1));
             }
         }
-        wanted.insert(index);
-        occupiedCells.insert(cell);
-        occupiedRects.append(pillRect);
-    };
-    if (nodeSelectable(m_hoveredNode) && (!m_3dMode || m_nodes[m_hoveredNode].has3d)) {
-        tryAdd(m_hoveredNode);
     }
-    for (int index : std::as_const(candidates)) {
-        tryAdd(index);
+
+    if (zoom > kArtistFadeOutStart) {
+        const qreal opacity = qBound(0.0,
+                (zoom - kArtistFadeOutStart) /
+                        (kArtistFadeOutEnd - kArtistFadeOutStart), 1.0);
+        const QPoint cursor = viewport()->mapFromGlobal(QCursor::pos());
+        std::stable_sort(visible.begin(), visible.end(), [this, cursor](int a, int b) {
+            const QPoint da = mapFromScene(m_dots[a]->pos()) - cursor;
+            const QPoint db = mapFromScene(m_dots[b]->pos()) - cursor;
+            const int ad = da.x() * da.x() + da.y() * da.y();
+            const int bd = db.x() * db.x() + db.y() * db.y();
+            return ad == bd ? a < b : ad < bd;
+        });
+        QVector<QRectF> occupied;
+        for (int index : std::as_const(visible)) {
+            MapLabel label = makeLabel(m_nodes[index].title,
+                    mapFromScene(m_dots[index]->pos()) + QPointF(7.0, 0.0),
+                    clusterColor(m_nodes[index].clusterId),
+                    qBound(9, 9 + qFloor((zoom - 3.2) / 4.0), 11),
+                    opacity, m_nodes[index].clusterId, index);
+            bool collision = false;
+            for (const QRectF& rect : std::as_const(occupied)) {
+                if (rect.adjusted(-2, -1, 2, 1).intersects(label.rect)) {
+                    collision = true; break;
+                }
+            }
+            if (!collision) {
+                occupied.append(label.rect);
+                m_trackLabels.append(std::move(label));
+            }
+        }
+        std::sort(m_trackLabels.begin(), m_trackLabels.end(), [](const MapLabel& a,
+                                                                  const MapLabel& b) {
+            return a.nodeIndex < b.nodeIndex;
+        });
+    }
+    updateHoverCard();
+    viewport()->update();
+}
+
+void WCrateGalaxy::updateHoverCard() {
+    QSet<int> wanted;
+    if (nodeSelectable(m_hoveredNode) &&
+            (!m_3dMode || m_nodes[m_hoveredNode].has3d)) {
+        wanted.insert(m_hoveredNode);
     }
     for (auto it = m_pills.begin(); it != m_pills.end();) {
         if (!wanted.contains(it.key())) {
@@ -1467,7 +1671,7 @@ void WCrateGalaxy::updatePills() {
             ++it;
         }
     }
-    for (int index : std::as_const(wanted)) {
+    for (int index : wanted) {
         QGraphicsItem* pPill = m_pills.value(index, nullptr);
         if (pPill == nullptr) {
             pPill = new GalaxyPillItem(m_nodes[index],
@@ -1479,7 +1683,7 @@ void WCrateGalaxy::updatePills() {
             m_pills.insert(index, pPill);
         }
         pPill->setPos(m_dots[index]->pos());
-        pPill->setOpacity(index == m_hoveredNode ? 1.0 : lodOpacity);
+        pPill->setOpacity(1.0);
     }
     // Dots stay visible alongside their pills (interview 2026-07-19: "always
     // show both" — hiding the dot broke the map's geometry and read
@@ -1913,6 +2117,15 @@ bool WCrateGalaxy::testNodeVisible(int index) const {
     return nodeSelectable(index);
 }
 
+int WCrateGalaxy::clusterLabelAt(const QPoint& viewportPos) const {
+    for (const MapLabel& label : m_clusterLabels) {
+        if (label.rect.adjusted(-8, -8, 8, 8).contains(viewportPos)) {
+            return label.clusterId;
+        }
+    }
+    return -1;
+}
+
 int WCrateGalaxy::testVisibleSelectableNodeCount() const {
     const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
     int count = 0;
@@ -1923,6 +2136,59 @@ int WCrateGalaxy::testVisibleSelectableNodeCount() const {
         }
     }
     return count;
+}
+
+int WCrateGalaxy::testLabelCount(int layer) const {
+    if (layer == 0) return m_clusterLabels.size();
+    if (layer == 1) return m_artistLabels.size();
+    if (layer == 2) return m_trackLabels.size();
+    return 0;
+}
+
+QStringList WCrateGalaxy::testLabelTexts(int layer) const {
+    const QVector<MapLabel>* labels = layer == 0 ? &m_clusterLabels
+            : layer == 1 ? &m_artistLabels : &m_trackLabels;
+    QStringList result;
+    for (const MapLabel& label : *labels) result.append(label.text);
+    result.sort(Qt::CaseInsensitive);
+    return result;
+}
+
+QColor WCrateGalaxy::testLabelColor(int layer, int index) const {
+    const QVector<MapLabel>* labels = layer == 0 ? &m_clusterLabels
+            : layer == 1 ? &m_artistLabels : &m_trackLabels;
+    return index >= 0 && index < labels->size() ? labels->at(index).color : QColor();
+}
+
+int WCrateGalaxy::testLabelClusterId(int layer, int index) const {
+    const QVector<MapLabel>* labels = layer == 0 ? &m_clusterLabels
+            : layer == 1 ? &m_artistLabels : &m_trackLabels;
+    return index >= 0 && index < labels->size() ? labels->at(index).clusterId : -1;
+}
+
+QColor WCrateGalaxy::testClusterColor(int clusterId) const {
+    return clusterColor(clusterId);
+}
+
+QString WCrateGalaxy::testNodeArtist(int index) const {
+    return index >= 0 && index < m_nodes.size() ? artistForNode(m_nodes[index])
+                                                : QString();
+}
+
+void WCrateGalaxy::testSetNodeDisplayPosition(int index, const QPointF& position) {
+    if (index < 0 || index >= m_dots.size()) return;
+    m_dots[index]->setPos(position);
+    m_halos[index]->setPos(position);
+    rebuildLabelCache();
+}
+
+QString WCrateGalaxy::testClusterName(int clusterId) const {
+    QVector<int> members;
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        if (nodeInSubset(i) && m_nodes[i].clusterId == clusterId) members.append(i);
+    }
+    return clusterId < 0 || members.isEmpty() ? QString()
+                                               : clusterName(clusterId, members);
 }
 
 void WCrateGalaxy::testSetAllNodeDisplayPositions(const QPointF& position) {
@@ -2006,12 +2272,23 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
     if (!m_initialFitDone && !m_pScene->items().isEmpty()) {
         fitInView(m_pScene->sceneRect(), Qt::KeepAspectRatio);
         m_fitScale = transform().m11();
-        const double debugZoom = m_pConfig->getValue(
-                ConfigKey("[Crate]", "galaxy_debug_zoom"), 0.0);
+        double debugZoom = m_pConfig->getValue(
+                ConfigKey("[Crate]", "galaxy_test_zoom"), 0.0);
+        if (debugZoom <= 0.0) {
+            debugZoom = m_pConfig->getValue(
+                    ConfigKey("[Crate]", "galaxy_debug_zoom"), 0.0);
+        }
         if (debugZoom > 0.0) {
             scale(debugZoom, debugZoom);
+            centerOn(m_pScene->sceneRect().center());
         }
         m_initialFitDone = true;
+        // The label/overlay caches were last built before the initial fit (or
+        // the debug zoom) changed the view transform — every cached device
+        // position is stale at first paint without this. Wheel/resize/scroll
+        // paths rebuild themselves; the initial fit must too.
+        rebuildLabelCache();
+        rebuildOverlayCache();
         // Proof/debug hook (matches the other galaxy_debug_* keys): when knob
         // focus is MAP, seed a cursor on show so the highlight is visible in a
         // static screenshot. No effect on normal runs (key defaults off).
@@ -2023,7 +2300,7 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
             stepCursorForward();
             stepCursorForward();
         }
-        updatePills();
+        rebuildLabelCache();
     }
 }
 

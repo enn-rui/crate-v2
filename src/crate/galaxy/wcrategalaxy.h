@@ -116,6 +116,15 @@ class WCrateGalaxy : public QGraphicsView {
     void testRefreshPlexus() { updateMixabilityHalos(); }
     bool testKnobFocusMap() const { return m_knobFocusMap; }
     int testVisibleSelectableNodeCount() const;
+    int testLabelCount(int layer) const;
+    QStringList testLabelTexts(int layer) const;
+    QColor testLabelColor(int layer, int index) const;
+    int testLabelClusterId(int layer, int index) const;
+    QColor testClusterColor(int clusterId) const;
+    QString testClusterName(int clusterId) const;
+    void testRebuildLabels() { rebuildLabelCache(); }
+    QString testNodeArtist(int index) const;
+    void testSetNodeDisplayPosition(int index, const QPointF& position);
     void testSetAllNodeDisplayPositions(const QPointF& position);
     // Deck-load context-menu labels for a node (empty if the node is not
     // selectable / ghosted). Playing decks are annotated "(playing)".
@@ -175,7 +184,11 @@ class WCrateGalaxy : public QGraphicsView {
     QColor nodeColor(const GalaxyNode& node) const;
     static ValueRange percentileRange(const QVector<double>& values);
     QString resolveMusicPath(const QString& relpath) const;
-    void updatePills();
+    void rebuildLabelCache();
+    void updateHoverCard();
+    QString clusterName(int clusterId, const QVector<int>& members) const;
+    QString artistForNode(const GalaxyNode& node) const;
+    int clusterLabelAt(const QPoint& viewportPos) const;
     void setHoveredNode(int index);
     void set3dMode(bool enabled);
     void setHalosEnabled(bool enabled);
@@ -235,6 +248,19 @@ class WCrateGalaxy : public QGraphicsView {
     QVector<QGraphicsEllipseItem*> m_dots;
     QVector<QGraphicsEllipseItem*> m_halos;
     QHash<int, QGraphicsItem*> m_pills;
+    struct MapLabel {
+        QString text;
+        QPointF center;
+        QRectF rect;
+        QColor color;
+        int pixelSize = 10;
+        qreal opacity = 1.0;
+        int clusterId = -1;
+        int nodeIndex = -1;
+    };
+    QVector<MapLabel> m_clusterLabels;
+    QVector<MapLabel> m_artistLabels;
+    QVector<MapLabel> m_trackLabels;
     QString m_musicRoot;
     ColorMode m_colorMode = ColorMode::Cluster;
     ValueRange m_tempoRange;
