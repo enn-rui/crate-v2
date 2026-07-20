@@ -1,0 +1,200 @@
+/* Winamp Classic scheme override. Appended after style.qss by LegacySkinParser. */
+QWidget {
+    color: #25e35a;
+    font-family: "Tahoma", "Arial", sans-serif;
+    selection-background-color: #185f2a;
+    selection-color: #39ff63;
+}
+
+#Mixxx, #MainWindow, #MainWidget, #CentralWidget, #SkinContainer {
+    background: #1b1c1e;
+}
+
+#ToolBar, #MainMenu, #MainControls, #Waveforms, #MainDecks,
+#Mixer, #MixerBorder, #MixerStrip_4Decks, #EffectRackContainer,
+#SampleDecksContainer, #MicrophonesContainer, #PreviewDeck,
+#LibraryContainer, #LibraryFeatureControls, #SkinSettings,
+#CrateMapControls, #GrabView, #SmartCrateEditor {
+    color: #25e35a;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #3a3c40, stop:1 #232427);
+    border: 1px solid #08090a;
+    border-top-color: #686b70;
+    border-left-color: #686b70;
+}
+
+#ToolBar {
+    border: 2px outset #55585d;
+    border-bottom-color: #0d0e0f;
+}
+
+#Deck1, #Deck2, #Deck3, #Deck4, #DeckSmall, #DeckControls,
+#DeckMixer, #EffectUnit, #Sampler, #MicAuxContainer, #HeadphoneControls {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #35373a, stop:1 #202124);
+    border: 2px outset #55585d;
+}
+
+#VisualRow, #OverviewRow, #PreviewDeckVisualRow, #WaveformSplitter,
+#CrateGalaxySplitter, #LibraryCoverArt {
+    background: #0a0c0a;
+    border: 2px inset #55585d;
+}
+
+QLabel, #h1, #h2, #h3, #Time, #BpmKeyTextSmall, #TitleTextSmall,
+#ArtistTextSmall, #PlayPositionTextSmall, #CrateMapFieldLabel,
+#CrateMapHeader, #GrabStatus, #GrabHint {
+    color: #25e35a;
+}
+
+#h1, #h2, #h3, #CrateMapHeader, #GrabQueueHeader {
+    color: #39ff63;
+    font-weight: bold;
+}
+
+QLineEdit, QPlainTextEdit, QSpinBox, QComboBox, #LibraryBPMSpinBox,
+#CueLabelEdit, #GrabQuery, #GrabSearch {
+    color: #39ff63;
+    background: #0a0c0a;
+    border: 2px inset #55585d;
+    padding: 3px 6px;
+}
+QLineEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QComboBox:focus {
+    border-color: #39ff63;
+}
+QComboBox::drop-down { border-left: 1px solid #08090a; width: 18px; }
+QComboBox QAbstractItemView, QAbstractItemView {
+    color: #39ff63;
+    background: #0a0c0a;
+    alternate-background-color: #101510;
+    border: 2px inset #55585d;
+    selection-background-color: #185f2a;
+    selection-color: #39ff63;
+    outline: 0;
+}
+
+QPushButton, WPushButton, #ToolbarButton, #CircleButton,
+#SmallCircleButton, #EffectButton, #EffectEnableButton,
+#EffectChainGroupControlButton, #SkinSettingsButton,
+#SkinSettingsCategoryButton, #LibraryBPMButton, #LibraryPreviewButton,
+#LibraryToggle, #SampleDeckToggle, #EffectRackToggle, #ShowHideToggle {
+    color: #d6d7d8;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #55585d, stop:1 #292b2e);
+    border: 2px outset #55585d;
+    padding: 2px 6px;
+}
+
+QPushButton:hover, WPushButton:hover, #ToolbarButton:hover,
+#EffectButton:hover, #SkinSettingsButton:hover {
+    color: #ffffff;
+    background: #494c51;
+}
+
+QPushButton:pressed, WPushButton:pressed,
+QPushButton:checked, WPushButton:checked,
+#ToolbarButton[value="1"], #LibraryToggle[value="1"],
+#SampleDeckToggle[value="1"], #EffectRackToggle[value="1"],
+#SkinSectionToggleButton[value="1"], #EffectEnableButton[value="1"],
+#EffectChainGroupControlButton[value="1"], #FxAssignmentButton[value="1"],
+#FxAssignmentButton[value="2"] {
+    color: #39ff63;
+    background: #111512;
+    border: 2px inset #55585d;
+}
+
+QPushButton:disabled, WPushButton:disabled {
+    color: #77797c;
+    background: #292a2d;
+    border-color: #393b3e;
+}
+
+#CueDeleteButton, #SmartCrateRemoveRow, #pushButtonSkipNext {
+    color: #ffffff;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #c72b2b, stop:1 #651010);
+    border: 2px outset #a52a2a;
+}
+#CueDeleteButton:pressed, #SmartCrateRemoveRow:pressed {
+    border: 2px inset #a52a2a;
+}
+
+#PlayToggle[value="1"], #PreviewIndicator[value="1"],
+#DeckSync[value="1"], #DeckSync[value="2"], #SyncLeader[value="1"],
+#BeatsyncButton[value="1"], #LoopIn[value="1"], #LoopOut[value="1"],
+#BeatloopActivate[value="1"], #SlipButton[value="1"], #ReverseButton[value="1"] {
+    color: #0a0c0a;
+    background: #39ff63;
+    border: 2px inset #55585d;
+}
+
+QTableView, QTreeView, WTrackTableView, WLibraryTableView {
+    color: #25e35a;
+    background: #0a0c0a;
+    alternate-background-color: #101510;
+    gridline-color: #1d3422;
+    border: 2px inset #55585d;
+    selection-background-color: #185f2a;
+    selection-color: #39ff63;
+}
+QTableView::item, QTreeView::item { color: #25e35a; }
+QTableView::item:selected, QTreeView::item:selected {
+    color: #39ff63;
+    background: #185f2a;
+}
+
+QHeaderView::section, QTableCornerButton::section {
+    color: #d6d7d8;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #55585d, stop:1 #292b2e);
+    border: 2px outset #55585d;
+    padding: 3px;
+}
+
+QScrollBar:vertical { background: #1b1c1e; width: 14px; margin: 0; }
+QScrollBar:horizontal { background: #1b1c1e; height: 14px; margin: 0; }
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #66696e, stop:1 #292b2e);
+    border: 2px outset #55585d;
+    min-height: 24px;
+    min-width: 24px;
+}
+QScrollBar::handle:pressed { border: 2px inset #55585d; }
+QScrollBar::add-line, QScrollBar::sub-line {
+    width: 0; height: 0; background: #292b2e;
+}
+QScrollBar::add-page, QScrollBar::sub-page { background: #111214; }
+
+QSlider::groove:horizontal { height: 5px; background: #080908; border: 1px inset #55585d; }
+QSlider::groove:vertical { width: 5px; background: #080908; border: 1px inset #55585d; }
+QSlider::handle:horizontal, QSlider::handle:vertical {
+    background: #55585d;
+    border: 2px outset #686b70;
+}
+QSlider::handle:horizontal { width: 12px; margin: -6px 0; }
+QSlider::handle:vertical { height: 12px; margin: 0 -6px; }
+
+QMenu {
+    color: #d6d7d8;
+    background: #232427;
+    border: 2px outset #55585d;
+}
+QMenu::item:selected { color: #0a0c0a; background: #39ff63; }
+QToolTip {
+    color: #111111;
+    background: #ffffe1;
+    border: 1px solid #111111;
+    padding: 4px;
+}
+QSplitter::handle { background: #55585d; border: 1px outset #686b70; }
+
+#GrabView, #SmartCrateEditor {
+    background: #1b1c1e;
+    border: 2px outset #55585d;
+}
+#GrabQueueHeader, #SmartCrateRulesHeader {
+    color: #39ff63;
+    background: #0a0c0a;
+    border: 2px inset #55585d;
+}

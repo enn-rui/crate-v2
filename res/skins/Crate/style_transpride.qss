@@ -1,0 +1,212 @@
+/* Trans Pride scheme override. Appended after style.qss by LegacySkinParser. */
+QWidget {
+    color: #2c3357;
+    font-family: "Segoe UI", "Inter", "Arial", sans-serif;
+    selection-background-color: #ffb8d8;
+    selection-color: #2c3357;
+}
+
+#Mixxx, #MainWindow, #MainWidget, #CentralWidget, #SkinContainer {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #5bcefa, stop:0.48 #d7d0ed, stop:1 #f5a9b8);
+}
+
+#ToolBar, #MainMenu, #MainControls, #Waveforms, #MainDecks,
+#Mixer, #MixerBorder, #MixerStrip_4Decks, #EffectRackContainer,
+#SampleDecksContainer, #MicrophonesContainer, #PreviewDeck,
+#LibraryContainer, #LibraryFeatureControls, #SkinSettings,
+#CrateMapControls, #GrabView, #SmartCrateEditor {
+    color: #2c3357;
+    background: rgba(255, 255, 255, 178);
+    border-color: #5bcefa;
+}
+
+#ToolBar {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #5bcefa, stop:0.52 #c9cbed, stop:1 #f5a9b8);
+    border-bottom: 2px solid #ff66b3;
+}
+
+#Deck1, #Deck3, #DeckSmall, #DeckControls, #DeckMixer,
+#EffectUnit, #Sampler, #MicAuxContainer, #HeadphoneControls {
+    background: rgba(227, 244, 253, 225);
+    border: 1px solid #2bb6ee;
+}
+
+#Deck2, #Deck4, #SampleDecksExpanded, #EffectRackExpanded {
+    background: rgba(255, 228, 236, 225);
+    border: 1px solid #f072a0;
+}
+
+#VisualRow, #OverviewRow, #PreviewDeckVisualRow, #WaveformSplitter,
+#CrateGalaxySplitter {
+    background: #fdf3f8;
+    border-color: #5bcefa;
+}
+
+QLabel, #h1, #h2, #h3, #Time, #BpmKeyTextSmall, #TitleTextSmall,
+#ArtistTextSmall, #PlayPositionTextSmall, #CrateMapFieldLabel,
+#CrateMapHeader, #GrabStatus, #GrabHint {
+    color: #2c3357;
+}
+
+#h1, #h2, #h3, #CrateMapHeader, #GrabQueueHeader {
+    color: #b21e4b;
+    font-weight: bold;
+}
+
+QLineEdit, QPlainTextEdit, QSpinBox, QComboBox, #LibraryBPMSpinBox,
+#CueLabelEdit, #GrabQuery, #GrabSearch {
+    color: #2c3357;
+    background: #e3f4fd;
+    border: 1px solid #2bb6ee;
+    border-radius: 4px;
+    padding: 3px 7px;
+}
+
+QLineEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QComboBox:focus {
+    border: 2px solid #ff66b3;
+}
+
+QComboBox::drop-down { border: 0; width: 18px; }
+QComboBox QAbstractItemView, QAbstractItemView {
+    color: #2c3357;
+    background: #e3f4fd;
+    alternate-background-color: #fde3ec;
+    border: 1px solid #2bb6ee;
+    selection-background-color: #ffb8d8;
+    selection-color: #2c3357;
+    outline: 0;
+}
+
+QPushButton, WPushButton, #ToolbarButton, #CircleButton,
+#SmallCircleButton, #EffectButton, #EffectEnableButton,
+#EffectChainGroupControlButton, #SkinSettingsButton,
+#SkinSettingsCategoryButton, #LibraryBPMButton, #LibraryPreviewButton,
+#LibraryToggle, #SampleDeckToggle, #EffectRackToggle, #ShowHideToggle {
+    color: #2c3357;
+    background: rgba(255, 255, 255, 190);
+    border: 1px solid #2bb6ee;
+    border-radius: 4px;
+}
+
+QPushButton:hover, WPushButton:hover, #ToolbarButton:hover,
+#EffectButton:hover, #SkinSettingsButton:hover {
+    background: #ffe4ec;
+    border-color: #ff66b3;
+}
+
+QPushButton:pressed, WPushButton:pressed {
+    background: #f5a9b8;
+    border-color: #d6336c;
+}
+
+QPushButton:checked, WPushButton:checked,
+#ToolbarButton[value="1"], #LibraryToggle[value="1"],
+#SampleDeckToggle[value="1"], #EffectRackToggle[value="1"],
+#SkinSectionToggleButton[value="1"], #EffectEnableButton[value="1"],
+#EffectChainGroupControlButton[value="1"], #FxAssignmentButton[value="1"],
+#FxAssignmentButton[value="2"], #DeckSync[value="1"], #DeckSync[value="2"],
+#PlayToggle[value="1"], #PreviewIndicator[value="1"] {
+    color: #2c3357;
+    background: #ff66b3;
+    border: 1px solid #b21e4b;
+}
+
+QPushButton:disabled, WPushButton:disabled {
+    color: #8993ad;
+    background: rgba(255, 255, 255, 100);
+    border-color: #b8d9e9;
+}
+
+#CueDeleteButton, #SmartCrateRemoveRow, #pushButtonSkipNext {
+    color: #b21e4b;
+    background: #ffd6e2;
+    border: 1px solid #b21e4b;
+}
+
+#PlayToggle, #DeckCue, #CueStandardButton, #CueSavedJumpButton,
+#CueSavedLoopButton, #HotcueButton, #SamplerPlayButtonRepeating {
+    border-color: #ff66b3;
+}
+
+#DeckSync[value="1"], #SyncLeader[value="1"], #BeatsyncButton[value="1"],
+#LoopIn[value="1"], #LoopOut[value="1"], #BeatloopActivate[value="1"],
+#SlipButton[value="1"], #ReverseButton[value="1"] {
+    background: #5bcefa;
+    border-color: #149fd8;
+    color: #2c3357;
+}
+
+QTableView, QTreeView, WTrackTableView, WLibraryTableView {
+    color: #2c3357;
+    background: #e3f4fd;
+    alternate-background-color: #fde3ec;
+    gridline-color: #b4dff3;
+    border: 1px solid #2bb6ee;
+    selection-background-color: #ffb8d8;
+    selection-color: #2c3357;
+}
+
+QTableView::item, QTreeView::item { color: #2c3357; }
+QTableView::item:selected, QTreeView::item:selected {
+    color: #2c3357;
+    background: #ffb8d8;
+}
+
+QHeaderView::section, QTableCornerButton::section {
+    color: #2c3357;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #fdf3f8, stop:1 #bfe9ff);
+    border: 0;
+    border-right: 1px solid #5bcefa;
+    border-bottom: 1px solid #2bb6ee;
+    padding: 4px;
+}
+
+QScrollBar:vertical { background: #d8f1ff; width: 12px; margin: 0; }
+QScrollBar:horizontal { background: #d8f1ff; height: 12px; margin: 0; }
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #ff66b3;
+    border: 1px solid #d6336c;
+    border-radius: 6px;
+    min-height: 24px;
+    min-width: 24px;
+}
+QScrollBar::handle:hover { background: #5bcefa; border-color: #149fd8; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+QSlider::groove:horizontal { height: 4px; background: #b8d9e9; border-radius: 2px; }
+QSlider::groove:vertical { width: 4px; background: #b8d9e9; border-radius: 2px; }
+QSlider::handle:horizontal, QSlider::handle:vertical {
+    background: #ff66b3;
+    border: 1px solid #b21e4b;
+    border-radius: 6px;
+}
+QSlider::handle:horizontal { width: 12px; margin: -5px 0; }
+QSlider::handle:vertical { height: 12px; margin: 0 -5px; }
+
+QMenu {
+    color: #2c3357;
+    background: #fdf3f8;
+    border: 1px solid #2bb6ee;
+}
+QMenu::item:selected { color: #2c3357; background: #ffb8d8; }
+QToolTip {
+    color: #2c3357;
+    background: #ffffff;
+    border: 1px solid #ff66b3;
+    padding: 4px;
+}
+QSplitter::handle { background: #5bcefa; }
+
+#GrabView, #SmartCrateEditor {
+    background: rgba(253, 243, 248, 235);
+    border: 1px solid #ff66b3;
+}
+#GrabQueueHeader, #SmartCrateRulesHeader {
+    color: #2c3357;
+    background: #bfe9ff;
+    border-bottom: 1px solid #ff66b3;
+}

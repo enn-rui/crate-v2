@@ -32,6 +32,9 @@ listed here. This list is the entire merge-conflict surface for future `upstream
   src/skin/legacy/legacyskinparser.cpp (+include, +dispatch branch, +parseCrateGalaxy impl;
   2026-07-19: parseCrateGalaxy now passes m_pLibrary to WCrateGalaxy so the MAP-walk cursor
   can selection-sync the library table — the preferred FLX4 browse-knob load integration),
+  2026-07-19: parseCrateGalaxy also reads optional GroundColor/InkColor/AccentDeckA/
+  AccentDeckB children after scheme-variable substitution and passes that palette to
+  WCrateGalaxy.
   src/skin/legacy/tooltips.cpp (+show_crate_galaxy tooltip)
 - Crate intelligence seam: CMakeLists.txt (SonicVectors/scores sources and golden test)
 - FX out-of-box default seam (2026-07-19): src/effects/effectsmanager.h (+decl

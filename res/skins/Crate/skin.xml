@@ -81,6 +81,41 @@
     </attributes>
   </manifest>
 
+  <Schemes>
+    <Scheme>
+      <Name>Terminal</Name>
+      <Filters/>
+      <SetVariable name="GalaxyGround">#05060a</SetVariable>
+      <SetVariable name="GalaxyInk">#f4f7fb</SetVariable>
+      <SetVariable name="GalaxyDeckA">#b4d2ff</SetVariable>
+      <SetVariable name="GalaxyDeckB">#ffb454</SetVariable>
+      <SetVariable name="SchemeSignalColor">#b4d2ff</SetVariable>
+      <SetVariable name="SchemeDeckBackground">#05060a</SetVariable>
+    </Scheme>
+    <Scheme>
+      <Name>Trans Pride</Name>
+      <Filters/>
+      <Style src="skin:style_transpride.qss"/>
+      <SetVariable name="GalaxyGround">#fdf3f8</SetVariable>
+      <SetVariable name="GalaxyInk">#2c3357</SetVariable>
+      <SetVariable name="GalaxyDeckA">#5bcefa</SetVariable>
+      <SetVariable name="GalaxyDeckB">#ff66b3</SetVariable>
+      <SetVariable name="SchemeSignalColor">#ff66b3</SetVariable>
+      <SetVariable name="SchemeDeckBackground">#e3f4fd</SetVariable>
+    </Scheme>
+    <Scheme>
+      <Name>Winamp Classic</Name>
+      <Filters/>
+      <Style src="skin:style_winamp.qss"/>
+      <SetVariable name="GalaxyGround">#0a0c0a</SetVariable>
+      <SetVariable name="GalaxyInk">#25e35a</SetVariable>
+      <SetVariable name="GalaxyDeckA">#39ff63</SetVariable>
+      <SetVariable name="GalaxyDeckB">#ffd24a</SetVariable>
+      <SetVariable name="SchemeSignalColor">#39ff63</SetVariable>
+      <SetVariable name="SchemeDeckBackground">#0a0c0a</SetVariable>
+    </Scheme>
+  </Schemes>
+
   <ObjectName>Mixxx</ObjectName>
   <Style src="skin:style.qss"
          src-mac="skin:style-mac.qss"
@@ -139,7 +174,7 @@
     <SetVariable name="VerticalStretchButtonSizePolicy">f,me</SetVariable>
 
     <!-- Signal color for waveform overview in preview deck, samplers and library -->
-    <SetVariable name="SignalColor">#B4D2FF</SetVariable>
+    <SetVariable name="SignalColor"><Variable name="SchemeSignalColor"/></SetVariable>
 
     <!-- The waveforms (zoomed and overview) use a lot of memory. They appear in multiple places in
     main_decks.xml, left_deck.xml, and right_deck.xml, so define them in singletons. This makes
@@ -148,32 +183,32 @@
     <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">1</SetVariable>
       <!-- Traditional Blue -->
-      <SetVariable name="DeckSignalColor">#B4D2FF</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
+      <SetVariable name="DeckSignalColor"><Variable name="SchemeSignalColor"/></SetVariable>
+      <SetVariable name="DeckBackgroundColor"><Variable name="SchemeDeckBackground"/></SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
     <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">2</SetVariable>
       <!-- Traditional Orange -->
-      <SetVariable name="DeckSignalColor">#B4D2FF</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
+      <SetVariable name="DeckSignalColor"><Variable name="SchemeSignalColor"/></SetVariable>
+      <SetVariable name="DeckBackgroundColor"><Variable name="SchemeDeckBackground"/></SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
     <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">3</SetVariable>
       <!-- Violet -->
-      <SetVariable name="DeckSignalColor">#B4D2FF</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
+      <SetVariable name="DeckSignalColor"><Variable name="SchemeSignalColor"/></SetVariable>
+      <SetVariable name="DeckBackgroundColor"><Variable name="SchemeDeckBackground"/></SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
     <Template src="skins:Crate/deck_singletons.xml">
       <SetVariable name="i">4</SetVariable>
       <!-- Lime -->
-      <SetVariable name="DeckSignalColor">#B4D2FF</SetVariable>
-      <SetVariable name="DeckBackgroundColor">#05060A</SetVariable>
+      <SetVariable name="DeckSignalColor"><Variable name="SchemeSignalColor"/></SetVariable>
+      <SetVariable name="DeckBackgroundColor"><Variable name="SchemeDeckBackground"/></SetVariable>
       <SetVariable name="PlayedOverlayColor">#b8000000</SetVariable>
     </Template>
 
@@ -249,6 +284,10 @@
                             </SingletonContainer>
                             <CrateGalaxy>
                               <ObjectName>CrateGalaxy</ObjectName>
+                              <GroundColor><Variable name="GalaxyGround"/></GroundColor>
+                              <InkColor><Variable name="GalaxyInk"/></InkColor>
+                              <AccentDeckA><Variable name="GalaxyDeckA"/></AccentDeckA>
+                              <AccentDeckB><Variable name="GalaxyDeckB"/></AccentDeckB>
                               <SizePolicy>e,me</SizePolicy>
                             </CrateGalaxy>
                           </Children>

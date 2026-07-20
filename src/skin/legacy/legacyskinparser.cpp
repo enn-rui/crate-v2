@@ -1675,8 +1675,17 @@ void LegacySkinParser::parseSingletonDefinition(const QDomElement& node) {
 }
 
 QWidget* LegacySkinParser::parseCrateGalaxy(const QDomElement& node) {
+    crate::GalaxyPalette palette;
+    const auto readColor = [this, &node](const QString& childName, const QColor& fallback) {
+        const QColor color(m_pContext->selectString(node, childName));
+        return color.isValid() ? color : fallback;
+    };
+    palette.ground = readColor(QStringLiteral("GroundColor"), palette.ground);
+    palette.ink = readColor(QStringLiteral("InkColor"), palette.ink);
+    palette.accentDeckA = readColor(QStringLiteral("AccentDeckA"), palette.accentDeckA);
+    palette.accentDeckB = readColor(QStringLiteral("AccentDeckB"), palette.accentDeckB);
     auto* pGalaxy = new crate::WCrateGalaxy(
-            m_pParent, m_pPlayerManager, m_pConfig, m_pLibrary);
+            m_pParent, m_pPlayerManager, m_pConfig, m_pLibrary, palette);
     setupWidget(node, pGalaxy);
     pGalaxy->installEventFilter(m_pKeyboard);
     return pGalaxy;

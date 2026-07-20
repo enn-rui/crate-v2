@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QLabel>
@@ -32,6 +33,7 @@
 #include "mixer/playerinfo.h"
 #include "mixer/playermanager.h"
 #include "preferences/usersettings.h"
+#include "skin/legacy/legacyskinparser.h"
 #include "track/track.h"
 
 namespace {
@@ -43,6 +45,13 @@ QString goldenSidecarDir() {
     dir.cdUp(); // src
     dir.cdUp(); // repo root
     return dir.filePath(QStringLiteral("golden/fixture_lib/.crate"));
+}
+
+QString crateSkinDir() {
+    QDir dir = QFileInfo(QStringLiteral(__FILE__)).dir(); // test
+    dir.cdUp(); // src
+    dir.cdUp(); // repo root
+    return dir.filePath(QStringLiteral("res/skins/Crate"));
 }
 
 class CrateGalaxyUiTest : public ::testing::Test {
@@ -180,6 +189,39 @@ TEST_F(CrateGalaxyUiTest, LayoutComboChangesGalaxyForEveryChoice) {
     QTest::keyClick(pCombo, Qt::Key_Home);
     QApplication::processEvents();
     EXPECT_EQ(configValue("galaxy_layout"), QStringLiteral("scatter"));
+}
+
+TEST(CrateGalaxyPalette, DefaultsRemainTerminalAndCustomColorsApply) {
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    auto pConfig = UserSettingsPointer(
+            new UserSettings(tmp.filePath(QStringLiteral("palette.cfg"))));
+
+    crate::WCrateGalaxy defaults(nullptr, nullptr, pConfig);
+    EXPECT_EQ(defaults.testPalette().ground, QColor(QStringLiteral("#05060a")));
+    EXPECT_EQ(defaults.testPalette().ink, QColor(QStringLiteral("#f4f7fb")));
+    EXPECT_EQ(defaults.testPalette().accentDeckA, QColor(QStringLiteral("#b4d2ff")));
+    EXPECT_EQ(defaults.testPalette().accentDeckB, QColor(QStringLiteral("#ffb454")));
+    EXPECT_EQ(defaults.backgroundBrush().color(), QColor(QStringLiteral("#05060a")));
+
+    crate::GalaxyPalette palette;
+    palette.ground = QColor(QStringLiteral("#fdf3f8"));
+    palette.ink = QColor(QStringLiteral("#2c3357"));
+    palette.accentDeckA = QColor(QStringLiteral("#5bcefa"));
+    palette.accentDeckB = QColor(QStringLiteral("#ff66b3"));
+    crate::WCrateGalaxy custom(nullptr, nullptr, pConfig, nullptr, palette);
+    EXPECT_EQ(custom.testPalette().ground, palette.ground);
+    EXPECT_EQ(custom.testPalette().ink, palette.ink);
+    EXPECT_EQ(custom.testPalette().accentDeckA, palette.accentDeckA);
+    EXPECT_EQ(custom.testPalette().accentDeckB, palette.accentDeckB);
+    EXPECT_EQ(custom.backgroundBrush().color(), palette.ground);
+}
+
+TEST(CrateSkinSchemes, LegacyParserListsAllThreeInPreferenceOrder) {
+    EXPECT_EQ(LegacySkinParser::getSchemeList(crateSkinDir()),
+            (QList<QString>{QStringLiteral("Terminal"),
+                    QStringLiteral("Trans Pride"),
+                    QStringLiteral("Winamp Classic")}));
 }
 
 TEST_F(CrateGalaxyUiTest, ColorComboChangesGalaxyForEveryChoice) {

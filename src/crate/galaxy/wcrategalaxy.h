@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QGraphicsView>
 #include <QHash>
 #include <QLineF>
@@ -30,6 +31,13 @@ class QAbstractItemModel;
 
 namespace crate {
 
+struct GalaxyPalette {
+    QColor ground = QColor(QStringLiteral("#05060a"));
+    QColor ink = QColor(QStringLiteral("#f4f7fb"));
+    QColor accentDeckA = QColor(QStringLiteral("#b4d2ff"));
+    QColor accentDeckB = QColor(QStringLiteral("#ffb454"));
+};
+
 // The galaxy: a 2D scatter of the library's PaCMAP coordinates, colored by
 // HDBSCAN cluster (golden-ratio hue walk, faithful to Crate v1 map_view.py).
 // Double-click loads the track into the first stopped deck. Data comes
@@ -41,7 +49,8 @@ class WCrateGalaxy : public QGraphicsView {
     WCrateGalaxy(QWidget* pParent,
             PlayerManager* pPlayerManager,
             UserSettingsPointer pConfig,
-            Library* pLibrary = nullptr);
+            Library* pLibrary = nullptr,
+            GalaxyPalette palette = {});
     ~WCrateGalaxy() override;
 
     // Pure, engine-free rule for the "natural next-prep deck" (spec wave-5 S3).
@@ -91,6 +100,7 @@ class WCrateGalaxy : public QGraphicsView {
     void testClearSubset();
     QString testLayoutMode() const;
     QString testColorMode() const;
+    GalaxyPalette testPalette() const { return m_palette; }
     bool test3dMode() const { return m_3dMode; }
     bool testHalosEnabled() const { return m_halosEnabled; }
     bool testTrailEnabled() const { return m_trailEnabled; }
@@ -219,6 +229,7 @@ class WCrateGalaxy : public QGraphicsView {
     PlayerManager* m_pPlayerManager;
     Library* m_pLibrary;
     UserSettingsPointer m_pConfig;
+    GalaxyPalette m_palette;
     QGraphicsScene* m_pScene;
     QVector<GalaxyNode> m_nodes;
     QVector<QGraphicsEllipseItem*> m_dots;

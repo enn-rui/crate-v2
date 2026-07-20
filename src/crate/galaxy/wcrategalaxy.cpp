@@ -50,12 +50,14 @@ constexpr double kPillFadeEnd = 3.15;
 constexpr int kPillCellWidth = 180;
 constexpr int kPillCellHeight = 52;
 constexpr double kGhostColorStrength = 0.20;
-const QColor kGalaxyInk(0x05, 0x06, 0x0a);
-
 class GalaxyPillItem final : public QGraphicsItem {
   public:
-    GalaxyPillItem(const crate::GalaxyNode& node, const QColor& accent, int index)
-            : m_node(node), m_accent(accent) {
+    GalaxyPillItem(const crate::GalaxyNode& node,
+            const QColor& accent,
+            const QColor& ground,
+            const QColor& ink,
+            int index)
+            : m_node(node), m_accent(accent), m_ground(ground), m_ink(ink) {
         setFlag(ItemIgnoresTransformations, true);
         setData(0, index);
         setZValue(10.0);
@@ -66,8 +68,12 @@ class GalaxyPillItem final : public QGraphicsItem {
     void paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidget*) override {
         const QRectF box = boundingRect();
         p->setRenderHint(QPainter::Antialiasing, true);
-        p->setPen(QPen(QColor(244, 247, 251, 46), 1.0));
-        p->setBrush(QColor(5, 6, 10, 235));
+        QColor border(m_ink);
+        border.setAlpha(46);
+        QColor fill(m_ground);
+        fill.setAlpha(235);
+        p->setPen(QPen(border, 1.0));
+        p->setBrush(fill);
         p->drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 4.0, 4.0);
         QFont font(QStringLiteral("IBM Plex Mono"));
         font.setStyleHint(QFont::Monospace);
@@ -77,7 +83,7 @@ class GalaxyPillItem final : public QGraphicsItem {
         const auto elide = [&fm](const QString& text) {
             return fm.elidedText(text, Qt::ElideRight, 158);
         };
-        p->setPen(QColor(244, 247, 251));
+        p->setPen(m_ink);
         p->drawText(QPointF(14.0, -10.0), elide(m_node.title));
         p->drawText(QPointF(14.0, 3.0), elide(m_node.artist));
         p->setPen(m_accent.lighter(120));
@@ -95,6 +101,8 @@ class GalaxyPillItem final : public QGraphicsItem {
   private:
     crate::GalaxyNode m_node;
     QColor m_accent;
+    QColor m_ground;
+    QColor m_ink;
 };
 
 // Faithful to Crate v1 map_view._cluster_color: golden-ratio hue walk,
@@ -135,11 +143,13 @@ namespace crate {
 WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
         PlayerManager* pPlayerManager,
         UserSettingsPointer pConfig,
-        Library* pLibrary)
+        Library* pLibrary,
+        GalaxyPalette palette)
         : QGraphicsView(pParent),
           m_pPlayerManager(pPlayerManager),
           m_pLibrary(pLibrary),
           m_pConfig(pConfig),
+          m_palette(std::move(palette)),
           m_pScene(new QGraphicsScene(this)),
           m_pLayoutAnimation(new QVariantAnimation(this)) {
     setScene(m_pScene);
@@ -151,7 +161,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     if (m_debugInput) {
         qApp->installEventFilter(this);
     }
-    setBackgroundBrush(kGalaxyInk);
+    setBackgroundBrush(m_palette.ground);
     setFrameShape(QFrame::NoFrame);
     setDragMode(QGraphicsView::ScrollHandDrag);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
@@ -234,7 +244,7 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
             -kCursorRingRadius, -kCursorRingRadius,
             kCursorRingRadius * 2, kCursorRingRadius * 2);
     m_pCursorRing->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
-    m_pCursorRing->setPen(QPen(QColor(0xf4, 0xf7, 0xfb), 1.6));
+    m_pCursorRing->setPen(QPen(m_palette.ink, 1.6));
     m_pCursorRing->setBrush(Qt::NoBrush);
     m_pCursorRing->setZValue(200.0);
     m_pCursorRing->setVisible(false);
@@ -314,7 +324,7 @@ void WCrateGalaxy::populate() {
     if (sidecarDir.isEmpty()) {
         auto* pText = m_pScene->addSimpleText(
                 QStringLiteral("galaxy: set [Crate] sidecar_dir in crate.cfg"));
-        pText->setBrush(QColor(0xf4, 0xf7, 0xfb));
+        pText->setBrush(m_palette.ink);
         return;
     }
 
@@ -322,7 +332,7 @@ void WCrateGalaxy::populate() {
     if (!sidecars.load()) {
         auto* pText = m_pScene->addSimpleText(
                 QStringLiteral("galaxy: ") + sidecars.lastError());
-        pText->setBrush(QColor(0xf4, 0xf7, 0xfb));
+        pText->setBrush(m_palette.ink);
         kLogger.warning() << "sidecar load failed:" << sidecars.lastError();
         return;
     }
@@ -330,7 +340,7 @@ void WCrateGalaxy::populate() {
     if (m_nodes.isEmpty()) {
         auto* pText = m_pScene->addSimpleText(
                 QStringLiteral("galaxy: no analyzed tracks yet"));
-        pText->setBrush(QColor(0xf4, 0xf7, 0xfb));
+        pText->setBrush(m_palette.ink);
         return;
     }
     m_nodeByRelpath.reserve(m_nodes.size());
@@ -475,9 +485,9 @@ QColor WCrateGalaxy::subsetColor(int index, const QColor& color) const {
     if (nodeInSubset(index)) {
         return color;
     }
-    return QColor(qRound(kGalaxyInk.red() + (color.red() - kGalaxyInk.red()) * kGhostColorStrength),
-            qRound(kGalaxyInk.green() + (color.green() - kGalaxyInk.green()) * kGhostColorStrength),
-            qRound(kGalaxyInk.blue() + (color.blue() - kGalaxyInk.blue()) * kGhostColorStrength),
+    return QColor(qRound(m_palette.ground.red() + (color.red() - m_palette.ground.red()) * kGhostColorStrength),
+            qRound(m_palette.ground.green() + (color.green() - m_palette.ground.green()) * kGhostColorStrength),
+            qRound(m_palette.ground.blue() + (color.blue() - m_palette.ground.blue()) * kGhostColorStrength),
             color.alpha());
 }
 
@@ -609,7 +619,7 @@ void WCrateGalaxy::applyHaloVisuals() {
             pDot->setRect(-radius, -radius, radius * 2, radius * 2);
         }
         QColor deckColor = playingDeck % 2 == 0
-                ? QColor(0xb4, 0xd2, 0xff) : QColor(0xff, 0xb4, 0x54);
+                ? m_palette.accentDeckA : m_palette.accentDeckB;
         if (playingDeck >= 2) deckColor.setAlpha(153);
         pDot->setPen(playing ? QPen(deckColor, 1.2) : QPen(Qt::NoPen));
         if (playing) {
@@ -636,7 +646,8 @@ void WCrateGalaxy::applyHaloVisuals() {
         const bool visible = nodeInSubset(i) && ringDeck >= 0 && pDot->isVisible();
         pHalo->setVisible(visible);
         if (visible) {
-            QColor color = ringDeck % 2 == 0 ? QColor(0xb4, 0xd2, 0xff) : QColor(0xff, 0xb4, 0x54);
+            QColor color = ringDeck % 2 == 0
+                    ? m_palette.accentDeckA : m_palette.accentDeckB;
             color.setAlpha(ringDeck >= 2 ? 105 : qRound(80 + 110 * ringScore));
             pHalo->setBrush(Qt::NoBrush);
             pHalo->setPen(QPen(color, 1.0 + ringScore));
@@ -901,14 +912,17 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     // A code-created QMenu pops up as a native-styled (white) top-level window
     // — the skin stylesheet never reaches it. Style it ink explicitly.
     menu.setStyleSheet(QStringLiteral(
-            "QMenu { background-color: #0d1017; color: #f4f7fb;"
-            "  border: 1px solid rgba(244, 247, 251, 51); padding: 4px; }"
+            "QMenu { background-color: %1; color: %2;"
+            "  border: 1px solid %2; padding: 4px; }"
             "QMenu::item { padding: 4px 20px 4px 24px; background: transparent; }"
-            "QMenu::item:selected { background-color: #b4d2ff; color: #05060a; }"
-            "QMenu::item:disabled { color: rgba(244, 247, 251, 90); }"
+            "QMenu::item:selected { background-color: %3; color: %1; }"
+            "QMenu::item:disabled { color: %2; }"
             "QMenu::separator { height: 1px;"
-            "  background: rgba(244, 247, 251, 51); margin: 4px 6px; }"
-            "QMenu::indicator { width: 12px; height: 12px; margin-left: 6px; }"));
+            "  background: %2; margin: 4px 6px; }"
+            "QMenu::indicator { width: 12px; height: 12px; margin-left: 6px; }")
+                               .arg(m_palette.ground.name(),
+                                       m_palette.ink.name(),
+                                       m_palette.accentDeckA.name()));
     // Deck-choice load (spec wave-5 S3): if the right-click landed on a
     // selectable dot, offer "Load to Deck N" for each deck at the top. Ghosted /
     // non-selectable nodes get no deck-load entries.
@@ -986,16 +1000,18 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     font.setStyleHint(QFont::Monospace);
     font.setPixelSize(10);
     pPainter->setFont(font);
-    pPainter->setPen(QColor(0xf4, 0xf7, 0xfb));
+    pPainter->setPen(m_palette.ink);
 
     const int margin = 10;
     const int top = margin;
     if (m_colorMode == ColorMode::Key) {
         const QRect chip(margin, top, 224, 42);
-        pPainter->setBrush(QColor(0x05, 0x06, 0x0a, 205));
+        QColor chipGround(m_palette.ground);
+        chipGround.setAlpha(205);
+        pPainter->setBrush(chipGround);
         pPainter->setPen(Qt::NoPen);
         pPainter->drawRoundedRect(chip, 3, 3);
-        pPainter->setPen(QColor(0xf4, 0xf7, 0xfb));
+        pPainter->setPen(m_palette.ink);
         for (int row = 0; row < 2; ++row) {
             const int y = top + 6 + row * 17;
             pPainter->drawText(QRect(margin + 6, y, 10, 12),
@@ -1015,7 +1031,9 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
                 m_colorMode == ColorMode::Tempo ? m_tempoRange : m_energyRange;
         const QRect chip(margin, top, 196, 30);
         const QRect bar(margin + 38, top + 7, 112, 8);
-        pPainter->setBrush(QColor(0x05, 0x06, 0x0a, 205));
+        QColor chipGround(m_palette.ground);
+        chipGround.setAlpha(205);
+        pPainter->setBrush(chipGround);
         pPainter->setPen(Qt::NoPen);
         pPainter->drawRoundedRect(chip, 3, 3);
         QLinearGradient gradient(bar.topLeft(), bar.topRight());
@@ -1025,7 +1043,7 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
                     fraction, rampColor(m_colorMode == ColorMode::Tempo, fraction));
         }
         pPainter->fillRect(bar, gradient);
-        pPainter->setPen(QColor(0xf4, 0xf7, 0xfb));
+        pPainter->setPen(m_palette.ink);
         const QString low = range.valid ? QString::number(range.low, 'f', 1) : QStringLiteral("--");
         const QString high = range.valid ? QString::number(range.high, 'f', 1) : QStringLiteral("--");
         pPainter->drawText(QRect(margin + 5, top + 5, 30, 12), Qt::AlignRight, low);
@@ -1170,8 +1188,9 @@ void WCrateGalaxy::rebuildOverlayCache() {
             const double freshness = qBound(0.0, (12.0 - age) / 12.0, 1.0);
             m_trailDeviceLines.append(QLineF(mapFromScene(m_dots[m_playTrail[i]]->pos()),
                     mapFromScene(m_dots[m_playTrail[i + 1]]->pos())));
-            m_trailDeviceColors.append(QColor(0xf4, 0xf7, 0xfb,
-                    qRound(38 + 170 * freshness)));
+            QColor trailColor(m_palette.ink);
+            trailColor.setAlpha(qRound(38 + 170 * freshness));
+            m_trailDeviceColors.append(trailColor);
         }
     }
     if (m_halosEnabled) {
@@ -1181,7 +1200,7 @@ void WCrateGalaxy::rebuildOverlayCache() {
                     !m_dots[segment.from]->isVisible() || !m_dots[segment.to]->isVisible()) continue;
             const double strength = qBound(0.0, (segment.score - 0.5) / 0.5, 1.0);
             QColor color = segment.deck % 2 == 0
-                    ? QColor(0xb4, 0xd2, 0xff) : QColor(0xff, 0xb4, 0x54);
+                    ? m_palette.accentDeckA : m_palette.accentDeckB;
             color.setAlpha(qRound((segment.deck >= 2 ? 0.6 : 1.0) * (24 + 180 * strength)));
             m_plexusDeviceLines.append(QLineF(mapFromScene(m_dots[segment.from]->pos()),
                     mapFromScene(m_dots[segment.to]->pos())));
@@ -1451,7 +1470,11 @@ void WCrateGalaxy::updatePills() {
     for (int index : std::as_const(wanted)) {
         QGraphicsItem* pPill = m_pills.value(index, nullptr);
         if (pPill == nullptr) {
-            pPill = new GalaxyPillItem(m_nodes[index], nodeColor(m_nodes[index]), index);
+            pPill = new GalaxyPillItem(m_nodes[index],
+                    nodeColor(m_nodes[index]),
+                    m_palette.ground,
+                    m_palette.ink,
+                    index);
             m_pScene->addItem(pPill);
             m_pills.insert(index, pPill);
         }
