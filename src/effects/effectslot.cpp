@@ -211,7 +211,7 @@ void EffectSlot::initializeInputChannel(ChannelHandle inputChannel) {
     if (!m_pEngineEffect) {
         return;
     }
-    m_pEngineEffect->initializeInputChannel(inputChannel);
+    m_pEngineEffect->initializeInputChannel(inputChannel, m_pControlEnabled->toBool());
 };
 
 EffectManifestPointer EffectSlot::getManifest() const {

@@ -46,6 +46,25 @@ listed here. This list is the entire merge-conflict surface for future `upstream
   so a real setup is never clobbered; the fix self-heals on next launch. Routing
   (unit N -> deck N) is unchanged upstream behaviour from StandardEffectChain's ctor.
   Small, additive; low merge risk.
+- FX 4-deck routing fix (2026-07-20): CMakeLists.txt (+src/test/crate_fx_routing_test.cpp),
+  src/engine/effects/engineeffect.h and .cpp, src/effects/effectslot.cpp. Bug: effects had
+  no audible effect on decks 3/4 in 4-deck mode. EngineEffect's per-channel enable-state
+  matrix (m_effectEnableStateForChannelMatrix) was only populated in the ctor and only
+  ever flipped -- never inserted -- by SET_EFFECT_PARAMETERS. Decks 3/4 are registered as
+  effect input channels only AFTER EffectsManager::setup() has built the standard units and
+  seeded Echo/Reverb (the Crate skin raises [App],num_decks to 4 at skin-load, well after
+  coreservices' addConfiguredDecks + setup()). A channel missing from the matrix is treated
+  as Disabled by EngineEffect::process(), so the loaded effect silently ignored it, even
+  though the group_[ChannelN]_enable CO existed and toggled and the CHAIN-level late-add
+  path (EngineEffectChain::enableForInputChannel) worked. Fix: EngineEffect::initializeInputChannel
+  now takes the effect's current enable state and, mirroring the ctor, inserts a missing
+  input channel into the matrix (set to Enabling when the effect is on) -- same main-thread,
+  pre-ENABLE-message ordering the EffectProcessor state allocation already relies on, and the
+  channel is not routed to the effect until the later chain ENABLE message. EffectSlot::initializeInputChannel
+  passes m_pControlEnabled->toBool() through; its own signature and EffectChain are unchanged.
+  Small, additive, no behaviour change for decks present at load. This also fixes the latent
+  upstream case of any input channel (e.g. skin-added samplers) registered after an effect is
+  loaded and then routed to that effect's standard unit.
 - identity rename pass: CMakeLists.txt, src/config.h.in, src/dialog/dlgabout.cpp,
   src/dialog/dlgaboutdlg.ui, src/mixxx.rc, src/util/cmdlineargs.cpp,
   src/util/versionstore.cpp

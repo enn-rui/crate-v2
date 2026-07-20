@@ -29,12 +29,12 @@ EngineEffect::EngineEffect(EffectManifestPointer pManifest,
         m_parametersById[param->id()] = pParameter;
     }
 
+    for (const ChannelHandleAndGroup& outputChannel : registeredOutputChannels) {
+        m_disabledOutputChannelMap.insert(outputChannel.handle(), EffectEnableState::Disabled);
+    }
     for (const ChannelHandleAndGroup& inputChannel : registeredInputChannels) {
-        ChannelHandleMap<EffectEnableState> outputChannelMap;
-        for (const ChannelHandleAndGroup& outputChannel : registeredOutputChannels) {
-            outputChannelMap.insert(outputChannel.handle(), EffectEnableState::Disabled);
-        }
-        m_effectEnableStateForChannelMatrix.insert(inputChannel.handle(), outputChannelMap);
+        m_effectEnableStateForChannelMatrix.insert(
+                inputChannel.handle(), m_disabledOutputChannelMap);
     }
 
     m_pProcessor->loadEngineEffectParameters(m_parametersById);
@@ -53,17 +53,40 @@ EngineEffect::~EngineEffect() {
     }
 }
 
-void EngineEffect::initializeInputChannel(ChannelHandle inputChannel) {
-    if (m_pProcessor->hasStatesForInputChannel(inputChannel)) {
-        // already initialized for this input channel
-        return;
+void EngineEffect::initializeInputChannel(ChannelHandle inputChannel, bool effectEnabled) {
+    if (!m_pProcessor->hasStatesForInputChannel(inputChannel)) {
+        // At this point the SoundDevice is not set up so we use the kInitalSampleRate.
+        const mixxx::EngineParameters engineParameters(
+                kInitalSampleRate,
+                kMaxEngineFrames);
+        m_pProcessor->initializeInputChannel(inputChannel, engineParameters);
     }
 
-    // At this point the SoundDevice is not set up so we use the kInitalSampleRate.
-    const mixxx::EngineParameters engineParameters(
-            kInitalSampleRate,
-            kMaxEngineFrames);
-    m_pProcessor->initializeInputChannel(inputChannel, engineParameters);
+    // m_effectEnableStateForChannelMatrix is only populated in the constructor and
+    // its entries are only ever flipped (never inserted) by SET_EFFECT_PARAMETERS.
+    // An input channel registered after this effect was loaded is therefore missing
+    // from the matrix, and process() treats a missing entry as Disabled, silently
+    // ignoring the channel. This is what caused effects to have no audible effect on
+    // decks 3/4, which are created when the Crate skin raises [App],num_decks to 4
+    // after the standard effect chains (and their seeded effects) already exist.
+    //
+    // Add the channel now, mirroring the constructor. Running on the main thread
+    // before the caller sends ENABLE_EFFECT_CHAIN_FOR_INPUT_CHANNEL is the same
+    // ordering the EffectProcessor state allocation above already relies on, and the
+    // channel is not routed to this effect (so the audio thread does not touch its
+    // row) until that later message is processed.
+    if (m_effectEnableStateForChannelMatrix[inputChannel].isEmpty()) {
+        m_effectEnableStateForChannelMatrix.insert(
+                inputChannel, m_disabledOutputChannelMap);
+        if (effectEnabled) {
+            // Bring the fresh row in line with the effect's current enable state so
+            // processing starts on the next callback, exactly as SET_EFFECT_PARAMETERS
+            // would have done had the channel existed when the effect was enabled.
+            for (auto& enableState : m_effectEnableStateForChannelMatrix[inputChannel]) {
+                enableState = EffectEnableState::Enabling;
+            }
+        }
+    }
 }
 
 bool EngineEffect::processEffectsRequest(const EffectsRequest& message,
