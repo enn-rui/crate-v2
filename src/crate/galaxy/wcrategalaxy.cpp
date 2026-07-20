@@ -12,6 +12,7 @@
 #include <QFontMetrics>
 #include <QLinearGradient>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTimer>
@@ -32,12 +33,15 @@
 #include "control/controlobject.h"
 #include "control/controlproxy.h"
 #include "control/controlpushbutton.h"
+#include "crate/cull/cullclient.h"
+#include "crate/grab/grabclient.h"
 #include "crate/intelligence/scores.h"
 #include "library/library.h"
 #include "library/trackcollectionmanager.h"
 #include "library/trackmodel.h"
 #include "mixer/playerinfo.h"
 #include "mixer/playermanager.h"
+#include "track/trackref.h"
 #include "track/track.h"
 #include "track/trackid.h"
 #include "util/logger.h"
@@ -1041,6 +1045,42 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     m_lastContextMenuNode = node;
     if (node >= 0) {
         addDeckLoadActions(&menu, node);
+        QAction* pCull = menu.addAction(tr("Cull to trash"));
+        pCull->setEnabled(m_pLibrary != nullptr);
+        connect(pCull, &QAction::triggered, this, [this, node] {
+            const QString relpath = m_nodes[node].relpath;
+            const QString location = resolveMusicPath(relpath);
+            if (QMessageBox::question(this, tr("Cull to Trash"),
+                        tr("Move this file to Trash?\n\n%1").arg(location),
+                        QMessageBox::Cancel | QMessageBox::Yes,
+                        QMessageBox::Cancel) != QMessageBox::Yes) {
+                return;
+            }
+            auto* client = new CullClient(
+                    GrabClient::configuredBaseUrl(m_pConfig),
+                    GrabClient::configuredToken(m_pConfig), this);
+            connect(client, &CullClient::cullFailed, this,
+                    [this, client](const QString& error) {
+                        QMessageBox::warning(this, tr("Cull to Trash"), error);
+                        client->deleteLater();
+                    });
+            connect(client, &CullClient::cullSucceeded, this,
+                    [this, client, location](const QString&) {
+                        auto* manager = m_pLibrary->trackCollectionManager();
+                        const QList<TrackId> ids =
+                                manager->resolveTrackIdsFromLocations({location});
+                        if (!ids.isEmpty()) {
+                            manager->purgeTracks(
+                                    {TrackRef::fromFilePath(location, ids.first())});
+                        }
+                        ControlObject::set(
+                                ConfigKey("[Crate]", "galaxy_reload"), 1.0);
+                        ControlObject::set(
+                                ConfigKey("[Crate]", "galaxy_reload"), 0.0);
+                        client->deleteLater();
+                    });
+            client->cull(relpath);
+        });
         menu.addSeparator();
     }
     const int clusterId = clusterLabelAt(pEvent->pos());

@@ -2,6 +2,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "crate/cull/cullclient.h"
 #include "preferences/dialog/dlgpreferencepage.h"
 #include "preferences/usersettings.h"
 
@@ -9,6 +10,7 @@ class QCheckBox;
 class QLineEdit;
 class QLabel;
 class QSpinBox;
+class QPushButton;
 class TrackCollectionManager;
 
 class DlgPrefCrate final : public DlgPreferencePage {
@@ -29,6 +31,9 @@ class DlgPrefCrate final : public DlgPreferencePage {
     QString findAnalysisScript() const;
     bool prepareAnalysisDirectories(QString* pMusicRoot, QString* pSidecarDir);
     void launchAnalysis();
+    void refreshTrash();
+    void restoreTrash();
+    void emptyTrash();
 
     FRIEND_TEST(CratePrefsTest, AnalysisDefaultsSidecarWithoutClobbering);
     FRIEND_TEST(CratePrefsTest, AnalysisPreservesConfiguredSidecar);
@@ -44,4 +49,9 @@ class DlgPrefCrate final : public DlgPreferencePage {
     QLabel* m_pAnalysisStatus;
     QCheckBox* m_pGalaxyTrail;
     QCheckBox* m_pGalaxyHalos;
+    QLabel* m_pTrashStatus;
+    QPushButton* m_pRestoreTrash;
+    QPushButton* m_pEmptyTrash;
+    crate::CullClient* m_pCullClient = nullptr;
+    QVector<crate::TrashEntry> m_trashEntries;
 };

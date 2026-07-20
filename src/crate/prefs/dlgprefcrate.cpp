@@ -2,6 +2,7 @@
 
 #include <QCheckBox>
 #include <QCoreApplication>
+#include <QDialog>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -10,12 +11,18 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
+#include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QProcess>
 #include <QSpinBox>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "library/trackcollection.h"
+#include "crate/cull/cullclient.h"
+#include "crate/grab/grabclient.h"
 #include "library/trackcollectionmanager.h"
 #include "moc_dlgprefcrate.cpp"
 
@@ -65,6 +72,23 @@ DlgPrefCrate::DlgPrefCrate(QWidget* pParent,
     pGrabLayout->addRow(note(tr("Leave empty to hide GRAB from the sidebar (restart applies).")));
     pLayout->addWidget(pGrab);
 
+    auto* pTrash = new QGroupBox(tr("Trash"), this);
+    auto* pTrashLayout = new QHBoxLayout(pTrash);
+    m_pTrashStatus = note(tr("Checking trash..."));
+    m_pTrashStatus->setObjectName(QStringLiteral("trashStatus"));
+    m_pRestoreTrash = new QPushButton(tr("Restore..."), pTrash);
+    m_pRestoreTrash->setObjectName(QStringLiteral("restoreTrash"));
+    m_pEmptyTrash = new QPushButton(tr("Empty Trash"), pTrash);
+    m_pEmptyTrash->setObjectName(QStringLiteral("emptyTrash"));
+    m_pRestoreTrash->setEnabled(false);
+    m_pEmptyTrash->setEnabled(false);
+    pTrashLayout->addWidget(m_pTrashStatus, 1);
+    pTrashLayout->addWidget(m_pRestoreTrash);
+    pTrashLayout->addWidget(m_pEmptyTrash);
+    connect(m_pRestoreTrash, &QPushButton::clicked, this, &DlgPrefCrate::restoreTrash);
+    connect(m_pEmptyTrash, &QPushButton::clicked, this, &DlgPrefCrate::emptyTrash);
+    pLayout->addWidget(pTrash);
+
     auto* pAnalysis = new QGroupBox(tr("Analysis"), this);
     auto* pAnalysisLayout = new QFormLayout(pAnalysis);
     m_pAutoAnalyze = new QCheckBox(
@@ -98,6 +122,72 @@ DlgPrefCrate::DlgPrefCrate(QWidget* pParent,
 
     setScrollSafeGuardForAllInputWidgets(this);
     slotUpdate();
+    QTimer::singleShot(0, this, &DlgPrefCrate::refreshTrash);
+}
+
+void DlgPrefCrate::refreshTrash() {
+    if (m_pCullClient) {
+        m_pCullClient->deleteLater();
+    }
+    const QString url = m_pGrabUrl->text().trimmed();
+    if (url.isEmpty()) {
+        m_pTrashStatus->setText(tr("Trash service is not configured."));
+        m_pRestoreTrash->setEnabled(false);
+        m_pEmptyTrash->setEnabled(false);
+        return;
+    }
+    m_pTrashStatus->setText(tr("Checking trash..."));
+    m_pCullClient = new crate::CullClient(url, m_pGrabToken->text(), this);
+    connect(m_pCullClient, &crate::CullClient::trashReady, this,
+            [this](const QVector<crate::TrashEntry>& entries, qint64 totalSize) {
+                m_trashEntries = entries;
+                m_pTrashStatus->setText(tr("%1 files, %2")
+                        .arg(entries.size()).arg(QLocale().formattedDataSize(totalSize)));
+                m_pRestoreTrash->setEnabled(!entries.isEmpty());
+                m_pEmptyTrash->setEnabled(!entries.isEmpty());
+            });
+    connect(m_pCullClient, &crate::CullClient::trashFailed, this,
+            [this](const QString& error) {
+                m_pTrashStatus->setText(error);
+                m_pRestoreTrash->setEnabled(false);
+                m_pEmptyTrash->setEnabled(false);
+            });
+    connect(m_pCullClient, &crate::CullClient::restoreSucceeded,
+            this, [this](const QString&) { refreshTrash(); });
+    connect(m_pCullClient, &crate::CullClient::restoreFailed,
+            this, [this](const QString& error) { QMessageBox::warning(this, tr("Restore"), error); });
+    connect(m_pCullClient, &crate::CullClient::emptySucceeded,
+            this, [this](int) { refreshTrash(); });
+    connect(m_pCullClient, &crate::CullClient::emptyFailed,
+            this, [this](const QString& error) { QMessageBox::warning(this, tr("Empty Trash"), error); });
+    m_pCullClient->requestTrash();
+}
+
+void DlgPrefCrate::restoreTrash() {
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Restore from Trash"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* list = new QListWidget(&dialog);
+    for (const auto& entry : std::as_const(m_trashEntries)) {
+        auto* item = new QListWidgetItem(entry.relpath, list);
+        item->setData(Qt::UserRole, entry.relpath);
+    }
+    layout->addWidget(list);
+    auto* restore = new QPushButton(tr("Restore Selected"), &dialog);
+    layout->addWidget(restore);
+    connect(restore, &QPushButton::clicked, &dialog, &QDialog::accept);
+    if (dialog.exec() == QDialog::Accepted && list->currentItem() && m_pCullClient) {
+        m_pCullClient->restore(list->currentItem()->data(Qt::UserRole).toString());
+    }
+}
+
+void DlgPrefCrate::emptyTrash() {
+    if (!m_pCullClient || QMessageBox::warning(this, tr("Empty Trash"),
+                tr("Permanently delete every file in Trash? This cannot be undone."),
+                QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Cancel) != QMessageBox::Yes) {
+        return;
+    }
+    m_pCullClient->emptyTrash();
 }
 
 QString DlgPrefCrate::findAnalysisScript() const {
