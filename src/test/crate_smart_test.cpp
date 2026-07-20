@@ -26,13 +26,14 @@ namespace {
 class CrateAutoAnalyzeTest : public LibraryTest {
 };
 
-TEST_F(CrateAutoAnalyzeTest, EnqueuesFullLibraryByDefault) {
+TEST_F(CrateAutoAnalyzeTest, EnqueuesOnlyUnanalyzedTracks) {
     const auto first = getOrAddTrackByLocation(
             getTestDir().filePath(QStringLiteral("id3-test-data/artist.mp3")));
     const auto second = getOrAddTrackByLocation(
             getTestDir().filePath(QStringLiteral("id3-test-data/empty.mp3")));
 
-    const auto scheduled = crate::autoAnalyzeTracks(
+    // Both fixture tracks lack bpm/key -> both enqueue.
+    auto scheduled = crate::autoAnalyzeTracks(
             config(), internalCollection()->database());
     ASSERT_EQ(scheduled.size(), 2);
     QSet<TrackId> ids;
@@ -40,6 +41,27 @@ TEST_F(CrateAutoAnalyzeTest, EnqueuesFullLibraryByDefault) {
         ids.insert(track.getTrackId());
     }
     EXPECT_EQ(ids, (QSet<TrackId>{first->getId(), second->getId()}));
+
+    // Regression ("it reanalyzes all of my tracks every time"): an analyzed
+    // track must NOT be enqueued again — a fully-analyzed library enqueues
+    // nothing at startup.
+    QSqlQuery update(internalCollection()->database());
+    update.prepare(QStringLiteral(
+            "UPDATE library SET bpm=128, key='8A' WHERE id=:id"));
+    update.bindValue(QStringLiteral(":id"), first->getId().toVariant());
+    ASSERT_TRUE(update.exec());
+
+    scheduled = crate::autoAnalyzeTracks(
+            config(), internalCollection()->database());
+    ASSERT_EQ(scheduled.size(), 1);
+    EXPECT_EQ(scheduled.first().getTrackId(), second->getId());
+
+    update.prepare(QStringLiteral(
+            "UPDATE library SET bpm=140, key='5B' WHERE id=:id"));
+    update.bindValue(QStringLiteral(":id"), second->getId().toVariant());
+    ASSERT_TRUE(update.exec());
+    EXPECT_TRUE(crate::autoAnalyzeTracks(
+            config(), internalCollection()->database()).isEmpty());
 }
 
 TEST_F(CrateAutoAnalyzeTest, DisabledEnqueuesNothing) {
