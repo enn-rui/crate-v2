@@ -144,9 +144,18 @@ class WCrateGalaxy : public QGraphicsView {
     void testPanBy(int dx, int dy) { scrollContentsBy(dx, dy); }
     QVector<QRectF> testLabelRects() const;
     QStringList testTrackLabelRelpaths() const;
+    QStringList testDrawableTrackLabelRelpaths() const;
+    int testLastDoubleClickNode() const { return m_lastDoubleClickNode; }
+    int testLastContextMenuNode() const { return m_lastContextMenuNode; }
+    int testLastRightClickNode() const { return m_lastRightClickNode; }
+    int testHoveredNode() const { return m_hoveredNode; }
     void testScaleAndRebuild(double factor) { scale(factor, factor); rebuildLabelCache(); }
     QString testNodeArtist(int index) const;
     void testSetNodeDisplayPosition(int index, const QPointF& position);
+    void testSetNodeDisplayPositionWithoutLabelRebuild(
+            int index, const QPointF& position);
+    QRectF testTrackLabelViewportRect(int index) const;
+    int testTrackLabelNodeIndex(int index) const;
     void testSetAllNodeDisplayPositions(const QPointF& position);
     // Deck-load context-menu labels for a node (empty if the node is not
     // selectable / ghosted). Playing decks are annotated "(playing)".
@@ -296,6 +305,9 @@ class WCrateGalaxy : public QGraphicsView {
     QTimer* m_pLabelRebuildTimer = nullptr;
     int m_labelRebuildCount = 0;
     int m_labelDropCount = 0;
+    int m_lastDoubleClickNode = -1;
+    int m_lastContextMenuNode = -1;
+    int m_lastRightClickNode = -1;
     int m_sidecarRebuildCount = 0;
     QDateTime m_lastSidecarModified;
     QString m_musicRoot;

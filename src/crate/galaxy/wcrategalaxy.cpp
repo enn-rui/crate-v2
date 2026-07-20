@@ -84,7 +84,11 @@ class GalaxyPillItem final : public QGraphicsItem {
     QRectF boundingRect() const override {
         return QRectF(7.0, -25.0, 172.0, 50.0);
     }
-    void paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidget*) override {
+    void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget*) override {
+        // The item remains in the scene for geometry and hit testing, but the
+        // visual is painted by WCrateGalaxy::drawForeground after all labels.
+    }
+    void paintVisual(QPainter* p) const {
         const QRectF box = boundingRect();
         p->setRenderHint(QPainter::Antialiasing, true);
         QColor border(m_ink);
@@ -1034,6 +1038,7 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     // selectable dot, offer "Load to Deck N" for each deck at the top. Ghosted /
     // non-selectable nodes get no deck-load entries.
     const int node = nodeAtViewportPos(pEvent->pos());
+    m_lastContextMenuNode = node;
     if (node >= 0) {
         addDeckLoadActions(&menu, node);
         menu.addSeparator();
@@ -1121,10 +1126,35 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     // Leader geometry is intentionally derived from the live transform. The
     // device-space label offset is cached, but pan/zoom can move its scene
     // anchor between debounced cache rebuilds.
+    QRectF pillRect;
+    int pillNode = -1;
+    GalaxyPillItem* pVisiblePill = nullptr;
+    if (m_pills.size() == 1) {
+        auto it = m_pills.constBegin();
+        pillNode = it.key();
+        pVisiblePill = dynamic_cast<GalaxyPillItem*>(it.value());
+        if (pVisiblePill != nullptr && pVisiblePill->isVisible() &&
+                pillNode >= 0 && pillNode < m_dots.size()) {
+            pillRect = pVisiblePill->boundingRect().translated(
+                    mapFromScene(m_dots[pillNode]->pos()));
+        }
+    }
+    const auto labelSuppressed = [this, pillNode, pillRect](const MapLabel& label) {
+        if (pillNode < 0 || pillRect.isEmpty()) {
+            return false;
+        }
+        if (label.nodeIndex == pillNode) {
+            return true;
+        }
+        const QRectF labelRect(mapFromScene(label.sceneAnchor) + label.pixmapOffset,
+                label.logicalSize);
+        return labelRect.intersects(pillRect);
+    };
     QHash<QRgb, QVector<QLineF>> leaderBatches;
     if (!leadersSuppressed()) {
         for (const MapLabel& label : std::as_const(m_trackLabels)) {
-            if (!label.hasLeader || label.nodeIndex < 0 || label.opacity < 0.5) {
+            if (!label.hasLeader || label.nodeIndex < 0 || label.opacity < 0.5 ||
+                    labelSuppressed(label)) {
                 continue;
             }
             const QPointF dotCenter = mapFromScene(label.sceneAnchor);
@@ -1146,8 +1176,11 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
         pPainter->setPen(QPen(QColor::fromRgba(it.key()), 1.0));
         pPainter->drawLines(it.value());
     }
-    const auto drawLabels = [pPainter, this](const QVector<MapLabel>& labels) {
+    const auto drawLabels = [pPainter, this, &labelSuppressed](const QVector<MapLabel>& labels) {
         for (const MapLabel& label : labels) {
+            if (labelSuppressed(label)) {
+                continue;
+            }
             pPainter->setOpacity(label.opacity);
             pPainter->drawPixmap(mapFromScene(label.sceneAnchor) + label.pixmapOffset,
                     label.pixmap);
@@ -1157,6 +1190,12 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
     drawLabels(m_artistLabels);
     drawLabels(m_trackLabels);
     pPainter->setOpacity(1.0);
+    if (pVisiblePill != nullptr && !pillRect.isEmpty()) {
+        pPainter->save();
+        pPainter->translate(pillRect.topLeft() - pVisiblePill->boundingRect().topLeft());
+        pVisiblePill->paintVisual(pPainter);
+        pPainter->restore();
+    }
     pPainter->restore();
     if (m_colorMode == ColorMode::Cluster) {
         return;
@@ -1503,6 +1542,9 @@ void WCrateGalaxy::mousePressEvent(QMouseEvent* pEvent) {
     if (m_debugInput) {
         kLogger.info() << "ORBITDBG press button=" << pEvent->button()
                        << "3d=" << m_3dMode << "pos=" << pEvent->pos();
+    }
+    if (pEvent->button() == Qt::RightButton) {
+        m_lastRightClickNode = nodeAtViewportPos(pEvent->pos());
     }
     if (m_3dMode && pEvent->button() == Qt::LeftButton) {
         m_orbiting = true;
@@ -2392,6 +2434,27 @@ QStringList WCrateGalaxy::testTrackLabelRelpaths() const {
     return result;
 }
 
+QStringList WCrateGalaxy::testDrawableTrackLabelRelpaths() const {
+    QStringList result;
+    QRectF pillRect;
+    if (m_pills.size() == 1) {
+        const auto it = m_pills.constBegin();
+        if (it.value()->isVisible() && it.key() >= 0 && it.key() < m_dots.size()) {
+            pillRect = it.value()->boundingRect().translated(
+                    mapFromScene(m_dots[it.key()]->pos()));
+        }
+    }
+    for (const MapLabel& label : m_trackLabels) {
+        const QRectF labelRect(mapFromScene(label.sceneAnchor) + label.pixmapOffset,
+                label.logicalSize);
+        if (label.nodeIndex != m_hoveredNode &&
+                (pillRect.isEmpty() || !labelRect.intersects(pillRect))) {
+            result.append(m_nodes[label.nodeIndex].relpath);
+        }
+    }
+    return result;
+}
+
 int WCrateGalaxy::testVisibleSelectableNodeCount() const {
     const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
     int count = 0;
@@ -2582,6 +2645,7 @@ QString WCrateGalaxy::testColorMode() const {
 
 void WCrateGalaxy::mouseDoubleClickEvent(QMouseEvent* pEvent) {
     const int node = nodeAtViewportPos(pEvent->pos());
+    m_lastDoubleClickNode = node;
     if (node < 0 || m_pPlayerManager == nullptr) {
         QGraphicsView::mouseDoubleClickEvent(pEvent);
         return;
@@ -2638,6 +2702,26 @@ void WCrateGalaxy::showEvent(QShowEvent* pEvent) {
         }
         rebuildLabelCache();
     }
+}
+
+void WCrateGalaxy::testSetNodeDisplayPositionWithoutLabelRebuild(
+        int index, const QPointF& position) {
+    if (index < 0 || index >= m_dots.size()) return;
+    m_dots[index]->setPos(position);
+    m_halos[index]->setPos(position);
+}
+
+QRectF WCrateGalaxy::testTrackLabelViewportRect(int index) const {
+    if (index < 0 || index >= m_trackLabels.size()) return {};
+    const MapLabel& label = m_trackLabels[index];
+    return QRectF(mapFromScene(label.sceneAnchor) + label.pixmapOffset,
+            label.logicalSize);
+}
+
+int WCrateGalaxy::testTrackLabelNodeIndex(int index) const {
+    return index >= 0 && index < m_trackLabels.size()
+            ? m_trackLabels[index].nodeIndex
+            : -1;
 }
 
 void WCrateGalaxy::focusInEvent(QFocusEvent* pEvent) {

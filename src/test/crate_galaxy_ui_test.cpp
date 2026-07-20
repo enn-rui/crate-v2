@@ -1142,6 +1142,62 @@ TEST_F(CrateGalaxyUiTest, PillIsAnAliasOfItsDotAndDotStaysVisible) {
     }
 }
 
+TEST_F(CrateGalaxyUiTest, HoverPillSuppressesOwnAndOverlappingLabelsWithoutRebuild) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/5.0, /*dense=*/true);
+    settleLabelRebuilds();
+    const QStringList allLabels = m_pGalaxy->testTrackLabelRelpaths();
+    ASSERT_GT(allLabels.size(), 1);
+    const int rebuilds = m_pGalaxy->testLabelRebuildCount();
+
+    const int hovered = m_pGalaxy->testTrackLabelNodeIndex(0);
+    const int overlapped = m_pGalaxy->testTrackLabelNodeIndex(1);
+    ASSERT_GE(hovered, 0);
+    ASSERT_GE(overlapped, 0);
+    ASSERT_NE(hovered, overlapped);
+    const QPoint target = m_pGalaxy->testTrackLabelViewportRect(1).center().toPoint();
+    const QPoint anchor = target - QPoint(60, 0);
+    m_pGalaxy->testSetNodeDisplayPositionWithoutLabelRebuild(
+            hovered, m_pGalaxy->mapToScene(anchor));
+    QMouseEvent hover(QEvent::MouseMove, QPointF(anchor),
+            m_pGalaxy->viewport()->mapToGlobal(anchor), Qt::NoButton,
+            Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(m_pGalaxy->viewport(), &hover);
+    QApplication::processEvents();
+    ASSERT_EQ(m_pGalaxy->testHoveredNode(), hovered);
+    const QStringList drawn = m_pGalaxy->testDrawableTrackLabelRelpaths();
+    EXPECT_FALSE(drawn.contains(m_pGalaxy->testNodeRelpath(hovered)));
+    EXPECT_FALSE(drawn.contains(m_pGalaxy->testNodeRelpath(overlapped)));
+    EXPECT_GE(allLabels.size() - drawn.size(), 2);
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
+
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(m_pGalaxy.get(), &leave);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testDrawableTrackLabelRelpaths(), allLabels);
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
+}
+
+TEST_F(CrateGalaxyUiTest, PillBodyRoutesDoubleClickAndRightClickToItsNode) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 0);
+    const int node = 0;
+    const QPoint anchor = m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(node));
+    QMouseEvent hover(QEvent::MouseMove, QPointF(anchor),
+            m_pGalaxy->viewport()->mapToGlobal(anchor), Qt::NoButton,
+            Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(m_pGalaxy->viewport(), &hover);
+    QApplication::processEvents();
+    const QPoint onPill = anchor + QPoint(60, 0);
+    ASSERT_GT((onPill - anchor).manhattanLength(), 14);
+
+    QTest::mouseDClick(m_pGalaxy->viewport(), Qt::LeftButton, Qt::NoModifier, onPill);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLastDoubleClickNode(), node);
+
+    QTest::mouseClick(m_pGalaxy->viewport(), Qt::RightButton, Qt::NoModifier, onPill);
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLastRightClickNode(), node);
+}
+
 TEST_F(CrateGalaxyUiTest, LocationResolvesUnderAnyRootSpelling) {
     // Regression: her real profile stored music_root as the UNC share while the
     // Mixxx library held Z:/ locations — the old music_root prefix strip
