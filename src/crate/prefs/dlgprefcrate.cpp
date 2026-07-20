@@ -1,13 +1,17 @@
 #include "crate/prefs/dlgprefcrate.h"
 
 #include <QCheckBox>
+#include <QCoreApplication>
+#include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QProcess>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -66,6 +70,13 @@ DlgPrefCrate::DlgPrefCrate(QWidget* pParent, UserSettingsPointer pConfig)
     m_pAnalyzerThreads->setSpecialValueText(tr("Automatic (half the CPU cores)"));
     pAnalysisLayout->addRow(m_pAutoAnalyze);
     pAnalysisLayout->addRow(tr("Background workers"), m_pAnalyzerThreads);
+    auto* pAnalyzeLibrary = new QPushButton(tr("Analyze library"), pAnalysis);
+    pAnalyzeLibrary->setObjectName(QStringLiteral("analyzeLibrary"));
+    m_pAnalysisStatus = note(QString());
+    m_pAnalysisStatus->setObjectName(QStringLiteral("analysisStatus"));
+    pAnalysisLayout->addRow(pAnalyzeLibrary);
+    pAnalysisLayout->addRow(m_pAnalysisStatus);
+    connect(pAnalyzeLibrary, &QPushButton::clicked, this, &DlgPrefCrate::launchAnalysis);
     pLayout->addWidget(pAnalysis);
 
     auto* pMap = new QGroupBox(tr("Map"), this);
@@ -81,6 +92,59 @@ DlgPrefCrate::DlgPrefCrate(QWidget* pParent, UserSettingsPointer pConfig)
 
     setScrollSafeGuardForAllInputWidgets(this);
     slotUpdate();
+}
+
+QString DlgPrefCrate::findAnalysisScript() const {
+    const QString relativePath = QStringLiteral("tools/analysis/analyze.ps1");
+    const QDir resourceDir(m_pConfig->getResourcePath());
+    const QStringList candidates{
+            resourceDir.absoluteFilePath(QStringLiteral("../") + relativePath),
+            QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(relativePath),
+            QDir(QCoreApplication::applicationDirPath())
+                    .absoluteFilePath(QStringLiteral("../") + relativePath),
+    };
+    for (const QString& candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (info.isFile()) {
+            return info.absoluteFilePath();
+        }
+    }
+    return QString();
+}
+
+void DlgPrefCrate::launchAnalysis() {
+    const QString script = findAnalysisScript();
+    if (script.isEmpty()) {
+        m_pAnalysisStatus->setText(tr("analysis tools not found"));
+        return;
+    }
+
+    QStringList arguments{
+            QStringLiteral("-NoExit"),
+            QStringLiteral("-ExecutionPolicy"),
+            QStringLiteral("Bypass"),
+            QStringLiteral("-File"),
+            script,
+    };
+    const QString musicRoot = m_pMusicRoot->text().trimmed();
+    if (!musicRoot.isEmpty()) {
+        arguments.append(QStringLiteral("-Root"));
+        arguments.append(musicRoot);
+    } else {
+        arguments = {
+                QStringLiteral("-NoExit"),
+                QStringLiteral("-Command"),
+                tr("Write-Host 'Set Music library in Crate preferences, or run analyze.ps1 -Root <music folder>.'"),
+        };
+    }
+
+    if (QProcess::startDetached(QStringLiteral("powershell.exe"), arguments)) {
+        m_pAnalysisStatus->setText(tr(
+                "analysis started in a separate window - use the MAP refresh "
+                "(or restart) when it finishes."));
+    } else {
+        m_pAnalysisStatus->setText(tr("analysis could not be started"));
+    }
 }
 
 QLineEdit* DlgPrefCrate::addDirectoryRow(

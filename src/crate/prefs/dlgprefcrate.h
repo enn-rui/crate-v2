@@ -5,6 +5,7 @@
 
 class QCheckBox;
 class QLineEdit;
+class QLabel;
 class QSpinBox;
 
 class DlgPrefCrate final : public DlgPreferencePage {
@@ -20,6 +21,8 @@ class DlgPrefCrate final : public DlgPreferencePage {
 
   private:
     QLineEdit* addDirectoryRow(const QString& label, const QString& objectName);
+    QString findAnalysisScript() const;
+    void launchAnalysis();
 
     UserSettingsPointer m_pConfig;
     QLineEdit* m_pSidecarDir;
@@ -28,6 +31,7 @@ class DlgPrefCrate final : public DlgPreferencePage {
     QLineEdit* m_pGrabToken;
     QCheckBox* m_pAutoAnalyze;
     QSpinBox* m_pAnalyzerThreads;
+    QLabel* m_pAnalysisStatus;
     QCheckBox* m_pGalaxyTrail;
     QCheckBox* m_pGalaxyHalos;
 };

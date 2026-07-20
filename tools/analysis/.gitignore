@@ -1,0 +1,5 @@
+.venv-analysis/
+__pycache__/
+.cache/
+huggingface/
+hub/

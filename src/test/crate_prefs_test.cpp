@@ -2,12 +2,22 @@
 
 #include <QCheckBox>
 #include <QLineEdit>
+#include <QLabel>
+#include <QPushButton>
 #include <QSpinBox>
 
 #include "crate/prefs/dlgprefcrate.h"
 #include "test/mixxxtest.h"
 
 class CratePrefsTest : public MixxxTest {};
+
+TEST_F(CratePrefsTest, AnalysisLauncherControlsExist) {
+    DlgPrefCrate page(nullptr, config());
+    ASSERT_NE(page.findChild<QPushButton*>(QStringLiteral("analyzeLibrary")), nullptr);
+    auto* status = page.findChild<QLabel*>(QStringLiteral("analysisStatus"));
+    ASSERT_NE(status, nullptr);
+    EXPECT_TRUE(status->text().isEmpty());
+}
 
 TEST_F(CratePrefsTest, ApplyAndReloadRoundTrip) {
     DlgPrefCrate page(nullptr, config());

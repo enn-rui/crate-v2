@@ -1,0 +1,65 @@
+"""Shared config for Crate's local analysis scripts.
+
+These are the box's analysis programs, vendored to run on ONE computer pointing at a local music
+library root. They resolve a single library ROOT and write all sidecars
+into ROOT/.crate/ keyed by path RELATIVE TO ROOT (forward slashes) — exactly how the Crate app
+(library.py) reads them back, so analysis run on another machine drops straight into the app.
+
+ROOT is always explicit: pass --root so the pipeline never guesses a library.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Every analysis step imports this module, so force UTF-8 console output HERE once. Otherwise, when the
+# pipeline runs as a frozen exe (or any Windows process whose stdout is a pipe), Python defaults to the
+# legacy cp1252 codec and a single print() of a track name with a non-Latin-1 character (accents, ö/ü/é,
+# combining marks, CJK, emoji) raises UnicodeEncodeError and kills the whole pass. errors="replace" keeps
+# it alive even on truly undecodable bytes.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+AUDIO_EXTS = {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".aif"}
+
+
+def resolve_root(arg_root: str | None = None) -> Path:
+    if arg_root:
+        return Path(arg_root).expanduser().resolve()
+    raise SystemExit(
+        'Music root is required. Run: python analyze_all.py --root "C:\\path\\to\\music"')
+
+
+def crate_dir(root: Path, out: str | Path | None = None) -> Path:
+    d = Path(out).expanduser() if out else Path(root) / ".crate"
+    d = d.resolve()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def parse_buckets(arg: str | None) -> set[str] | None:
+    """'music,dj' -> {'music','dj'}; None/'' -> None (no filter)."""
+    if not arg:
+        return None
+    return {b.strip() for b in arg.split(",") if b.strip()}
+
+
+def iter_audio(root: Path, buckets: set[str] | None = None):
+    """Yield every audio file under ROOT (recursive), skipping the .crate sidecar dir.
+
+    If `buckets` is given, only files whose FIRST path segment under ROOT is in the set are
+    yielded — so analysis can target the real library folders (e.g. music/dj/music-mp3) and skip
+    download caches / quarantine dirs / backups sharing the root.
+    """
+    root = Path(root)
+    for p in sorted(root.rglob("*")):
+        if not (p.is_file() and p.suffix.lower() in AUDIO_EXTS and ".crate" not in p.parts):
+            continue
+        if buckets is not None:
+            rel = p.relative_to(root).parts
+            if not rel or rel[0] not in buckets:
+                continue
+        yield p
