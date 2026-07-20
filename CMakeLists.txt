@@ -1776,6 +1776,7 @@ add_library(
   src/crate/grab/wgrabview.cpp
   src/crate/intelligence/scores.cpp
   src/crate/intelligence/sonicvectors.cpp
+  src/crate/prefs/dlgprefcrate.cpp
   src/widget/wcoverartmenu.cpp
   src/widget/wcuemenupopup.cpp
   src/widget/wcuebutton.cpp
@@ -2908,6 +2909,7 @@ if(BUILD_TESTING)
     src/test/crate_golden_test.cpp
     src/test/crate_grab_test.cpp
     src/test/crate_playlist_migration_test.cpp
+    src/test/crate_prefs_test.cpp
     src/test/crate_smart_test.cpp
     src/test/crate_smart_ui_test.cpp
     src/test/cue_test.cpp

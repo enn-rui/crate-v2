@@ -13,6 +13,7 @@
 #include <QtGlobal>
 
 #include "controllers/dlgprefcontrollers.h"
+#include "crate/prefs/dlgprefcrate.h"
 #include "library/library.h"
 #include "library/trackcollectionmanager.h"
 #include "moc_dlgpreferences.cpp"
@@ -120,6 +121,12 @@ DlgPreferences::DlgPreferences(
     addPageWidget(PreferencesPage(plibraryPage,
                           new QTreeWidgetItem(contentsTreeWidget, QTreeWidgetItem::Type)),
             tr("Library"),
+            "ic_preferences_library.svg");
+
+    addPageWidget(PreferencesPage(
+                          new DlgPrefCrate(this, m_pConfig),
+                          new QTreeWidgetItem(contentsTreeWidget, QTreeWidgetItem::Type)),
+            tr("Crate"),
             "ic_preferences_library.svg");
 
     QTreeWidgetItem* pControllerRootItem =

@@ -1507,6 +1507,13 @@ WTrackProperty:hover {
   text-align: left;
 }
 
+#SamplerIndex {
+  color: rgba(244, 247, 251, 102);
+  font-size: 10px;
+  font-weight: normal;
+  qproperty-alignment: 'AlignCenter';
+}
+
 #EffectUnitLabel,
 #EffectRackCollapsed #EffectUnitNameContainer WLabel {
   font-weight: bold;

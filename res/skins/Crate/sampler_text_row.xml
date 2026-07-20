@@ -20,6 +20,12 @@
         <SizePolicy>i,max</SizePolicy>
         <Children>
 
+          <Label>
+            <ObjectName>SamplerIndex</ObjectName>
+            <Text><Variable name="i"/></Text>
+            <Size>16f,min</Size>
+          </Label>
+
           <WidgetGroup>
             <Layout>horizontal</Layout>
             <Children>

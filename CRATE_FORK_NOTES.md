@@ -14,6 +14,11 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 
 ## Upstream files edited (keep current!)
 
+- Crate preferences seam (2026-07-19): CMakeLists.txt (+Crate-owned preferences page
+  and test), src/preferences/dialog/dlgpreferences.cpp (registers the Crate page directly
+  after Library, near the top of the preferences tree). All page implementation lives
+  under src/crate/prefs; sampler numbering is skin-local under res/skins/Crate.
+
 - Playlist-to-crate merge seam (2026-07-19, wave 7 slice C): CMakeLists.txt
   (+playlist migrator source/test), src/library/library.h and .cpp (`addFeature` gains a
   `showInSidebar` default; Setlog remains in the bind list but skips the sidebar;
