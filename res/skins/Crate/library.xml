@@ -25,6 +25,10 @@
             <SizePolicy>me,me</SizePolicy>
             <SplitSizesConfigKey>[Skin],librarySidebar_splitsize</SplitSizesConfigKey>
             <SplitSizes>2,8</SplitSizes>
+            <!-- Neither pane may collapse to zero: a 0-width table pane persists to
+                 config and every later drag only grows the sidebar (the "table is
+                 gone" trap, bitten 2026-07-20 and again 2026-07-21). -->
+            <Collapsible>0,0</Collapsible>
             <Children>
               <WidgetGroup>
                 <Layout>vertical</Layout>
