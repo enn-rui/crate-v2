@@ -21,6 +21,7 @@
 #include <QStyle>
 #include <QRadialGradient>
 #include <QRegularExpression>
+#include <QSqlQuery>
 #include <QVariantAnimation>
 #include <QRandomGenerator>
 #include <QtMath>
@@ -299,6 +300,23 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
     m_pLabelRebuildTimer->setInterval(120);
     connect(m_pLabelRebuildTimer, &QTimer::timeout,
             this, &WCrateGalaxy::rebuildLabelCache);
+    m_pLibraryBpmTimer = new QTimer(this);
+    m_pLibraryBpmTimer->setSingleShot(true);
+    m_pLibraryBpmTimer->setInterval(120);
+    connect(m_pLibraryBpmTimer, &QTimer::timeout,
+            this, &WCrateGalaxy::refreshLibraryBpms);
+    if (m_pLibrary != nullptr && m_pLibrary->trackCollectionManager() != nullptr) {
+        auto* pCollection =
+                m_pLibrary->trackCollectionManager()->internalCollection();
+        connect(pCollection, &TrackCollection::tracksAdded,
+                this, &WCrateGalaxy::scheduleLibraryBpmRefresh);
+        connect(pCollection, &TrackCollection::tracksChanged,
+                this, &WCrateGalaxy::scheduleLibraryBpmRefresh);
+        connect(pCollection, &TrackCollection::tracksRemoved,
+                this, &WCrateGalaxy::scheduleLibraryBpmRefresh);
+        connect(pCollection, &TrackCollection::multipleTracksChanged,
+                this, &WCrateGalaxy::scheduleLibraryBpmRefresh);
+    }
     m_pPopulateRetryTimer = new QTimer(this);
     m_pPopulateRetryTimer->setSingleShot(true);
     m_pPopulateRetryTimer->setInterval(10000);
@@ -441,6 +459,8 @@ bool WCrateGalaxy::reloadSidecars() {
     }
     QVector<GalaxyNode> nodes = sidecars.nodes();
     excludeDemotedNodes(&nodes);
+    m_sidecarNodes = nodes;
+    applyLibraryBpms(&nodes);
     rebuildScene(nodes);
     m_lastSidecarModified = QFileInfo(
             QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite"))).lastModified();
@@ -519,6 +539,59 @@ void WCrateGalaxy::testSetDemotedRelpaths(const QSet<QString>& relpaths) {
                 QDir::fromNativeSeparators(relpath).toCaseFolded());
     }
     reloadSidecars();
+}
+
+void WCrateGalaxy::applyLibraryBpms(QVector<GalaxyNode>* pNodes) const {
+    if (pNodes->isEmpty() || m_pLibrary == nullptr ||
+            m_pLibrary->trackCollectionManager() == nullptr) {
+        return;
+    }
+    TrackCollection* pCollection =
+            m_pLibrary->trackCollectionManager()->internalCollection();
+    if (pCollection == nullptr) {
+        return;
+    }
+    QHash<QString, int> byRelpath;
+    byRelpath.reserve(pNodes->size());
+    for (int i = 0; i < pNodes->size(); ++i) {
+        byRelpath.insert(QDir::fromNativeSeparators(
+                                 pNodes->at(i).relpath).toCaseFolded(), i);
+    }
+    QSqlQuery query(pCollection->database());
+    if (!query.exec(QStringLiteral(
+                "SELECT track_locations.location, library.bpm "
+                "FROM library JOIN track_locations ON library.location = track_locations.id "
+                "WHERE library.bpm > 0"))) {
+        return;
+    }
+    while (query.next()) {
+        const double bpm = query.value(1).toDouble();
+        if (!(bpm > 0.0) || !std::isfinite(bpm)) {
+            continue;
+        }
+        const int index = matchNodeIndex(query.value(0).toString(), byRelpath);
+        if (index >= 0) {
+            (*pNodes)[index].bpm = bpm;
+        }
+    }
+}
+
+void WCrateGalaxy::scheduleLibraryBpmRefresh() {
+    if (m_pLibraryBpmTimer != nullptr) {
+        m_pLibraryBpmTimer->start();
+    }
+}
+
+void WCrateGalaxy::refreshLibraryBpms() {
+    QVector<GalaxyNode> nodes = m_sidecarNodes;
+    applyLibraryBpms(&nodes);
+    bool changed = nodes.size() != m_nodes.size();
+    for (int i = 0; !changed && i < nodes.size(); ++i) {
+        changed = !qFuzzyCompare(nodes[i].bpm + 1.0, m_nodes[i].bpm + 1.0);
+    }
+    if (changed) {
+        rebuildScene(nodes);
+    }
 }
 
 bool WCrateGalaxy::testPopulateRetryScheduled() const {

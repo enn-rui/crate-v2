@@ -220,6 +220,9 @@ class WCrateGalaxy : public QGraphicsView {
     // scene is built, so they are absent from every layer (dots, labels, plexus,
     // halos, subset). Resolved from the library, or from a test-injected set.
     void excludeDemotedNodes(QVector<GalaxyNode>* pNodes) const;
+    void applyLibraryBpms(QVector<GalaxyNode>* pNodes) const;
+    void scheduleLibraryBpmRefresh();
+    void refreshLibraryBpms();
     QSet<QString> libraryDemotedRelpaths(const QVector<GalaxyNode>& nodes) const;
     void rebuildScene(const QVector<GalaxyNode>& nodes);
     void updateColors();
@@ -297,6 +300,7 @@ class WCrateGalaxy : public QGraphicsView {
     GalaxyPalette m_palette;
     QGraphicsScene* m_pScene;
     QVector<GalaxyNode> m_nodes;
+    QVector<GalaxyNode> m_sidecarNodes;
     QVector<QGraphicsEllipseItem*> m_dots;
     QVector<QGraphicsEllipseItem*> m_halos;
     QHash<int, QGraphicsItem*> m_pills;
@@ -317,6 +321,7 @@ class WCrateGalaxy : public QGraphicsView {
     QVector<MapLabel> m_artistLabels;
     QVector<MapLabel> m_trackLabels;
     QTimer* m_pLabelRebuildTimer = nullptr;
+    QTimer* m_pLibraryBpmTimer = nullptr;
     int m_labelRebuildCount = 0;
     int m_labelDropCount = 0;
     QElapsedTimer m_labelDropLogTimer;

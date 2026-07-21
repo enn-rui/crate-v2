@@ -7,10 +7,12 @@
 
 #include "controllers/keyboard/keyboardeventfilter.h"
 #include "crate/system/systemcrates.h"
+#include "crate/cull/cullworkflow.h"
 #include "crate/triage/triagetablemodel.h"
 #include "library/library.h"
 #include "library/trackcollection.h"
 #include "library/trackcollectionmanager.h"
+#include "track/track.h"
 #include "moc_wtriageview.cpp"
 #include "widget/wlibrary.h"
 #include "widget/wtracktableview.h"
@@ -31,10 +33,13 @@ WTriageView::WTriageView(WLibrary* pParent,
           m_pModel(new TriageTableModel(this, pTrackCollectionManager, since)),
           m_pEmpty(new QLabel(tr("Nothing to triage"), this)),
           m_pKeep(new QPushButton(tr("KEEP (MARK REVIEWED)"), this)),
+          m_pCull(new QPushButton(tr("CULL"), this)),
+          m_pConfig(pConfig),
           m_pTrackCollectionManager(pTrackCollectionManager) {
     setObjectName(QStringLiteral("CrateTriageView"));
     m_pEmpty->setObjectName(QStringLiteral("TriageEmptyState"));
     m_pKeep->setObjectName(QStringLiteral("TriageKeep"));
+    m_pCull->setObjectName(QStringLiteral("TriageCull"));
     m_pTable->setObjectName(QStringLiteral("TriageTrackTable"));
     if (pKeyboard) {
         m_pTable->installEventFilter(pKeyboard);
@@ -44,6 +49,7 @@ WTriageView::WTriageView(WLibrary* pParent,
     auto* pToolbar = new QHBoxLayout();
     pToolbar->addStretch();
     pToolbar->addWidget(m_pKeep);
+    pToolbar->addWidget(m_pCull);
     auto* pLayout = new QVBoxLayout(this);
     pLayout->setContentsMargins(0, 0, 0, 0);
     pLayout->addLayout(pToolbar);
@@ -52,6 +58,8 @@ WTriageView::WTriageView(WLibrary* pParent,
 
     connect(m_pKeep, &QPushButton::clicked,
             this, &WTriageView::markSelectedReviewed);
+    connect(m_pCull, &QPushButton::clicked,
+            this, &WTriageView::cullSelected);
     connect(m_pTable->selectionModel(), &QItemSelectionModel::selectionChanged,
             this, &WTriageView::updateKeepButton);
     connect(m_pModel, &QAbstractItemModel::modelReset,
@@ -69,7 +77,22 @@ WTriageView::WTriageView(WLibrary* pParent,
                 m_pTable, &WTrackTableView::setSelectedClick);
     }
     m_pKeep->setEnabled(false);
+    m_pCull->setEnabled(false);
     updateEmptyState();
+}
+
+void WTriageView::cullSelected() {
+    QList<TrackRef> refs;
+    for (const TrackId& id : m_pTable->getSelectedTrackIds()) {
+        const TrackPointer pTrack = m_pTrackCollectionManager->getTrackById(id);
+        if (pTrack) {
+            refs.append(TrackRef::fromFilePath(pTrack->getLocation(), id));
+        }
+    }
+    startCullWorkflow(this, m_pConfig, m_pTrackCollectionManager, refs, [this] {
+        m_pModel->refresh();
+        updateEmptyState();
+    });
 }
 
 WTriageView::~WTriageView() {
@@ -120,11 +143,13 @@ void WTriageView::updateKeepButton() {
             ? 0
             : m_pTable->getSelectedTrackIds().size();
     m_pKeep->setEnabled(count > 0);
+    m_pCull->setEnabled(count > 0);
     if (count > 1) {
         m_pKeep->setText(tr("KEEP %1 SELECTED").arg(count));
     } else {
         m_pKeep->setText(tr("KEEP (MARK REVIEWED)"));
     }
+    m_pCull->setText(count > 1 ? tr("CULL %1 SELECTED").arg(count) : tr("CULL"));
 }
 
 } // namespace crate

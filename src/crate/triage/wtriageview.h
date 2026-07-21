@@ -40,6 +40,7 @@ class WTriageView final : public QWidget, public LibraryView {
 
   private slots:
     void markSelectedReviewed();
+    void cullSelected();
     void updateEmptyState();
     void updateKeepButton();
 
@@ -48,6 +49,8 @@ class WTriageView final : public QWidget, public LibraryView {
     TriageTableModel* m_pModel;
     QLabel* m_pEmpty;
     QPushButton* m_pKeep;
+    QPushButton* m_pCull;
+    UserSettingsPointer m_pConfig;
     TrackCollectionManager* const m_pTrackCollectionManager;
     bool m_hasShown{false};
 };

@@ -7,6 +7,7 @@
 #include <QSpinBox>
 
 #include "crate/prefs/dlgprefcrate.h"
+#include "crate/tempo/tempocheck.h"
 #include "test/mixxxtest.h"
 
 class CratePrefsTest : public MixxxTest {};
@@ -17,6 +18,50 @@ TEST_F(CratePrefsTest, AnalysisLauncherControlsExist) {
     auto* status = page.findChild<QLabel*>(QStringLiteral("analysisStatus"));
     ASSERT_NE(status, nullptr);
     EXPECT_TRUE(status->text().isEmpty());
+    EXPECT_NE(page.findChild<QPushButton*>(QStringLiteral("checkTempos")), nullptr);
+}
+
+TEST(CrateTempoCheckTest, CleanDoubleErrorWithBothSignalsIsFixed) {
+    crate::TempoProbe probe;
+    probe.bpm = 240.0;
+    probe.sidecarBpm = 120.0;
+    probe.clusterMedianBpm = 121.0;
+    const auto result = crate::evaluateTempo(probe);
+    EXPECT_EQ(result.verdict, crate::TempoVerdict::FixHalve);
+    EXPECT_DOUBLE_EQ(result.newBpm, 120.0);
+}
+
+TEST(CrateTempoCheckTest, CleanHalfErrorWithSingleSignalIsFixed) {
+    crate::TempoProbe probe;
+    probe.bpm = 60.0;
+    probe.sidecarBpm = 120.0;
+    EXPECT_EQ(crate::evaluateTempo(probe).verdict,
+            crate::TempoVerdict::FixDouble);
+}
+
+TEST(CrateTempoCheckTest, ConflictingAndNonOctaveSignalsAreSuspects) {
+    crate::TempoProbe probe;
+    probe.bpm = 180.0;
+    probe.sidecarBpm = 120.0;
+    probe.clusterMedianBpm = 90.0;
+    EXPECT_EQ(crate::evaluateTempo(probe).verdict,
+            crate::TempoVerdict::Suspect);
+    probe.bpm = 240.0;
+    EXPECT_EQ(crate::evaluateTempo(probe).verdict,
+            crate::TempoVerdict::Suspect);
+}
+
+TEST(CrateTempoCheckTest, ConsistentTempoIsIdempotentAndNoReferenceSkips) {
+    crate::TempoProbe probe;
+    probe.bpm = 120.0;
+    probe.sidecarBpm = 120.0;
+    probe.clusterMedianBpm = 121.0;
+    EXPECT_EQ(crate::evaluateTempo(probe).verdict,
+            crate::TempoVerdict::Consistent);
+    probe.sidecarBpm.reset();
+    probe.clusterMedianBpm.reset();
+    EXPECT_EQ(crate::evaluateTempo(probe).verdict,
+            crate::TempoVerdict::Consistent);
 }
 
 TEST_F(CratePrefsTest, ApplyAndReloadRoundTrip) {

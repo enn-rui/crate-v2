@@ -31,6 +31,7 @@ class DlgPrefCrate final : public DlgPreferencePage {
     QString findAnalysisScript() const;
     bool prepareAnalysisDirectories(QString* pMusicRoot, QString* pSidecarDir);
     void launchAnalysis();
+    void checkTempos();
     void refreshTrash();
     void restoreTrash();
     void emptyTrash();
