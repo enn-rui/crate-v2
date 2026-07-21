@@ -366,11 +366,14 @@ PioneerDDJFLX4Crate.focusedFxGroup = function() {
 
 PioneerDDJFLX4Crate.beatFxLevelDepthRotate = function(_channel, _control, value) {
     if (PioneerDDJFLX4Crate.shiftButtonDown[0] || PioneerDDJFLX4Crate.shiftButtonDown[1]) {
-        engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit1]", "mix");
-        engine.setParameter(PioneerDDJFLX4Crate.focusedFxGroup(), "meta", value / 0x7F);
-    } else {
-        engine.softTakeoverIgnoreNextValue(PioneerDDJFLX4Crate.focusedFxGroup(), "meta");
+        // SHIFT: adjust the unit dry/wet mix so nothing is lost.
+        engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit1]", "super1");
         engine.setParameter("[EffectRack1_EffectUnit1]", "mix", value / 0x7F);
+    } else {
+        // No SHIFT: sweep the unit super knob, which turns every loaded effect's
+        // meta knob together (the "3 knobs turn" behaviour).
+        engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit1]", "mix");
+        engine.setParameter("[EffectRack1_EffectUnit1]", "super1", value / 0x7F);
     }
 };
 
@@ -434,20 +437,22 @@ PioneerDDJFLX4Crate.beatFxOnOffShiftPressed = function(_channel, _control, value
     PioneerDDJFLX4Crate.toggleLight(PioneerDDJFLX4Crate.lights.shiftBeatFx, false);
 };
 
-PioneerDDJFLX4Crate.beatFxChannel1 = function(_channel, control, value, _status, group) {
-    let enableChannel = 0;
+// CH SELECT is a 3-position switch. Each position sends its own Note-On with
+// value 0x7F (and the position being left sends value 0x00). Routing unit 1 to
+// exactly one destination means setting all three enables on every move so the
+// other two are always cleared. Positions (per the DDJ-FLX4/DDJ-400 MIDI spec):
+//   CH1    -> 0x94 / 0x10
+//   CH2    -> 0x95 / 0x11
+//   MASTER -> 0x94 / 0x14
+// Because every message rewrites all three enables, the switch takes effect
+// immediately even while an effect is enabled, and resyncs on the first message
+// after an app restart.
+PioneerDDJFLX4Crate.beatFxChannelSelect = function(_channel, control, value, _status, group) {
+    if (value === 0) { return; }
 
-    if (value === 0x7f) { enableChannel = 1; }
-
-    engine.setValue(group, "group_[Channel1]_enable", enableChannel);
-};
-
-PioneerDDJFLX4Crate.beatFxChannel2 = function(_channel, control, value, _status, group) {
-    let enableChannel = 0;
-
-    if (value === 0x7f) { enableChannel = 1; }
-
-    engine.setValue(group, "group_[Channel2]_enable", enableChannel);
+    engine.setValue(group, "group_[Channel1]_enable", control === 0x10 ? 1 : 0);
+    engine.setValue(group, "group_[Channel2]_enable", control === 0x11 ? 1 : 0);
+    engine.setValue(group, "group_[Master]_enable", control === 0x14 ? 1 : 0);
 };
 
 //

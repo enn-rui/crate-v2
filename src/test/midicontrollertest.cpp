@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QScopedPointer>
 
+#include "control/controlobject.h"
 #include "control/controlpotmeter.h"
 #include "control/controlpushbutton.h"
 #include "controllers/legacycontrollermappingfilehandler.h"
@@ -147,6 +148,90 @@ TEST_F(MidiControllerTest, CrateFlx4ShiftDeck2LoadStrobesGalaxyReload) {
     receivedShortMessage(0x96, 0x47, 0x7F); // Deck 2 LOAD press.
     EXPECT_DOUBLE_EQ(1.0, galaxyReload.get());
     EXPECT_DOUBLE_EQ(1.0, loadSelectedTrack.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4BeatFxChSelectRoutesUnitExclusively) {
+    // The 3-position CH SELECT switch routes effect unit 1 to exactly one
+    // destination; the other two enables must always clear, and this must hold
+    // while an effect slot is enabled (live routing).
+    ControlObject ch1(ConfigKey("[EffectRack1_EffectUnit1]", "group_[Channel1]_enable"));
+    ControlObject ch2(ConfigKey("[EffectRack1_EffectUnit1]", "group_[Channel2]_enable"));
+    ControlObject master(ConfigKey("[EffectRack1_EffectUnit1]", "group_[Master]_enable"));
+    ControlObject slotEnabled(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "enabled"));
+    loadCrateFlx4Mapping();
+    slotEnabled.set(1.0); // A live effect: routing must switch regardless.
+
+    // CH1 position: Note-On 0x94/0x10, value 0x7F.
+    receivedShortMessage(0x94, 0x10, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, ch1.get());
+    EXPECT_DOUBLE_EQ(0.0, ch2.get());
+    EXPECT_DOUBLE_EQ(0.0, master.get());
+
+    // CH2 position: Note-On 0x95/0x11, value 0x7F. CH1 must clear even though
+    // the effect slot is still enabled.
+    receivedShortMessage(0x95, 0x11, 0x7F);
+    EXPECT_DOUBLE_EQ(0.0, ch1.get());
+    EXPECT_DOUBLE_EQ(1.0, ch2.get());
+    EXPECT_DOUBLE_EQ(0.0, master.get());
+    EXPECT_DOUBLE_EQ(1.0, slotEnabled.get());
+
+    // MASTER position: Note-On 0x94/0x14, value 0x7F.
+    receivedShortMessage(0x94, 0x14, 0x7F);
+    EXPECT_DOUBLE_EQ(0.0, ch1.get());
+    EXPECT_DOUBLE_EQ(0.0, ch2.get());
+    EXPECT_DOUBLE_EQ(1.0, master.get());
+
+    // The position being left sends value 0x00; it must be ignored so it does
+    // not clobber the newly selected route.
+    receivedShortMessage(0x94, 0x10, 0x00);
+    EXPECT_DOUBLE_EQ(0.0, ch1.get());
+    EXPECT_DOUBLE_EQ(0.0, ch2.get());
+    EXPECT_DOUBLE_EQ(1.0, master.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4BeatFxLevelDepthDrivesSuperKnobAndShiftMix) {
+    // LEVEL/DEPTH (0xB4/0x02) sweeps the unit super knob (all loaded effects'
+    // meta together); +SHIFT drives the unit dry/wet mix instead.
+    ControlPotmeter super1(ConfigKey("[EffectRack1_EffectUnit1]", "super1"), 0.0, 1.0);
+    ControlPotmeter mix(ConfigKey("[EffectRack1_EffectUnit1]", "mix"), 0.0, 1.0);
+    super1.set(0.0);
+    mix.set(0.0);
+    loadCrateFlx4Mapping();
+
+    // No SHIFT: the knob moves super1 and leaves mix untouched.
+    receivedShortMessage(0xB4, 0x02, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, super1.get());
+    EXPECT_DOUBLE_EQ(0.0, mix.get());
+
+    // SHIFT held (Deck 1 SHIFT press 0x90/0x3F): the knob moves mix and leaves
+    // super1 where it was.
+    receivedShortMessage(0x90, 0x3F, 0x7F);
+    receivedShortMessage(0xB4, 0x02, 0x40);
+    EXPECT_NEAR(0x40 / 127.0, mix.get(), 1e-9);
+    EXPECT_DOUBLE_EQ(1.0, super1.get());
+    receivedShortMessage(0x90, 0x3F, 0x00); // SHIFT release.
+}
+
+TEST_F(MidiControllerTest, CrateFlx4BeatFxSelectCyclesSlotZeroEffect) {
+    // BEAT FX SELECT cycles the effect loaded in the first slot (Effect1, the
+    // seeded focused slot); SHIFT+SELECT steps the other way.
+    ControlObject focused(ConfigKey("[EffectRack1_EffectUnit1]", "focused_effect"));
+    ControlObject nextEffect(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "next_effect"));
+    ControlObject prevEffect(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "prev_effect"));
+    focused.set(1.0); // Seeded default after the empty-rack fix.
+    loadCrateFlx4Mapping();
+
+    ASSERT_DOUBLE_EQ(0.0, nextEffect.get());
+    ASSERT_DOUBLE_EQ(0.0, prevEffect.get());
+
+    // BEAT FX SELECT: Note-On 0x94/0x63.
+    receivedShortMessage(0x94, 0x63, 0x7F);
+    EXPECT_DOUBLE_EQ(0x7F, nextEffect.get());
+    EXPECT_DOUBLE_EQ(0.0, prevEffect.get());
+
+    // SHIFT + BEAT FX SELECT: Note-On 0x94/0x64 (distinct note, no SHIFT needed).
+    receivedShortMessage(0x94, 0x64, 0x7F);
+    EXPECT_DOUBLE_EQ(0x7F, prevEffect.get());
 }
 
 TEST_F(MidiControllerTest, ReceiveMessage_PushButtonCO_PushOnOff) {

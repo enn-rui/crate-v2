@@ -1008,11 +1008,11 @@
                 </options>
             </control>
 
-            <!-- Beat Fx channel selector -->
+            <!-- Beat Fx channel selector - 3-position CH SELECT switch routes unit 1 to CH1/CH2/MASTER -->
             <control>
-                <description>BEAT FX CH SELECT CH1 - slide - Select FX on DECK 1</description>
+                <description>BEAT FX CH SELECT CH1 - slide - Route unit 1 to DECK 1</description>
                 <group>[EffectRack1_EffectUnit1]</group>
-                <key>PioneerDDJFLX4Crate.beatFxChannel1</key>
+                <key>PioneerDDJFLX4Crate.beatFxChannelSelect</key>
                 <status>0x94</status>
                 <midino>0x10</midino>
                 <options>
@@ -1020,19 +1020,29 @@
                 </options>
             </control>
             <control>
-                <description>BEAT FX CH SELECT CH2 - slide - Select FX on DECK 2</description>
+                <description>BEAT FX CH SELECT CH2 - slide - Route unit 1 to DECK 2</description>
                 <group>[EffectRack1_EffectUnit1]</group>
-                <key>PioneerDDJFLX4Crate.beatFxChannel2</key>
+                <key>PioneerDDJFLX4Crate.beatFxChannelSelect</key>
                 <status>0x95</status>
                 <midino>0x11</midino>
                 <options>
                     <Script-Binding/>
                 </options>
             </control>
+            <control>
+                <description>BEAT FX CH SELECT MASTER - slide - Route unit 1 to Master</description>
+                <group>[EffectRack1_EffectUnit1]</group>
+                <key>PioneerDDJFLX4Crate.beatFxChannelSelect</key>
+                <status>0x94</status>
+                <midino>0x14</midino>
+                <options>
+                    <Script-Binding/>
+                </options>
+            </control>
 
             <control>
-                <description>BEAT FX LEVEL/DEPTH - rotate (MSB) - Adjust FX Level (mix) and BEAT FX Depth (meta) in the
-                    selected slot
+                <description>BEAT FX LEVEL/DEPTH - rotate (MSB) - Sweep unit super knob (all loaded effects' meta
+                    together); +SHIFT adjusts unit dry/wet mix
                 </description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxLevelDepthRotate</key>
