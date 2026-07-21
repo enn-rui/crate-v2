@@ -783,13 +783,12 @@ void WCrateGalaxy::recomputeSubsetFromModel() {
     relpaths.reserve(pModel->rowCount());
     for (int row = 0; row < pModel->rowCount(); ++row) {
         const QModelIndex index = pModel->index(row, 0);
-        // BaseSqlTableModel::getTrackLocation may be empty for rows whose
-        // lazy cache has not been populated by the visible table yet. Loading
-        // the Track by ID is deterministic for every row in the result set.
-        const TrackPointer pTrack = pTrackModel->getTrack(index);
-        const QString location = pTrack
-                ? pTrack->getLocation()
-                : pTrackModel->getTrackLocation(index);
+        // getTrackLocation only - NEVER getTrack() here. Hydrating a Track
+        // deserializes beats/keys; doing it per row turned every subset
+        // refresh into a full-library load on the GUI thread (thousands of
+        // track loads at startup, app unresponsive - 2026-07-20 incident).
+        // Rows whose lazy cache is empty simply resolve on a later refresh.
+        const QString location = pTrackModel->getTrackLocation(index);
         const QString relpath = relpathForLocation(location);
         if (!relpath.isEmpty()) {
             relpaths.insert(relpath);
