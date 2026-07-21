@@ -234,6 +234,125 @@ TEST_F(MidiControllerTest, CrateFlx4BeatFxSelectCyclesSlotZeroEffect) {
     EXPECT_DOUBLE_EQ(0x7F, prevEffect.get());
 }
 
+TEST_F(MidiControllerTest, CrateFlx4FourBeatExitInstantLoopThenExitAndShiftReloop) {
+    // 4 BEAT/EXIT (the RELOOP/EXIT button, note 0x4D): a cold press with no
+    // active loop fires an instant quantized 4-beat loop; a press during an
+    // active loop exits it (reloop_toggle, keep playing) and must NOT re-fire
+    // the beatloop; SHIFT + press (note 0x50) re-enters the last loop.
+    ControlObject loopEnabled(ConfigKey("[Channel1]", "loop_enabled"));
+    ControlPushButton beatloop4(ConfigKey("[Channel1]", "beatloop_4_activate"));
+    ControlPushButton reloopToggle(ConfigKey("[Channel1]", "reloop_toggle"));
+    loopEnabled.set(0.0);
+    loadCrateFlx4Mapping();
+
+    // Cold press, no loop -> instant 4-beat loop.
+    receivedShortMessage(0x90, 0x4D, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, beatloop4.get());
+    EXPECT_DOUBLE_EQ(0.0, reloopToggle.get());
+
+    // Simulate the loop now being active; the next press exits it and must not
+    // re-fire the beatloop.
+    beatloop4.set(0.0);
+    loopEnabled.set(1.0);
+    receivedShortMessage(0x90, 0x4D, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, reloopToggle.get());
+    EXPECT_DOUBLE_EQ(0.0, beatloop4.get());
+
+    // SHIFT + 4 BEAT/EXIT (note 0x50) re-enters the last loop via reloop_toggle.
+    reloopToggle.set(0.0);
+    receivedShortMessage(0x90, 0x50, 0x7F);
+    EXPECT_LT(0.0, reloopToggle.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4LoopInHoldJogAdjustsStartAndSuppressesScratch) {
+    // While a loop is active, holding LOOP IN (note 0x10) and turning the jog
+    // (0xB0/0x22) moves the loop-in point via loop_start_position and must NOT
+    // write the jog (no scratch/nudge). Releasing IN reverts the jog to normal.
+    ControlObject loopEnabled(ConfigKey("[Channel1]", "loop_enabled"));
+    ControlObject loopStart(ConfigKey("[Channel1]", "loop_start_position"));
+    ControlObject loopEnd(ConfigKey("[Channel1]", "loop_end_position"));
+    ControlPushButton loopIn(ConfigKey("[Channel1]", "loop_in"));
+    ControlObject jog(ConfigKey("[Channel1]", "jog"));
+    loopEnabled.set(1.0);
+    loopStart.set(1000.0);
+    jog.set(0.0);
+    loadCrateFlx4Mapping();
+
+    // IN held during an active loop enters loop-in adjust; it must NOT reset the
+    // loop-in point to the playhead.
+    receivedShortMessage(0x90, 0x10, 0x7F);
+    EXPECT_DOUBLE_EQ(0.0, loopIn.get());
+
+    // Jog forward (value 0x50 = +16) moves loop_start_position and leaves the
+    // jog untouched (no scratch/nudge).
+    receivedShortMessage(0xB0, 0x22, 0x50);
+    EXPECT_LT(1000.0, loopStart.get());
+    EXPECT_DOUBLE_EQ(0.0, jog.get());
+
+    // Release IN (note 0x10, value 0x00): the jog reverts to normal (nudge).
+    receivedShortMessage(0x90, 0x10, 0x00);
+    receivedShortMessage(0xB0, 0x22, 0x50);
+    EXPECT_LT(0.0, jog.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4LoopOutHoldJogAdjustsEndAndSuppressesScratch) {
+    // Mirror of the IN case: holding LOOP OUT (note 0x11) during an active loop
+    // moves the loop-out point via loop_end_position and suppresses the jog;
+    // releasing OUT reverts the jog to normal.
+    ControlObject loopEnabled(ConfigKey("[Channel1]", "loop_enabled"));
+    ControlObject loopStart(ConfigKey("[Channel1]", "loop_start_position"));
+    ControlObject loopEnd(ConfigKey("[Channel1]", "loop_end_position"));
+    ControlPushButton loopOut(ConfigKey("[Channel1]", "loop_out"));
+    ControlObject jog(ConfigKey("[Channel1]", "jog"));
+    loopEnabled.set(1.0);
+    loopEnd.set(2000.0);
+    jog.set(0.0);
+    loadCrateFlx4Mapping();
+
+    receivedShortMessage(0x90, 0x11, 0x7F);
+    EXPECT_DOUBLE_EQ(0.0, loopOut.get());
+
+    receivedShortMessage(0xB0, 0x22, 0x50);
+    EXPECT_LT(2000.0, loopEnd.get());
+    EXPECT_DOUBLE_EQ(0.0, jog.get());
+
+    receivedShortMessage(0x90, 0x11, 0x00);
+    receivedShortMessage(0xB0, 0x22, 0x50);
+    EXPECT_LT(0.0, jog.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4LoopInOutPressWithNoLoopSetsPoints) {
+    // With no active loop, a LOOP IN / LOOP OUT press sets the loop-in / loop-out
+    // point (manual loop build) rather than entering jog-adjust.
+    ControlObject loopEnabled(ConfigKey("[Channel1]", "loop_enabled"));
+    ControlPushButton loopIn(ConfigKey("[Channel1]", "loop_in"));
+    ControlPushButton loopOut(ConfigKey("[Channel1]", "loop_out"));
+    loopEnabled.set(0.0);
+    loadCrateFlx4Mapping();
+
+    receivedShortMessage(0x90, 0x10, 0x7F);
+    EXPECT_LT(0.0, loopIn.get());
+
+    receivedShortMessage(0x90, 0x11, 0x7F);
+    EXPECT_LT(0.0, loopOut.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4CueLoopCallHalvesAndDoublesActiveLoop) {
+    // CUE/LOOP CALL left (note 0x51) halves and right (note 0x53) doubles the
+    // active loop via loop_scale (0.5 / 2.0).
+    ControlObject loopEnabled(ConfigKey("[Channel1]", "loop_enabled"));
+    ControlObject loopScale(ConfigKey("[Channel1]", "loop_scale"));
+    loopEnabled.set(1.0);
+    loadCrateFlx4Mapping();
+
+    loopScale.set(0.0);
+    receivedShortMessage(0x90, 0x51, 0x7F);
+    EXPECT_DOUBLE_EQ(0.5, loopScale.get());
+
+    receivedShortMessage(0x90, 0x53, 0x7F);
+    EXPECT_DOUBLE_EQ(2.0, loopScale.get());
+}
+
 TEST_F(MidiControllerTest, ReceiveMessage_PushButtonCO_PushOnOff) {
     // Most MIDI controller send push-buttons as (NOTE_ON, 0x7F) for press and
     // (NOTE_OFF, 0x00) for release.

@@ -419,73 +419,73 @@
             </control>
 
             <control>
-                <description>LOOP IN/4 BEAT (DECK1) - press - Set loop in</description>
+                <description>LOOP IN (DECK1) - press - Set loop in / hold to move loop-in during an active loop</description>
                 <group>[Channel1]</group>
-                <key>loop_in</key>
+                <key>PioneerDDJFLX4Crate.loopInPress</key>
                 <status>0x90</status>
                 <midino>0x10</midino>
                 <options>
-                    <Normal/>
+                    <Script-Binding/>
                 </options>
             </control>
 
             <control>
-                <description>LOOP IN/4 BEAT (DECK2) - press - Set loop in</description>
+                <description>LOOP IN (DECK2) - press - Set loop in / hold to move loop-in during an active loop</description>
                 <group>[Channel2]</group>
-                <key>loop_in</key>
+                <key>PioneerDDJFLX4Crate.loopInPress</key>
                 <status>0x91</status>
                 <midino>0x10</midino>
                 <options>
-                    <Normal/>
+                    <Script-Binding/>
                 </options>
             </control>
 
             <control>
-                <description>LOOP OUT (DECK1) - press - Set loop out</description>
+                <description>LOOP OUT (DECK1) - press - Set loop out / hold to move loop-out during an active loop</description>
                 <group>[Channel1]</group>
-                <key>loop_out</key>
+                <key>PioneerDDJFLX4Crate.loopOutPress</key>
                 <status>0x90</status>
                 <midino>0x11</midino>
                 <options>
-                    <Normal/>
+                    <Script-Binding/>
                 </options>
             </control>
             <control>
-                <description>LOOP OUT (DECK2) - press - Set loop out</description>
+                <description>LOOP OUT (DECK2) - press - Set loop out / hold to move loop-out during an active loop</description>
                 <group>[Channel2]</group>
-                <key>loop_out</key>
+                <key>PioneerDDJFLX4Crate.loopOutPress</key>
                 <status>0x91</status>
                 <midino>0x11</midino>
                 <options>
-                    <Normal/>
+                    <Script-Binding/>
                 </options>
             </control>
 
             <control>
-                <description>RELOOP/EXIT (DECK1) - press - (loop off) Reloop, (loop on) Loop exit</description>
+                <description>4 BEAT/EXIT (DECK1) - press - (no loop) instant 4-beat loop, (loop on) exit keep playing</description>
+                <group>[Channel1]</group>
+                <key>PioneerDDJFLX4Crate.fourBeatExit</key>
+                <status>0x90</status>
+                <midino>0x4D</midino>
+                <options>
+                    <Script-Binding/>
+                </options>
+            </control>
+            <control>
+                <description>4 BEAT/EXIT (DECK2) - press - (no loop) instant 4-beat loop, (loop on) exit keep playing</description>
+                <group>[Channel2]</group>
+                <key>PioneerDDJFLX4Crate.fourBeatExit</key>
+                <status>0x91</status>
+                <midino>0x4D</midino>
+                <options>
+                    <Script-Binding/>
+                </options>
+            </control>
+
+            <control>
+                <description>4 BEAT/EXIT +SHIFT (DECK1) - press - Reloop (re-enter the last loop)</description>
                 <group>[Channel1]</group>
                 <key>reloop_toggle</key>
-                <status>0x90</status>
-                <midino>0x4D</midino>
-                <options>
-                    <Normal/>
-                </options>
-            </control>
-            <control>
-                <description>RELOOP/EXIT (DECK2) - press - (loop off) Reloop, (loop on) Loop exit</description>
-                <group>[Channel2]</group>
-                <key>reloop_toggle</key> <!-- check if correct -->
-                <status>0x91</status>
-                <midino>0x4D</midino>
-                <options>
-                    <Normal/>
-                </options>
-            </control>
-
-            <control>
-                <description>RELOOP/EXIT +SHIFT (DECK1) - press - Reloop and stop</description>
-                <group>[Channel1]</group>
-                <key>reloop_andstop</key>
                 <status>0x90</status>
                 <midino>0x50</midino>
                 <options>
@@ -493,9 +493,9 @@
                 </options>
             </control>
             <control>
-                <description>RELOOP/EXIT +SHIFT (DECK2) - press - Reloop and stop</description>
+                <description>4 BEAT/EXIT +SHIFT (DECK2) - press - Reloop (re-enter the last loop)</description>
                 <group>[Channel2]</group>
-                <key>reloop_andstop</key>
+                <key>reloop_toggle</key>
                 <status>0x91</status>
                 <midino>0x50</midino>
                 <options>

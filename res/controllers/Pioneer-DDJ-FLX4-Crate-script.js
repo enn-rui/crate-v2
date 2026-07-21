@@ -559,6 +559,64 @@ PioneerDDJFLX4Crate.cueLoopCallRight = function(_channel, _control, value, _stat
 };
 
 //
+// LOOP IN / OUT / 4 BEAT (rekordbox model)
+//
+// LOOP IN press with no active loop sets the loop-in point (manual loop build).
+// While a loop is active, holding IN and turning the jog moves the loop-in
+// point (no SHIFT); releasing IN returns the jog to normal. OUT mirrors this
+// for the loop-out point. The jog handler (jogTurn) reads loopAdjustIn/Out and
+// suppresses scratch/nudge while a point is being adjusted.
+
+PioneerDDJFLX4Crate.loopInPress = function(channel, _control, value, _status, group) {
+    if (value === 0x7F) {
+        if (engine.getValue(group, "loop_enabled") > 0) {
+            // Active loop: hold IN + jog moves the loop-in point.
+            PioneerDDJFLX4Crate.loopAdjustIn[channel] = true;
+            PioneerDDJFLX4Crate.loopAdjustOut[channel] = false;
+        } else {
+            // No loop: set the loop-in point.
+            engine.setValue(group, "loop_in", 1);
+        }
+    } else {
+        // Release returns the jog to normal.
+        PioneerDDJFLX4Crate.loopAdjustIn[channel] = false;
+    }
+};
+
+PioneerDDJFLX4Crate.loopOutPress = function(channel, _control, value, _status, group) {
+    if (value === 0x7F) {
+        if (engine.getValue(group, "loop_enabled") > 0) {
+            // Active loop: hold OUT + jog moves the loop-out point.
+            PioneerDDJFLX4Crate.loopAdjustOut[channel] = true;
+            PioneerDDJFLX4Crate.loopAdjustIn[channel] = false;
+        } else {
+            // No loop: set the loop-out point (closes a manual loop).
+            engine.setValue(group, "loop_out", 1);
+        }
+    } else {
+        // Release returns the jog to normal.
+        PioneerDDJFLX4Crate.loopAdjustOut[channel] = false;
+    }
+};
+
+// 4 BEAT / EXIT (the RELOOP/EXIT button): a cold press with no active loop
+// starts an instant quantized 4-beat loop; a press during an active loop exits
+// it (playback continues past the out point). SHIFT + press (a separate note)
+// re-enters the last loop via reloop_toggle.
+PioneerDDJFLX4Crate.fourBeatExit = function(_channel, _control, value, _status, group) {
+    if (value === 0) {
+        return;
+    }
+    if (engine.getValue(group, "loop_enabled") > 0) {
+        // Active loop: exit but keep playing.
+        engine.setValue(group, "reloop_toggle", 1);
+    } else {
+        // No loop: instant quantized 4-beat loop at the current position.
+        engine.setValue(group, "beatloop_4_activate", 1);
+    }
+};
+
+//
 // BEAT SYNC
 //
 // Note that the controller sends different signals for a short press and a long
