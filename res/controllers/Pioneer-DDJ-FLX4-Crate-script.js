@@ -18,13 +18,20 @@
 //      * Keyshift mode
 //
 //  Custom (Mixxx specific mappings):
-//      * BeatFX: Assigned Effect Unit 1
-//                v FX_SELECT Load next effect.
+//      * BeatFX (per-deck model): FX unit 1 edits deck A, FX unit 2 edits
+//                deck B (fixed routing, seeded at startup). CH SELECT chooses
+//                which unit the BEAT FX section addresses:
+//                  CH1    -> unit 1 (deck A)
+//                  CH2    -> unit 2 (deck B)
+//                  MASTER -> both units together
+//                v FX_SELECT Load next effect on the addressed unit(s), slot 0.
 //                SHIFT + v FX_SELECT Load previous effect.
 //                < LEFT Cycle effect focus leftward
 //                > RIGHT Cycle effect focus rightward
-//                ON/OFF toggles focused effect slot
-//                SHIFT + ON/OFF disables all three effect slots.
+//                LEVEL/DEPTH raises intensity (super) AND dry/wet (mix)
+//                  together on the addressed unit(s); SHIFT trims mix only.
+//                ON/OFF toggles the addressed unit(s) effect slot.
+//                SHIFT + ON/OFF disables all slots on the addressed unit(s).
 //
 //      * 32 beat jump forward & back (Shift + </> CUE/LOOP CALL arrows)
 //      * Toggle quantize (Shift + channel cue)
@@ -252,6 +259,7 @@ PioneerDDJFLX4Crate.toggleLight = function(midiIn, active) {
 
 PioneerDDJFLX4Crate.init = function() {
     engine.setValue("[EffectRack1_EffectUnit1]", "show_focus", 1);
+    engine.setValue("[EffectRack1_EffectUnit2]", "show_focus", 1);
 
     engine.makeConnection("[Channel1]", "vu_meter", PioneerDDJFLX4Crate.vuMeterUpdate);
     engine.makeConnection("[Channel2]", "vu_meter", PioneerDDJFLX4Crate.vuMeterUpdate);
@@ -261,10 +269,9 @@ PioneerDDJFLX4Crate.init = function() {
 
     engine.softTakeover("[Channel1]", "rate", true);
     engine.softTakeover("[Channel2]", "rate", true);
-    engine.softTakeover("[EffectRack1_EffectUnit1_Effect1]", "meta", true);
-    engine.softTakeover("[EffectRack1_EffectUnit1_Effect2]", "meta", true);
-    engine.softTakeover("[EffectRack1_EffectUnit1_Effect3]", "meta", true);
-    engine.softTakeover("[EffectRack1_EffectUnit1]", "mix", true);
+    // BEAT FX LEVEL/DEPTH drives the addressed unit's super1 + mix directly
+    // (absolute knob, no soft takeover) so the intensity and wet always follow
+    // the physical position - the fix for "the knob doesn't affect the mix".
 
     const samplerCount = 16;
     if (engine.getValue("[App]", "num_samplers") < samplerCount) {
@@ -287,10 +294,10 @@ PioneerDDJFLX4Crate.init = function() {
     engine.makeConnection("[Channel1]", "loop_enabled", PioneerDDJFLX4Crate.loopToggle);
     engine.makeConnection("[Channel2]", "loop_enabled", PioneerDDJFLX4Crate.loopToggle);
 
-    for (i = 1; i <= 3; i++) {
-        engine.makeConnection("[EffectRack1_EffectUnit1_Effect" + i +"]", "enabled", PioneerDDJFLX4Crate.toggleFxLight);
-    }
-    engine.makeConnection("[EffectRack1_EffectUnit1]", "focused_effect", PioneerDDJFLX4Crate.toggleFxLight);
+    // The BEAT FX light tracks slot 0 (Effect1) of each unit; whichever unit(s)
+    // are currently addressed drive the lit state (see updateBeatFxLights).
+    engine.makeConnection("[EffectRack1_EffectUnit1_Effect1]", "enabled", PioneerDDJFLX4Crate.toggleFxLight);
+    engine.makeConnection("[EffectRack1_EffectUnit2_Effect1]", "enabled", PioneerDDJFLX4Crate.toggleFxLight);
 
     // Register callbacks for each deck, when a file is loaded and the number of stems is available
     engine.makeConnection("[Channel1]", "stem_count", PioneerDDJFLX4Crate.stemCountChanged);
@@ -352,29 +359,53 @@ PioneerDDJFLX4Crate.vuMeterUpdate = function(value, group) {
 // Effects
 //
 
-PioneerDDJFLX4Crate.toggleFxLight = function(_value, _group, _control) {
-    const enabled = engine.getValue(PioneerDDJFLX4Crate.focusedFxGroup(), "enabled");
+// Per-deck BEAT FX model. FX unit 1 is permanently wired to deck A and unit 2
+// to deck B (the fixed routing is seeded in EffectsManager). CH SELECT does NOT
+// re-route; it chooses which unit(s) the hardware section (SELECT / ON / LEVEL)
+// currently EDITS. beatFxAddressedUnits holds the one-based unit number(s):
+//   [1]    -> CH1    (edit unit 1 / deck A)
+//   [2]    -> CH2    (edit unit 2 / deck B)
+//   [1, 2] -> MASTER (edit both units together)
+PioneerDDJFLX4Crate.beatFxAddressedUnits = [1];
+
+PioneerDDJFLX4Crate.beatFxUnitGroup = function(unit) {
+    return "[EffectRack1_EffectUnit" + unit + "]";
+};
+
+// The section always edits slot 0 (Effect1) of the addressed unit.
+PioneerDDJFLX4Crate.beatFxSlotGroup = function(unit) {
+    return "[EffectRack1_EffectUnit" + unit + "_Effect1]";
+};
+
+PioneerDDJFLX4Crate.updateBeatFxLights = function() {
+    const enabled = PioneerDDJFLX4Crate.beatFxAddressedUnits.some(function(unit) {
+        return engine.getValue(PioneerDDJFLX4Crate.beatFxSlotGroup(unit), "enabled") > 0;
+    });
 
     PioneerDDJFLX4Crate.toggleLight(PioneerDDJFLX4Crate.lights.beatFx, enabled);
     PioneerDDJFLX4Crate.toggleLight(PioneerDDJFLX4Crate.lights.shiftBeatFx, enabled);
 };
 
-PioneerDDJFLX4Crate.focusedFxGroup = function() {
-    const focusedFx = engine.getValue("[EffectRack1_EffectUnit1]", "focused_effect");
-    return "[EffectRack1_EffectUnit1_Effect" + focusedFx + "]";
+PioneerDDJFLX4Crate.toggleFxLight = function(_value, _group, _control) {
+    PioneerDDJFLX4Crate.updateBeatFxLights();
 };
 
 PioneerDDJFLX4Crate.beatFxLevelDepthRotate = function(_channel, _control, value) {
-    if (PioneerDDJFLX4Crate.shiftButtonDown[0] || PioneerDDJFLX4Crate.shiftButtonDown[1]) {
-        // SHIFT: adjust the unit dry/wet mix so nothing is lost.
-        engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit1]", "super1");
-        engine.setParameter("[EffectRack1_EffectUnit1]", "mix", value / 0x7F);
-    } else {
-        // No SHIFT: sweep the unit super knob, which turns every loaded effect's
-        // meta knob together (the "3 knobs turn" behaviour).
-        engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit1]", "mix");
-        engine.setParameter("[EffectRack1_EffectUnit1]", "super1", value / 0x7F);
-    }
+    const param = value / 0x7F;
+    const shift = PioneerDDJFLX4Crate.shiftButtonDown[0] || PioneerDDJFLX4Crate.shiftButtonDown[1];
+
+    PioneerDDJFLX4Crate.beatFxAddressedUnits.forEach(function(unit) {
+        const group = PioneerDDJFLX4Crate.beatFxUnitGroup(unit);
+        if (shift) {
+            // SHIFT: fine dry/wet trim only (mix), leaving intensity where it is.
+            engine.setParameter(group, "mix", param);
+        } else {
+            // No SHIFT: intensity (super1, which turns every loaded effect's
+            // meta together) AND wet (mix) rise as one - the rekordbox feel.
+            engine.setParameter(group, "super1", param);
+            engine.setParameter(group, "mix", param);
+        }
+    });
 };
 
 PioneerDDJFLX4Crate.changeFocusedEffectBy = function(numberOfSteps) {
@@ -396,13 +427,17 @@ PioneerDDJFLX4Crate.changeFocusedEffectBy = function(numberOfSteps) {
 PioneerDDJFLX4Crate.beatFxSelectPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    engine.setValue(PioneerDDJFLX4Crate.focusedFxGroup(), "next_effect", value);
+    PioneerDDJFLX4Crate.beatFxAddressedUnits.forEach(function(unit) {
+        engine.setValue(PioneerDDJFLX4Crate.beatFxSlotGroup(unit), "next_effect", value);
+    });
 };
 
 PioneerDDJFLX4Crate.beatFxSelectShiftPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    engine.setValue(PioneerDDJFLX4Crate.focusedFxGroup(), "prev_effect", value);
+    PioneerDDJFLX4Crate.beatFxAddressedUnits.forEach(function(unit) {
+        engine.setValue(PioneerDDJFLX4Crate.beatFxSlotGroup(unit), "prev_effect", value);
+    });
 };
 
 PioneerDDJFLX4Crate.beatFxLeftPressed = function(_channel, _control, value) {
@@ -420,39 +455,52 @@ PioneerDDJFLX4Crate.beatFxRightPressed = function(_channel, _control, value) {
 PioneerDDJFLX4Crate.beatFxOnOffPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    const toggleEnabled = !engine.getValue(PioneerDDJFLX4Crate.focusedFxGroup(), "enabled");
-    engine.setValue(PioneerDDJFLX4Crate.focusedFxGroup(), "enabled", toggleEnabled);
+    // Toggle both addressed units together off the first unit's current state,
+    // so MASTER moves them as one instead of drifting out of phase.
+    const units = PioneerDDJFLX4Crate.beatFxAddressedUnits;
+    const target = engine.getValue(PioneerDDJFLX4Crate.beatFxSlotGroup(units[0]), "enabled") ? 0 : 1;
+
+    units.forEach(function(unit) {
+        engine.setValue(PioneerDDJFLX4Crate.beatFxSlotGroup(unit), "enabled", target);
+    });
 };
 
 PioneerDDJFLX4Crate.beatFxOnOffShiftPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    engine.setParameter("[EffectRack1_EffectUnit1]", "mix", 0);
-    engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit1]", "mix");
+    PioneerDDJFLX4Crate.beatFxAddressedUnits.forEach(function(unit) {
+        const group = PioneerDDJFLX4Crate.beatFxUnitGroup(unit);
+        engine.setParameter(group, "mix", 0);
 
-    for (let i = 1; i <= 3; i++) {
-        engine.setValue("[EffectRack1_EffectUnit1_Effect" + i + "]", "enabled", 0);
-    }
-    PioneerDDJFLX4Crate.toggleLight(PioneerDDJFLX4Crate.lights.beatFx, false);
-    PioneerDDJFLX4Crate.toggleLight(PioneerDDJFLX4Crate.lights.shiftBeatFx, false);
+        for (let i = 1; i <= 3; i++) {
+            engine.setValue("[EffectRack1_EffectUnit" + unit + "_Effect" + i + "]", "enabled", 0);
+        }
+    });
+
+    PioneerDDJFLX4Crate.updateBeatFxLights();
 };
 
 // CH SELECT is a 3-position switch. Each position sends its own Note-On with
-// value 0x7F (and the position being left sends value 0x00). Routing unit 1 to
-// exactly one destination means setting all three enables on every move so the
-// other two are always cleared. Positions (per the DDJ-FLX4/DDJ-400 MIDI spec):
-//   CH1    -> 0x94 / 0x10
-//   CH2    -> 0x95 / 0x11
-//   MASTER -> 0x94 / 0x14
-// Because every message rewrites all three enables, the switch takes effect
-// immediately even while an effect is enabled, and resyncs on the first message
-// after an app restart.
-PioneerDDJFLX4Crate.beatFxChannelSelect = function(_channel, control, value, _status, group) {
+// value 0x7F (and the position being left sends value 0x00). It picks which
+// effect unit(s) the BEAT FX section edits - it does NOT change the fixed
+// unit->deck routing. Positions (per the DDJ-FLX4/DDJ-400 MIDI spec):
+//   CH1    -> 0x94 / 0x10  -> edit unit 1 (deck A)
+//   CH2    -> 0x95 / 0x11  -> edit unit 2 (deck B)
+//   MASTER -> 0x94 / 0x14  -> edit both units together
+// The position being left sends value 0x00, which is ignored so it never
+// clobbers the freshly selected addressing.
+PioneerDDJFLX4Crate.beatFxChannelSelect = function(_channel, control, value) {
     if (value === 0) { return; }
 
-    engine.setValue(group, "group_[Channel1]_enable", control === 0x10 ? 1 : 0);
-    engine.setValue(group, "group_[Channel2]_enable", control === 0x11 ? 1 : 0);
-    engine.setValue(group, "group_[Master]_enable", control === 0x14 ? 1 : 0);
+    if (control === 0x10) {
+        PioneerDDJFLX4Crate.beatFxAddressedUnits = [1];
+    } else if (control === 0x11) {
+        PioneerDDJFLX4Crate.beatFxAddressedUnits = [2];
+    } else if (control === 0x14) {
+        PioneerDDJFLX4Crate.beatFxAddressedUnits = [1, 2];
+    }
+
+    PioneerDDJFLX4Crate.updateBeatFxLights();
 };
 
 //

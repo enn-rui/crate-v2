@@ -966,7 +966,7 @@
             <!-- BEAT FX SECTION START -->
 
             <control>
-              <description>BEAT FX SELECT - press once - select next effect</description>
+              <description>BEAT FX SELECT - press once - next effect on the addressed unit(s)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxSelectPressed</key>
                 <status>0x94</status>
@@ -976,7 +976,7 @@
                 </options>
             </control>
             <control>
-              <description>BEAT FX SELECT + shift - press once - select previous effect</description>
+              <description>BEAT FX SELECT + shift - press once - previous effect on the addressed unit(s)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxSelectShiftPressed</key>
                 <status>0x94</status>
@@ -1008,9 +1008,9 @@
                 </options>
             </control>
 
-            <!-- Beat Fx channel selector - 3-position CH SELECT switch routes unit 1 to CH1/CH2/MASTER -->
+            <!-- Beat Fx channel selector - 3-position CH SELECT switch picks which unit the section edits: CH1->unit1, CH2->unit2, MASTER->both -->
             <control>
-                <description>BEAT FX CH SELECT CH1 - slide - Route unit 1 to DECK 1</description>
+                <description>BEAT FX CH SELECT CH1 - slide - Address unit 1 (deck A)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxChannelSelect</key>
                 <status>0x94</status>
@@ -1020,7 +1020,7 @@
                 </options>
             </control>
             <control>
-                <description>BEAT FX CH SELECT CH2 - slide - Route unit 1 to DECK 2</description>
+                <description>BEAT FX CH SELECT CH2 - slide - Address unit 2 (deck B)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxChannelSelect</key>
                 <status>0x95</status>
@@ -1030,7 +1030,7 @@
                 </options>
             </control>
             <control>
-                <description>BEAT FX CH SELECT MASTER - slide - Route unit 1 to Master</description>
+                <description>BEAT FX CH SELECT MASTER - slide - Address both units together</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxChannelSelect</key>
                 <status>0x94</status>
@@ -1041,8 +1041,8 @@
             </control>
 
             <control>
-                <description>BEAT FX LEVEL/DEPTH - rotate (MSB) - Sweep unit super knob (all loaded effects' meta
-                    together); +SHIFT adjusts unit dry/wet mix
+                <description>BEAT FX LEVEL/DEPTH - rotate (MSB) - Raise intensity (super) and dry/wet (mix)
+                    together on the addressed unit(s); +SHIFT trims mix only
                 </description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxLevelDepthRotate</key>
@@ -1054,7 +1054,7 @@
             </control>
 
             <control>
-                <description>BEAT FX ON/OFF - press - Toggle FX in the selected Slot (when on CHAN1/1+2)</description>
+                <description>BEAT FX ON/OFF - press - Toggle the addressed unit(s) effect (CH SELECT at CH1/MASTER)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxOnOffPressed</key>
                 <status>0x94</status>
@@ -1064,7 +1064,7 @@
                 </options>
             </control>
             <control>
-                <description>BEAT FX ON/OFF - press - Toggle FX in the selected Slot (when on CHAN2)</description>
+                <description>BEAT FX ON/OFF - press - Toggle the addressed unit(s) effect (CH SELECT at CH2)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxOnOffPressed</key>
                 <status>0x95</status>
@@ -1074,7 +1074,7 @@
                 </options>
             </control>
             <control>
-                <description>BEAT FX ON/OFF +SHIFT - press - Disable all enabled Beat FX Slots (when on CHAN1/1+2)</description>
+                <description>BEAT FX ON/OFF +SHIFT - press - Disable all slots on the addressed unit(s) (CH SELECT at CH1/MASTER)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxOnOffShiftPressed</key>
                 <status>0x94</status>
@@ -1084,7 +1084,7 @@
                 </options>
             </control>
             <control>
-                <description>BEAT FX ON/OFF +SHIFT - press - Disable all enabled Beat FX Slots (when on CHAN12)</description>
+                <description>BEAT FX ON/OFF +SHIFT - press - Disable all slots on the addressed unit(s) (CH SELECT at CH2)</description>
                 <group>[EffectRack1_EffectUnit1]</group>
                 <key>PioneerDDJFLX4Crate.beatFxOnOffShiftPressed</key>
                 <status>0x95</status>

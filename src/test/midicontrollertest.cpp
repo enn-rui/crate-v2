@@ -150,61 +150,84 @@ TEST_F(MidiControllerTest, CrateFlx4ShiftDeck2LoadStrobesGalaxyReload) {
     EXPECT_DOUBLE_EQ(1.0, loadSelectedTrack.get());
 }
 
-TEST_F(MidiControllerTest, CrateFlx4BeatFxChSelectRoutesUnitExclusively) {
-    // The 3-position CH SELECT switch routes effect unit 1 to exactly one
-    // destination; the other two enables must always clear, and this must hold
-    // while an effect slot is enabled (live routing).
-    ControlObject ch1(ConfigKey("[EffectRack1_EffectUnit1]", "group_[Channel1]_enable"));
-    ControlObject ch2(ConfigKey("[EffectRack1_EffectUnit1]", "group_[Channel2]_enable"));
-    ControlObject master(ConfigKey("[EffectRack1_EffectUnit1]", "group_[Master]_enable"));
-    ControlObject slotEnabled(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "enabled"));
+TEST_F(MidiControllerTest, CrateFlx4BeatFxChSelectAddressesUnitExclusively) {
+    // CH SELECT no longer routes the unit; it picks which effect unit the BEAT
+    // FX section edits (the per-deck model). CH1 -> unit 1, CH2 -> unit 2,
+    // MASTER -> both. The knob and ON must hit only the addressed unit(s); the
+    // other unit stays untouched.
+    ControlPotmeter super1_1(ConfigKey("[EffectRack1_EffectUnit1]", "super1"), 0.0, 1.0);
+    ControlPotmeter mix1(ConfigKey("[EffectRack1_EffectUnit1]", "mix"), 0.0, 1.0);
+    ControlPotmeter super1_2(ConfigKey("[EffectRack1_EffectUnit2]", "super1"), 0.0, 1.0);
+    ControlPotmeter mix2(ConfigKey("[EffectRack1_EffectUnit2]", "mix"), 0.0, 1.0);
+    ControlObject enabled1(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "enabled"));
+    ControlObject enabled2(ConfigKey("[EffectRack1_EffectUnit2_Effect1]", "enabled"));
+    super1_1.set(0.0);
+    mix1.set(0.0);
+    super1_2.set(0.0);
+    mix2.set(0.0);
+    enabled1.set(0.0);
+    enabled2.set(0.0);
     loadCrateFlx4Mapping();
-    slotEnabled.set(1.0); // A live effect: routing must switch regardless.
 
-    // CH1 position: Note-On 0x94/0x10, value 0x7F.
+    // CH1 position (Note-On 0x94/0x10): the knob drives unit 1 only.
     receivedShortMessage(0x94, 0x10, 0x7F);
-    EXPECT_DOUBLE_EQ(1.0, ch1.get());
-    EXPECT_DOUBLE_EQ(0.0, ch2.get());
-    EXPECT_DOUBLE_EQ(0.0, master.get());
+    receivedShortMessage(0xB4, 0x02, 0x7F); // LEVEL/DEPTH full.
+    EXPECT_DOUBLE_EQ(1.0, super1_1.get());
+    EXPECT_DOUBLE_EQ(1.0, mix1.get());
+    EXPECT_DOUBLE_EQ(0.0, super1_2.get());
+    EXPECT_DOUBLE_EQ(0.0, mix2.get());
 
-    // CH2 position: Note-On 0x95/0x11, value 0x7F. CH1 must clear even though
-    // the effect slot is still enabled.
+    // ON toggles unit 1's slot only.
+    receivedShortMessage(0x94, 0x47, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, enabled1.get());
+    EXPECT_DOUBLE_EQ(0.0, enabled2.get());
+
+    // CH2 position (Note-On 0x95/0x11): the knob drives unit 2 only; unit 1 is
+    // left exactly where it was.
     receivedShortMessage(0x95, 0x11, 0x7F);
-    EXPECT_DOUBLE_EQ(0.0, ch1.get());
-    EXPECT_DOUBLE_EQ(1.0, ch2.get());
-    EXPECT_DOUBLE_EQ(0.0, master.get());
-    EXPECT_DOUBLE_EQ(1.0, slotEnabled.get());
+    receivedShortMessage(0xB4, 0x02, 0x40);
+    EXPECT_NEAR(0x40 / 127.0, super1_2.get(), 1e-9);
+    EXPECT_NEAR(0x40 / 127.0, mix2.get(), 1e-9);
+    EXPECT_DOUBLE_EQ(1.0, super1_1.get());
+    EXPECT_DOUBLE_EQ(1.0, mix1.get());
 
-    // MASTER position: Note-On 0x94/0x14, value 0x7F.
+    // ON now toggles unit 2 only; unit 1 keeps its earlier state.
+    receivedShortMessage(0x95, 0x47, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, enabled2.get());
+    EXPECT_DOUBLE_EQ(1.0, enabled1.get());
+
+    // MASTER position (Note-On 0x94/0x14): both units move together.
     receivedShortMessage(0x94, 0x14, 0x7F);
-    EXPECT_DOUBLE_EQ(0.0, ch1.get());
-    EXPECT_DOUBLE_EQ(0.0, ch2.get());
-    EXPECT_DOUBLE_EQ(1.0, master.get());
+    receivedShortMessage(0xB4, 0x02, 0x60);
+    EXPECT_NEAR(0x60 / 127.0, super1_1.get(), 1e-9);
+    EXPECT_NEAR(0x60 / 127.0, mix1.get(), 1e-9);
+    EXPECT_NEAR(0x60 / 127.0, super1_2.get(), 1e-9);
+    EXPECT_NEAR(0x60 / 127.0, mix2.get(), 1e-9);
 
-    // The position being left sends value 0x00; it must be ignored so it does
-    // not clobber the newly selected route.
-    receivedShortMessage(0x94, 0x10, 0x00);
-    EXPECT_DOUBLE_EQ(0.0, ch1.get());
-    EXPECT_DOUBLE_EQ(0.0, ch2.get());
-    EXPECT_DOUBLE_EQ(1.0, master.get());
+    // ON in MASTER toggles both together (off, from unit 1's current state).
+    receivedShortMessage(0x94, 0x47, 0x7F);
+    EXPECT_DOUBLE_EQ(0.0, enabled1.get());
+    EXPECT_DOUBLE_EQ(0.0, enabled2.get());
 }
 
-TEST_F(MidiControllerTest, CrateFlx4BeatFxLevelDepthDrivesSuperKnobAndShiftMix) {
-    // LEVEL/DEPTH (0xB4/0x02) sweeps the unit super knob (all loaded effects'
-    // meta together); +SHIFT drives the unit dry/wet mix instead.
+TEST_F(MidiControllerTest, CrateFlx4BeatFxLevelDepthDrivesSuperAndMixShiftMixOnly) {
+    // LEVEL/DEPTH (0xB4/0x02) raises super1 AND mix together on the addressed
+    // unit (intensity + wet as one); +SHIFT trims mix only, leaving super1 put.
     ControlPotmeter super1(ConfigKey("[EffectRack1_EffectUnit1]", "super1"), 0.0, 1.0);
     ControlPotmeter mix(ConfigKey("[EffectRack1_EffectUnit1]", "mix"), 0.0, 1.0);
     super1.set(0.0);
     mix.set(0.0);
     loadCrateFlx4Mapping();
 
-    // No SHIFT: the knob moves super1 and leaves mix untouched.
+    receivedShortMessage(0x94, 0x10, 0x7F); // Address unit 1.
+
+    // No SHIFT: both intensity and wet rise together.
     receivedShortMessage(0xB4, 0x02, 0x7F);
     EXPECT_DOUBLE_EQ(1.0, super1.get());
-    EXPECT_DOUBLE_EQ(0.0, mix.get());
+    EXPECT_DOUBLE_EQ(1.0, mix.get());
 
-    // SHIFT held (Deck 1 SHIFT press 0x90/0x3F): the knob moves mix and leaves
-    // super1 where it was.
+    // SHIFT held (Deck 1 SHIFT press 0x90/0x3F): the knob trims mix only and
+    // leaves super1 where it was.
     receivedShortMessage(0x90, 0x3F, 0x7F);
     receivedShortMessage(0xB4, 0x02, 0x40);
     EXPECT_NEAR(0x40 / 127.0, mix.get(), 1e-9);
@@ -212,26 +235,32 @@ TEST_F(MidiControllerTest, CrateFlx4BeatFxLevelDepthDrivesSuperKnobAndShiftMix) 
     receivedShortMessage(0x90, 0x3F, 0x00); // SHIFT release.
 }
 
-TEST_F(MidiControllerTest, CrateFlx4BeatFxSelectCyclesSlotZeroEffect) {
-    // BEAT FX SELECT cycles the effect loaded in the first slot (Effect1, the
-    // seeded focused slot); SHIFT+SELECT steps the other way.
-    ControlObject focused(ConfigKey("[EffectRack1_EffectUnit1]", "focused_effect"));
-    ControlObject nextEffect(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "next_effect"));
-    ControlObject prevEffect(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "prev_effect"));
-    focused.set(1.0); // Seeded default after the empty-rack fix.
+TEST_F(MidiControllerTest, CrateFlx4BeatFxSelectCyclesAddressedUnitSlotZero) {
+    // BEAT FX SELECT cycles slot 0 (Effect1) of the addressed unit; SHIFT+SELECT
+    // steps back. Switching CH SELECT to CH2 redirects it to unit 2.
+    ControlObject next1(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "next_effect"));
+    ControlObject prev1(ConfigKey("[EffectRack1_EffectUnit1_Effect1]", "prev_effect"));
+    ControlObject next2(ConfigKey("[EffectRack1_EffectUnit2_Effect1]", "next_effect"));
+    next1.set(0.0);
+    prev1.set(0.0);
+    next2.set(0.0);
     loadCrateFlx4Mapping();
 
-    ASSERT_DOUBLE_EQ(0.0, nextEffect.get());
-    ASSERT_DOUBLE_EQ(0.0, prevEffect.get());
+    receivedShortMessage(0x94, 0x10, 0x7F); // Address unit 1.
 
     // BEAT FX SELECT: Note-On 0x94/0x63.
     receivedShortMessage(0x94, 0x63, 0x7F);
-    EXPECT_DOUBLE_EQ(0x7F, nextEffect.get());
-    EXPECT_DOUBLE_EQ(0.0, prevEffect.get());
+    EXPECT_DOUBLE_EQ(0x7F, next1.get());
+    EXPECT_DOUBLE_EQ(0.0, next2.get());
 
-    // SHIFT + BEAT FX SELECT: Note-On 0x94/0x64 (distinct note, no SHIFT needed).
+    // SHIFT + BEAT FX SELECT: Note-On 0x94/0x64 (distinct note).
     receivedShortMessage(0x94, 0x64, 0x7F);
-    EXPECT_DOUBLE_EQ(0x7F, prevEffect.get());
+    EXPECT_DOUBLE_EQ(0x7F, prev1.get());
+
+    // Address unit 2 (Note-On 0x95/0x11): SELECT now cycles unit 2's slot 0.
+    receivedShortMessage(0x95, 0x11, 0x7F);
+    receivedShortMessage(0x94, 0x63, 0x7F);
+    EXPECT_DOUBLE_EQ(0x7F, next2.get());
 }
 
 TEST_F(MidiControllerTest, CrateFlx4FourBeatExitInstantLoopThenExitAndShiftReloop) {

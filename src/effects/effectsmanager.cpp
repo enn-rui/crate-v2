@@ -278,6 +278,11 @@ void EffectsManager::readEffectsXml() {
         loadCrateDefaultStandardEffects();
     }
 
+    // Crate fork: pin unit 1 -> deck A and unit 2 -> deck B for the FLX4
+    // per-deck BEAT FX model. Runs on every setup (independent of the effect
+    // seed above) but only touches a unit that currently has no routing.
+    seedCrateEffectUnitDeckRouting();
+
     if (!data.outputChainPreset.isNull()) {
         m_outputEffectChain->loadChainPreset(data.outputChainPreset);
     }
@@ -363,6 +368,57 @@ void EffectsManager::loadCrateDefaultStandardEffects() {
         // saved racks restore this control as 0, which points at nonexistent
         // Effect0. Select the first real (one-based) slot along with the seed.
         ControlObject::set(ConfigKey(pChain->group(), "focused_effect"), 1.0);
+    }
+}
+
+void EffectsManager::seedCrateEffectUnitDeckRouting() {
+    // Crate fork default for the FLX4 per-deck BEAT FX model: FX unit 1 edits
+    // deck A and unit 2 edits deck B, permanently. Stock Mixxx already routes
+    // standard unit N to deck N in StandardEffectChain's constructor, but a
+    // saved effects state (or the earlier route-switching model that rewrote
+    // these enables live) can leave a unit unrouted or pointed elsewhere. We
+    // seed the deck route ONLY when a unit has no channel routing enabled at
+    // all, so a manual re-route in the UI is never clobbered and re-running this
+    // is a no-op (idempotent).
+    struct CrateUnitRoute {
+        int unitIndex; // zero-based standard chain index
+        const char* deckGroup;
+    };
+    constexpr CrateUnitRoute kRoutes[] = {
+            {0, "[Channel1]"},
+            {1, "[Channel2]"},
+    };
+    for (const auto& route : kRoutes) {
+        if (route.unitIndex >= m_standardEffectChains.size()) {
+            continue;
+        }
+        auto pChain = m_standardEffectChains.at(route.unitIndex);
+        VERIFY_OR_DEBUG_ASSERT(pChain) {
+            continue;
+        }
+        const QString chainGroup = pChain->group();
+
+        bool anyChannelRouted = false;
+        for (const auto& handleGroup : registeredInputChannels()) {
+            const double enabled = ControlObject::get(ConfigKey(chainGroup,
+                    QStringLiteral("group_%1_enable").arg(handleGroup.name())));
+            if (enabled > 0.0) {
+                anyChannelRouted = true;
+                break;
+            }
+        }
+        if (anyChannelRouted) {
+            // Respect existing/manual routing; never fight the user.
+            continue;
+        }
+
+        // Turning the enable control on drives EffectChain::enableForInputChannel
+        // via its connected slot, which actually routes the deck to the unit.
+        ControlObject::set(
+                ConfigKey(chainGroup,
+                        QStringLiteral("group_%1_enable")
+                                .arg(QString::fromLatin1(route.deckGroup))),
+                1.0);
     }
 }
 
