@@ -635,6 +635,8 @@ void WCrateGalaxy::reloadSidecarsIfChanged() {
 }
 
 void WCrateGalaxy::rebuildScene(const QVector<GalaxyNode>& nodes) {
+    m_orbiting = false;
+    m_orbitMoved = false;
     if (m_pLayoutAnimation->state() != QAbstractAnimation::Stopped) {
         m_pLayoutAnimation->stop();
     }
@@ -651,6 +653,7 @@ void WCrateGalaxy::rebuildScene(const QVector<GalaxyNode>& nodes) {
     m_trackLabels.clear();
     m_scatterPositions.clear();
     m_nodeByRelpath.clear();
+    m_labelSortHashes.clear();
     m_subsetNodes.clear();
     m_subsetActive = false;
     m_hoveredNode = -1;
@@ -677,9 +680,11 @@ void WCrateGalaxy::rebuildScene(const QVector<GalaxyNode>& nodes) {
         return;
     }
     m_nodeByRelpath.reserve(m_nodes.size());
+    m_labelSortHashes.reserve(m_nodes.size());
     for (int i = 0; i < m_nodes.size(); ++i) {
         m_nodeByRelpath.insert(
                 QDir::fromNativeSeparators(m_nodes[i].relpath).toCaseFolded(), i);
+        m_labelSortHashes.append(qHash(m_nodes[i].relpath.toCaseFolded(), 0));
     }
 
     QVector<double> tempos;
@@ -1036,12 +1041,26 @@ void WCrateGalaxy::updateMixabilityHalos() {
     rebuildOverlayCache();
 }
 
-void WCrateGalaxy::applyHaloVisuals() {
-    for (int i = 0; i < m_dots.size(); ++i) {
-        int playingDeck = -1;
-        for (auto it = m_deckPlayingNodes.constBegin(); it != m_deckPlayingNodes.constEnd(); ++it) {
-            if (it.value() == i) { playingDeck = it.key(); break; }
+void WCrateGalaxy::applyHaloVisuals(bool updateViewport) {
+    QHash<int, int> playingDeckByNode;
+    playingDeckByNode.reserve(m_deckPlayingNodes.size());
+    for (auto it = m_deckPlayingNodes.constBegin();
+            it != m_deckPlayingNodes.constEnd(); ++it) {
+        playingDeckByNode.insert(it.value(), it.key());
+    }
+    QHash<int, QPair<int, double>> bestRingByNode;
+    for (auto deckIt = m_deckPlexusScores.constBegin();
+            deckIt != m_deckPlexusScores.constEnd(); ++deckIt) {
+        for (auto scoreIt = deckIt.value().constBegin();
+                scoreIt != deckIt.value().constEnd(); ++scoreIt) {
+            auto best = bestRingByNode.constFind(scoreIt.key());
+            if (best == bestRingByNode.constEnd() || scoreIt.value() > best->second) {
+                bestRingByNode.insert(scoreIt.key(), qMakePair(deckIt.key(), scoreIt.value()));
+            }
         }
+    }
+    for (int i = 0; i < m_dots.size(); ++i) {
+        const int playingDeck = playingDeckByNode.value(i, -1);
         const bool playing = playingDeck >= 0;
         QGraphicsEllipseItem* pDot = m_dots[i];
         const double radius = playing ? kDotRadius * 1.65 : kDotRadius;
@@ -1067,11 +1086,10 @@ void WCrateGalaxy::applyHaloVisuals() {
         pHalo->setPos(pDot->pos());
         int ringDeck = playingDeck;
         double ringScore = playing ? 1.0 : 0.0;
-        for (auto deckIt = m_deckPlexusScores.constBegin(); deckIt != m_deckPlexusScores.constEnd(); ++deckIt) {
-            const auto scoreIt = deckIt.value().constFind(i);
-            if (scoreIt != deckIt.value().constEnd() && *scoreIt > ringScore) {
-                ringDeck = deckIt.key(); ringScore = *scoreIt;
-            }
+        const auto bestRing = bestRingByNode.constFind(i);
+        if (bestRing != bestRingByNode.constEnd() && bestRing->second > ringScore) {
+            ringDeck = bestRing->first;
+            ringScore = bestRing->second;
         }
         const bool visible = nodeInSubset(i) && ringDeck >= 0 && pDot->isVisible();
         pHalo->setVisible(visible);
@@ -1086,7 +1104,9 @@ void WCrateGalaxy::applyHaloVisuals() {
             pHalo->setPen(QPen(color, 1.0 + ringScore));
         }
     }
-    viewport()->update();
+    if (updateViewport) {
+        viewport()->update();
+    }
 }
 
 WCrateGalaxy::ValueRange WCrateGalaxy::percentileRange(const QVector<double>& values) {
@@ -1163,6 +1183,7 @@ void WCrateGalaxy::applyPositions(const QVector<QPointF>& positions) {
         m_halos[i]->setPos(positions[i]);
     }
     updateCursorVisual();
+    reanchorLabels();
     scheduleLabelCacheRebuild();
     rebuildOverlayCache();
     viewport()->update();
@@ -1714,6 +1735,8 @@ void WCrateGalaxy::setHoveredNode(int index) {
 }
 
 void WCrateGalaxy::set3dMode(bool enabled) {
+    m_orbiting = false;
+    m_orbitMoved = false;
     if (m_3dMode == enabled) {
         return;
     }
@@ -1794,7 +1817,7 @@ int WCrateGalaxy::testPlexusRingAlpha(int node) const {
     return pHalo && pHalo->isVisible() ? pHalo->pen().color().alpha() : 0;
 }
 
-void WCrateGalaxy::rebuildOverlayCache() {
+void WCrateGalaxy::rebuildOverlayCache(bool updateViewport) {
     m_trailDeviceLines.clear();
     m_trailDeviceColors.clear();
     m_plexusDeviceLines.clear();
@@ -1841,7 +1864,9 @@ void WCrateGalaxy::rebuildOverlayCache() {
         m_suggestionDeviceRings.append(QRectF(center.x() - 6.5,
                 center.y() - 6.5, 13.0, 13.0));
     }
-    viewport()->update();
+    if (updateViewport) {
+        viewport()->update();
+    }
 }
 
 void WCrateGalaxy::update3dProjection() {
@@ -1919,11 +1944,12 @@ void WCrateGalaxy::update3dProjection() {
         pDot->setBrush(color);
         pDot->setZValue(depths[i]);
     }
-    applyHaloVisuals();
+    applyHaloVisuals(false);
     updateCursorVisual();
     updateHoverCard();
+    reanchorLabels();
     scheduleLabelCacheRebuild();
-    rebuildOverlayCache();
+    rebuildOverlayCache(false);
     viewport()->update();
 }
 
@@ -2029,9 +2055,43 @@ void WCrateGalaxy::resizeEvent(QResizeEvent* pEvent) {
 void WCrateGalaxy::scrollContentsBy(int dx, int dy) {
     QGraphicsView::scrollContentsBy(dx, dy);
     rebuildOverlayCache();
-    // Pan frames only restart the single-shot timer. Selection changes once,
-    // 120 ms after the final scroll event, including sub-25% pans.
+    const QRectF liveViewport = mapToScene(viewport()->rect()).boundingRect();
+    constexpr qint64 kPanRelabelThrottleMs = 100;
+    constexpr qreal kScaleEpsilon = 1e-6;
+    const bool purePan = qAbs(transform().m11() - m_labelBuiltTransformScale) <=
+            kScaleEpsilon;
+    if (purePan && !m_labelBuiltViewportSceneRect.contains(liveViewport) &&
+            (!m_lastForcedPanLabelRebuild.isValid() ||
+                    m_lastForcedPanLabelRebuild.elapsed() >= kPanRelabelThrottleMs)) {
+        m_lastForcedPanLabelRebuild.restart();
+        if (m_pLabelRebuildTimer) {
+            m_pLabelRebuildTimer->stop();
+        }
+        rebuildLabelCache();
+    }
     scheduleLabelCacheRebuild();
+}
+
+void WCrateGalaxy::reanchorLabels() {
+    const auto reanchor = [this](QVector<MapLabel>* labels) {
+        for (MapLabel& label : *labels) {
+            if (label.nodeIndex >= 0 && label.nodeIndex < m_dots.size()) {
+                label.sceneAnchor = m_dots[label.nodeIndex]->pos();
+                continue;
+            }
+            if (label.memberNodeIndices.isEmpty()) {
+                continue;
+            }
+            QPointF center;
+            for (int index : std::as_const(label.memberNodeIndices)) {
+                center += m_dots[index]->pos();
+            }
+            label.sceneAnchor = center / label.memberNodeIndices.size();
+        }
+    };
+    reanchor(&m_clusterLabels);
+    reanchor(&m_artistLabels);
+    reanchor(&m_trackLabels);
 }
 
 void WCrateGalaxy::scheduleLabelCacheRebuild() {
@@ -2137,12 +2197,9 @@ void WCrateGalaxy::rebuildLabelCache() {
     const qreal dpr = viewport()->devicePixelRatioF();
     const auto makeLabel = [this, dpr](const QString& text, const QPointF& sceneAnchor,
                                    QColor color, int pixelSize, qreal opacity,
-                                   int clusterId, int nodeIndex, QPointF offset = {}) {
-        QFont font(QStringLiteral("IBM Plex Mono"));
-        font.setStyleHint(QFont::Monospace);
-        font.setPixelSize(pixelSize);
-        font.setWeight(pixelSize >= 13 ? QFont::DemiBold : QFont::Normal);
-        const QFontMetrics metrics(font);
+                                   int clusterId, int nodeIndex, QPointF offset,
+                                   const QFont& font, const QFontMetrics& metrics,
+                                   QVector<int> memberNodeIndices = {}) {
         const QSize textSize = metrics.size(Qt::TextSingleLine, text);
         const QSize logicalSize = textSize + QSize(2, 2);
         QPixmap pixmap(qCeil(logicalSize.width() * dpr),
@@ -2162,8 +2219,16 @@ void WCrateGalaxy::rebuildLabelCache() {
                     -logicalSize.height() * 0.5);
         }
         MapLabel label{text, sceneAnchor, offset, logicalSize, pixmap,
-                color, pixelSize, opacity, clusterId, nodeIndex, false};
+                color, pixelSize, opacity, clusterId, nodeIndex, false,
+                std::move(memberNodeIndices)};
         return label;
+    };
+    const auto labelFont = [](int pixelSize) {
+        QFont font(QStringLiteral("IBM Plex Mono"));
+        font.setStyleHint(QFont::Monospace);
+        font.setPixelSize(pixelSize);
+        font.setWeight(pixelSize >= 13 ? QFont::DemiBold : QFont::Normal);
+        return font;
     };
 
     // One device-space collision index for every layer. Keeping the stable
@@ -2242,8 +2307,11 @@ void WCrateGalaxy::rebuildLabelCache() {
             const double population = std::log1p(it.value().size()) /
                     std::log1p(largest);
             const int px = qRound(11.0 + 9.0 * population);
+            const QFont font = labelFont(px);
+            const QFontMetrics metrics(font);
             place(makeLabel(clusterName(it.key(), it.value()), center,
-                          clusterColor(it.key()), px, opacity, it.key(), -1),
+                          clusterColor(it.key()), px, opacity, it.key(), -1, {},
+                          font, metrics, it.value()),
                     &m_clusterLabels);
         }
     }
@@ -2297,7 +2365,10 @@ void WCrateGalaxy::rebuildLabelCache() {
                 pendingArtistLabels.append(makeLabel(artistForNode(m_nodes[clump[0]]),
                         center, clusterColor(dominant),
                         qBound(9, 9 + clump.size() / 3, 12),
-                        0.78 * qMin(fadeIn, fadeOut), dominant, -1));
+                        0.78 * qMin(fadeIn, fadeOut), dominant, -1, {},
+                        labelFont(qBound(9, 9 + clump.size() / 3, 12)),
+                        QFontMetrics(labelFont(qBound(9, 9 + clump.size() / 3, 12))),
+                        clump));
             }
         }
     }
@@ -2323,20 +2394,22 @@ void WCrateGalaxy::rebuildLabelCache() {
             if (aInView != bInView) return aInView;
             const int ap = priority(a), bp = priority(b);
             if (ap != bp) return ap < bp;
-            const size_t ah = qHash(m_nodes[a].relpath.toCaseFolded(), 0);
-            const size_t bh = qHash(m_nodes[b].relpath.toCaseFolded(), 0);
+            const size_t ah = m_labelSortHashes[a];
+            const size_t bh = m_labelSortHashes[b];
             return ah == bh ? m_nodes[a].relpath < m_nodes[b].relpath : ah < bh;
         });
+        const QFont trackFont = labelFont(10);
+        const QFontMetrics trackMetrics(trackFont);
+        const int trackElideWidth = trackMetrics.horizontalAdvance(
+                QString(24, QLatin1Char('M')));
         for (int index : std::as_const(visible)) {
             if (occupied.size() >= labelCap) break;
-            QFont font(QStringLiteral("IBM Plex Mono"));
-            font.setPixelSize(10);
-            const QString title = QFontMetrics(font).elidedText(
-                    m_nodes[index].title, Qt::ElideRight,
-                    QFontMetrics(font).horizontalAdvance(QString(24, QLatin1Char('M'))));
+            const QString title = trackMetrics.elidedText(
+                    m_nodes[index].title, Qt::ElideRight, trackElideWidth);
             placeTrack(makeLabel(title, m_dots[index]->pos(),
                           clusterColor(m_nodes[index].clusterId), 10, opacity,
-                          m_nodes[index].clusterId, index, QPointF(7.0, -6.0)),
+                          m_nodes[index].clusterId, index, QPointF(7.0, -6.0),
+                          trackFont, trackMetrics),
                     &m_trackLabels);
         }
         std::sort(m_trackLabels.begin(), m_trackLabels.end(), [](const MapLabel& a,

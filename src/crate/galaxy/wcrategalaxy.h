@@ -165,7 +165,14 @@ class WCrateGalaxy : public QGraphicsView {
     void testSetNodeDisplayPosition(int index, const QPointF& position);
     void testSetNodeDisplayPositionWithoutLabelRebuild(
             int index, const QPointF& position);
+    void testReanchorLabels() { reanchorLabels(); }
+    void testUpdate3dProjection() { update3dProjection(); }
     QRectF testTrackLabelViewportRect(int index) const;
+    QPointF testTrackLabelSceneAnchor(int index) const {
+        return index >= 0 && index < m_trackLabels.size()
+                ? m_trackLabels[index].sceneAnchor
+                : QPointF();
+    }
     int testTrackLabelNodeIndex(int index) const;
     void testSetAllNodeDisplayPositions(const QPointF& position);
     // Deck-load context-menu labels for a node (empty if the node is not
@@ -248,6 +255,7 @@ class WCrateGalaxy : public QGraphicsView {
     static ValueRange percentileRange(const QVector<double>& values);
     QString resolveMusicPath(const QString& relpath) const;
     void rebuildLabelCache();
+    void reanchorLabels();
     bool leadersSuppressed() const;
     void scheduleLabelCacheRebuild();
     void updateLabelOpacities();
@@ -262,10 +270,10 @@ class WCrateGalaxy : public QGraphicsView {
     void update3dProjection();
     int projectedNodeAt(const QPoint& viewportPos) const;
     void updateMixabilityHalos();
-    void applyHaloVisuals();
+    void applyHaloVisuals(bool updateViewport = true);
     void playingTrackChanged(const TrackPointer& pTrack);
     void appendTrailRelpath(const QString& relpath);
-    void rebuildOverlayCache();
+    void rebuildOverlayCache(bool updateViewport = true);
     void scheduleSuggestions();
     void updateSuggestions();
     QString relpathForLocation(const QString& location) const;
@@ -329,6 +337,7 @@ class WCrateGalaxy : public QGraphicsView {
         int clusterId = -1;
         int nodeIndex = -1;
         bool hasLeader = false;
+        QVector<int> memberNodeIndices;
     };
     QVector<MapLabel> m_clusterLabels;
     QVector<MapLabel> m_artistLabels;
@@ -396,6 +405,8 @@ class WCrateGalaxy : public QGraphicsView {
     QPointer<QAbstractItemModel> m_pSubsetModel;
     QRectF m_labelBuiltViewportSceneRect;
     qreal m_labelBuiltTransformScale = 0.0;
+    QElapsedTimer m_lastForcedPanLabelRebuild;
+    QVector<size_t> m_labelSortHashes;
 
     // Table-jump-on-load observation (test seam; see requestTableJumpToCursor).
     int m_tableJumpRequests = 0;

@@ -890,10 +890,10 @@ TEST_F(CrateGalaxyUiTest, SmallPanRecomputesOnceAfterSettleAndLabelsNewView) {
             m_pGalaxy->viewport()->rect()).boundingRect();
     m_pGalaxy->centerOn(visible.center() + QPointF(visible.width() * 0.10, 0.0));
     QApplication::processEvents();
-    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 1);
     QTest::qWait(140);
     QApplication::processEvents();
-    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 1);
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 2);
     const QPair<int, int> coverage =
             m_pGalaxy->testInViewportTrackLabelCoverage();
     EXPECT_GT(coverage.first, 0);
@@ -908,9 +908,21 @@ TEST_F(CrateGalaxyUiTest, LargePanRecomputesLabelsOnceAfterSettle) {
             m_pGalaxy->viewport()->rect()).boundingRect();
     m_pGalaxy->centerOn(visible.center() + QPointF(visible.width() * 0.35, 0.0));
     QApplication::processEvents();
-    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before);
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 1);
     QTest::qWait(140);
     QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 2);
+}
+
+TEST_F(CrateGalaxyUiTest, ContinuousPanForcesAtMostOneRebuildPerThrottleWindow) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0, /*dense=*/true);
+    const int before = m_pGalaxy->testLabelRebuildCount();
+    const QRectF visible = m_pGalaxy->mapToScene(
+            m_pGalaxy->viewport()->rect()).boundingRect();
+    for (int i = 1; i <= 8; ++i) {
+        m_pGalaxy->centerOn(visible.center() + QPointF(visible.width() * i, 0.0));
+        QApplication::processEvents();
+    }
     EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), before + 1);
 }
 
@@ -936,6 +948,61 @@ TEST_F(CrateGalaxyUiTest, LabelRecomputeMeetsPerformanceGate) {
     const qint64 elapsedMs = timer.elapsed();
     RecordProperty("label_recompute_ms", elapsedMs);
     EXPECT_LT(elapsedMs, 25);
+}
+
+TEST_F(CrateGalaxyUiTest, ReanchorLabelsTracksMovedDotsWithoutRebuild) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0);
+    ASSERT_GT(m_pGalaxy->testLabelCount(2), 0);
+    const int rebuilds = m_pGalaxy->testLabelRebuildCount();
+    for (int label = 0; label < qMin(8, m_pGalaxy->testLabelCount(2)); ++label) {
+        const int node = m_pGalaxy->testTrackLabelNodeIndex(label);
+        const QPointF moved = m_pGalaxy->testNodeDisplayPos(node) + QPointF(17, -9);
+        m_pGalaxy->testSetNodeDisplayPositionWithoutLabelRebuild(node, moved);
+    }
+    m_pGalaxy->testReanchorLabels();
+    for (int label = 0; label < qMin(8, m_pGalaxy->testLabelCount(2)); ++label) {
+        const int node = m_pGalaxy->testTrackLabelNodeIndex(label);
+        EXPECT_EQ(m_pGalaxy->mapFromScene(m_pGalaxy->testTrackLabelSceneAnchor(label)),
+                m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(node)));
+    }
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
+}
+
+TEST_F(CrateGalaxyUiTest, LayoutApplyReanchorsLabelsMidAnimationWithoutRebuild) {
+    recreateGalaxy(/*mode3d=*/false, /*debugZoom=*/4.0);
+    ASSERT_GT(m_pGalaxy->testLabelCount(2), 0);
+    const int rebuilds = m_pGalaxy->testLabelRebuildCount();
+    m_pGalaxy->testSetAllNodeDisplayPositions(QPointF(640, 360));
+    for (int label = 0; label < qMin(8, m_pGalaxy->testLabelCount(2)); ++label) {
+        const int node = m_pGalaxy->testTrackLabelNodeIndex(label);
+        EXPECT_EQ(m_pGalaxy->mapFromScene(m_pGalaxy->testTrackLabelSceneAnchor(label)),
+                m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(node)));
+    }
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
+}
+
+TEST_F(CrateGalaxyUiTest, GalaxyPerFrameWorkMeetsPerformanceGatesAt1500Nodes) {
+    recreateGalaxy(/*mode3d=*/true, /*debugZoom=*/4.0, /*dense=*/false,
+            /*syntheticNodes=*/1500);
+    ASSERT_GE(m_pGalaxy->testNodeCount(), 1500);
+    const int rebuilds = m_pGalaxy->testLabelRebuildCount();
+    QElapsedTimer timer;
+    timer.start();
+    m_pGalaxy->testReanchorLabels();
+    const qint64 reanchorNs = timer.nsecsElapsed();
+    timer.restart();
+    m_pGalaxy->testUpdate3dProjection();
+    const qint64 projectionNs = timer.nsecsElapsed();
+    RecordProperty("label_reanchor_ns", reanchorNs);
+    RecordProperty("projection_frame_ns", projectionNs);
+    EXPECT_LT(reanchorNs, 3000000);
+    EXPECT_LT(projectionNs, 5000000);
+    for (int label = 0; label < qMin(8, m_pGalaxy->testLabelCount(2)); ++label) {
+        const int node = m_pGalaxy->testTrackLabelNodeIndex(label);
+        EXPECT_EQ(m_pGalaxy->mapFromScene(m_pGalaxy->testTrackLabelSceneAnchor(label)),
+                m_pGalaxy->mapFromScene(m_pGalaxy->testNodeDisplayPos(node)));
+    }
+    EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
 }
 
 TEST_F(CrateGalaxyUiTest, DeepZoomLabelsAreNested) {
