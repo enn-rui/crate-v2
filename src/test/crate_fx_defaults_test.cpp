@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <QSignalSpy>
+
 #include "control/controlobject.h"
 #include "effects/effectchain.h"
 #include "effects/effectslot.h"
@@ -19,6 +21,9 @@ class CrateFxDefaultsTest : public MixxxTest {
                 "[MasterOutput]");
         pManager->registerOutputChannel(masterOutput);
         pManager->registerInputChannel(masterOutput);
+        const QString masterGroup = QStringLiteral("[Master]");
+        pManager->registerInputChannel(ChannelHandleAndGroup(
+                m_pHandleFactory->getOrCreateHandle(masterGroup), masterGroup));
         for (int deck = 1; deck <= 4; ++deck) {
             const QString group = QStringLiteral("[Channel%1]").arg(deck);
             pManager->registerInputChannel(ChannelHandleAndGroup(
@@ -78,39 +83,81 @@ TEST_F(CrateFxDefaultsTest, EffectUnitsRouteToOwnDeckExclusively) {
     EXPECT_DOUBLE_EQ(0.0, routeEnable(2, "[Master]"));
 }
 
-// The seed must re-route a unit that has NO routing at all, and re-running it
-// must be a no-op (idempotent).
-TEST_F(CrateFxDefaultsTest, SeedRoutesUnroutedUnitAndIsIdempotent) {
+TEST_F(CrateFxDefaultsTest, RepairsPersistedCrossedRoutingAndIsIdempotent) {
+    // Her exact stale state: both units process deck B and unit 1 misses deck A.
+    config()->setValue(ConfigKey("[EffectRack1_EffectUnit1]",
+                               "group_[Channel1]_enable"),
+            0.0);
+    config()->setValue(ConfigKey("[EffectRack1_EffectUnit1]",
+                               "group_[Channel2]_enable"),
+            1.0);
+    config()->setValue(ConfigKey("[EffectRack1_EffectUnit2]",
+                               "group_[Channel2]_enable"),
+            1.0);
     auto pManager = makeManager();
 
-    // Simulate a unit that ended up with no routing (e.g. a stale saved state).
-    setRouteEnable(1, "[Channel1]", 0.0);
-    ASSERT_DOUBLE_EQ(0.0, routeEnable(1, "[Channel1]"));
-
-    pManager->seedCrateEffectUnitDeckRouting();
-    EXPECT_DOUBLE_EQ(1.0, routeEnable(1, "[Channel1]"))
-            << "an unrouted unit 1 must be seeded back to deck A";
-    EXPECT_DOUBLE_EQ(0.0, routeEnable(1, "[Channel2]"));
-
-    // Idempotent: a second pass changes nothing.
-    pManager->seedCrateEffectUnitDeckRouting();
     EXPECT_DOUBLE_EQ(1.0, routeEnable(1, "[Channel1]"));
     EXPECT_DOUBLE_EQ(0.0, routeEnable(1, "[Channel2]"));
+    EXPECT_DOUBLE_EQ(1.0, routeEnable(2, "[Channel2]"));
+    EXPECT_DOUBLE_EQ(0.0, routeEnable(2, "[Channel1]"));
+
+    const ConfigKey unit1Deck1("[EffectRack1_EffectUnit1]",
+            "group_[Channel1]_enable");
+    QSignalSpy valueChanges(ControlObject::getControl(unit1Deck1),
+            &ControlObject::valueChanged);
+    pManager->seedCrateEffectUnitDeckRouting();
+    EXPECT_EQ(0, valueChanges.count())
+            << "an idempotent pass must not re-enable an already-correct route";
 }
 
-// A unit the user manually re-routed (any channel enabled) must be left alone.
-TEST_F(CrateFxDefaultsTest, SeedLeavesManuallyRoutedUnitAlone) {
-    auto pManager = makeManager();
+TEST_F(CrateFxDefaultsTest, LateDecksRouteUnitsThreeAndFourExclusively) {
+    auto pManager = std::make_unique<EffectsManager>(config(), m_pHandleFactory);
+    const QString masterOutputGroup = QStringLiteral("[MasterOutput]");
+    const ChannelHandleAndGroup masterOutput(
+            m_pHandleFactory->getOrCreateHandle(masterOutputGroup),
+            masterOutputGroup);
+    pManager->registerOutputChannel(masterOutput);
+    pManager->registerInputChannel(masterOutput);
+    const QString masterGroup = QStringLiteral("[Master]");
+    pManager->registerInputChannel(ChannelHandleAndGroup(
+            m_pHandleFactory->getOrCreateHandle(masterGroup), masterGroup));
+    for (int deck = 1; deck <= 2; ++deck) {
+        const QString group = QStringLiteral("[Channel%1]").arg(deck);
+        pManager->registerInputChannel(ChannelHandleAndGroup(
+                m_pHandleFactory->getOrCreateHandle(group), group));
+    }
+    pManager->setup();
 
-    // Manual re-route: unit 1 now feeds deck 3 only, not its default deck A.
-    setRouteEnable(1, "[Channel1]", 0.0);
-    setRouteEnable(1, "[Channel3]", 1.0);
+    for (int deck = 3; deck <= 4; ++deck) {
+        const QString group = QStringLiteral("[Channel%1]").arg(deck);
+        pManager->registerInputChannel(ChannelHandleAndGroup(
+                m_pHandleFactory->getOrCreateHandle(group), group));
+    }
+
+    for (int unit = 3; unit <= 4; ++unit) {
+        for (int deck = 1; deck <= 4; ++deck) {
+            EXPECT_DOUBLE_EQ(unit == deck ? 1.0 : 0.0,
+                    routeEnable(unit,
+                            QStringLiteral("[Channel%1]").arg(deck)));
+        }
+        EXPECT_DOUBLE_EQ(0.0, routeEnable(unit, masterGroup));
+    }
+}
+
+TEST_F(CrateFxDefaultsTest, RoutingGateOffPreservesCrossedState) {
+    config()->setValue(ConfigKey("[Crate]", "fx_deck_routing"), 0);
+    config()->setValue(ConfigKey("[EffectRack1_EffectUnit1]",
+                               "group_[Channel1]_enable"),
+            0.0);
+    config()->setValue(ConfigKey("[EffectRack1_EffectUnit1]",
+                               "group_[Channel2]_enable"),
+            1.0);
+    auto pManager = makeManager();
 
     pManager->seedCrateEffectUnitDeckRouting();
 
-    EXPECT_DOUBLE_EQ(0.0, routeEnable(1, "[Channel1]"))
-            << "the seed must not fight a manual re-route";
-    EXPECT_DOUBLE_EQ(1.0, routeEnable(1, "[Channel3]"));
+    EXPECT_DOUBLE_EQ(0.0, routeEnable(1, "[Channel1]"));
+    EXPECT_DOUBLE_EQ(1.0, routeEnable(1, "[Channel2]"));
 }
 
 TEST_F(CrateFxDefaultsTest, EmptySavedRackSeedsAllUnitsOnceAndControlsResolve) {

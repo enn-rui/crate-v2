@@ -61,11 +61,21 @@ class CrateFxRoutingTest : public MixxxTest {
         pEffect->processEffectsRequest(request, &m_pipes.second);
     }
 
+    void setGain(EngineEffect* pEffect, double decibels) {
+        EffectsRequest request;
+        request.type = EffectsRequest::SET_PARAMETER_PARAMETERS;
+        request.pTargetEffect = pEffect;
+        request.SetParameterParameters.iParameter = 0;
+        request.value = decibels;
+        pEffect->processEffectsRequest(request, &m_pipes.second);
+    }
+
     // Runs one engine callback for the given input channel with the chain fully enabled
     // for it (mirrors EngineEffectChain routing an enabled channel to the effect).
     // Returns whether the effect processed the channel.
     bool processChannel(EngineEffect* pEffect, const ChannelHandleAndGroup& input) {
         GroupFeatureState groupFeatures;
+        std::fill(m_output.begin(), m_output.end(), 0.0f);
         return pEffect->process(input.handle(),
                 m_master.handle(),
                 m_input.data(),
@@ -107,11 +117,14 @@ TEST_F(CrateFxRoutingTest, LateAddedDeckIsProcessedByLoadedEffect) {
 
     // Effect loaded and enabled into the standard unit.
     setEffectEnabled(&effect, true);
+    setGain(&effect, -12.0);
 
     // Sanity: a deck that existed when the effect was loaded is processed. This holds
     // both before and after the fix and validates the harness.
     EXPECT_TRUE(processChannel(&effect, m_deck1))
             << "deck present at effect-load time should be processed";
+    EXPECT_NE(m_input, m_output)
+            << "unit 1 must audibly alter deck 1's buffer when wet";
 
     // Deck 3 is created later (4-deck mode). EffectChain::enableForInputChannel calls
     // EffectSlot::initializeInputChannel -> EngineEffect::initializeInputChannel with the
@@ -122,6 +135,8 @@ TEST_F(CrateFxRoutingTest, LateAddedDeckIsProcessedByLoadedEffect) {
     EXPECT_TRUE(processChannel(&effect, m_deck3))
             << "FX must apply to a deck created after the effect was loaded (decks 3/4 "
                "in 4-channel mode)";
+    EXPECT_NE(m_input, m_output)
+            << "unit 3 must audibly alter late deck 3's buffer when wet";
 }
 
 // A disabled effect must not spuriously process a late-added deck: initializeInputChannel

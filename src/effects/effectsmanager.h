@@ -74,10 +74,9 @@ class EffectsManager {
         return m_registeredInputChannels;
     }
 
-    // Crate fork: pin standard unit 1 -> deck A and unit 2 -> deck B so the
-    // FLX4 per-deck BEAT FX model has a stable target. Idempotent; only seeds a
-    // unit that has no channel routing at all (never fights a manual re-route).
-    // Called at the end of setup(); public so it can be exercised in isolation.
+    // Crate fork: enforce standard unit N -> deck N exclusively for units 1-4.
+    // Idempotent and also called when late input channels register. Disabled by
+    // [Crate],fx_deck_routing=0. Public so it can be exercised in isolation.
     void seedCrateEffectUnitDeckRouting();
 
     void registerOutputChannel(const ChannelHandleAndGroup& handle_group);
