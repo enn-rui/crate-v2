@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "analyzer/analyzerscheduledtrack.h"
+#include "crate/downbeat/downbeatstore.h"
 #include "crate/export/rekordboxxml.h"
 #include "crate/suggestions/suggestfeature.h"
 #include "crate/system/systemcrates.h"
@@ -935,7 +936,12 @@ void CrateFeature::exportRekordboxXml(
         playlists.append(qMakePair(crate.getName(), tracks));
     }
     const auto result = mixxx::RekordboxXmlExport::write(
-            playlists, fileLocation, VersionStore::version());
+            playlists,
+            fileLocation,
+            VersionStore::version(),
+            [](const TrackPointer& pTrack) {
+                return crate::DownbeatStore::instance().offset(pTrack->getId());
+            });
     if (!result.ok) {
         QMessageBox::warning(nullptr, tr("rekordbox XML Export Failed"), result.error);
         return;

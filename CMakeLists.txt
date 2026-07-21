@@ -1769,6 +1769,7 @@ add_library(
   src/widget/wcoverartlabel.cpp
   src/crate/data/cratesidecars.cpp
   src/crate/data/playlistmigration.cpp
+  src/crate/downbeat/downbeatstore.cpp
   src/crate/cull/cullclient.cpp
   src/crate/cull/culledtracks.cpp
   src/crate/cull/cullworkflow.cpp
@@ -2936,6 +2937,7 @@ if(BUILD_TESTING)
     src/test/coverartutils_test.cpp
     src/test/cratestorage_test.cpp
     src/test/crate_rekordbox_xml_test.cpp
+    src/test/crate_bar_markers_test.cpp
     src/test/crate_fx_routing_test.cpp
     src/test/crate_fx_defaults_test.cpp
     src/test/crate_control_polling_test.cpp

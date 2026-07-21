@@ -1041,6 +1041,11 @@ ControlPickerMenu::ControlPickerMenu(QWidget* pParent)
             tr("Reload map from disk"),
             tr("Reload the galaxy map from its sidecar files"),
             pCrateMenu);
+    addDeckControl("crate_downbeat_shift",
+            tr("Shift downbeat (bar phase)"),
+            tr("Rotate the loaded track's downbeat by one beat so 4/4 bar "
+               "markers land on the right beat"),
+            pCrateMenu);
 
     // Effect Controls
     QMenu* pEffectsMenu = addSubmenu(tr("Effects"));

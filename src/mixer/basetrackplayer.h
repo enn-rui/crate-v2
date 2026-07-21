@@ -154,6 +154,7 @@ class BaseTrackPlayerImpl : public BaseTrackPlayer {
     void slotShiftCuesMillis(double milliseconds);
     void slotShiftCuesMillisButton(double value, double milliseconds);
     void slotUpdateReplayGainFromPregain(double pressed);
+    void slotCrateDownbeatShift(double pressed);
 
   private:
     void setReplayGain(double value);
@@ -223,6 +224,9 @@ class BaseTrackPlayerImpl : public BaseTrackPlayer {
     std::unique_ptr<ControlPushButton> m_pShiftCuesLater;
     std::unique_ptr<ControlPushButton> m_pShiftCuesLaterSmall;
     std::unique_ptr<ControlObject> m_pShiftCues;
+
+    // Crate: rotate the loaded track's downbeat offset (+1 mod 4) for bar markers
+    std::unique_ptr<ControlPushButton> m_pCrateDownbeatShift;
 
     std::unique_ptr<ControlPushButton> m_pShowTrackMenuControl;
 

@@ -11,10 +11,13 @@
 
 #include "analyzer/analyzerprogress.h"
 #include "control/controlproxy.h"
+#include "crate/downbeat/barphase.h"
+#include "crate/downbeat/downbeatstore.h"
 #include "engine/engine.h"
 #include "mixer/playermanager.h"
 #include "moc_woverview.cpp"
 #include "preferences/colorpalettesettings.h"
+#include "track/beats.h"
 #include "track/track.h"
 #include "util/colorcomponents.h"
 #include "util/dnd.h"
@@ -144,6 +147,16 @@ WOverview::WOverview(
             this, &WOverview::onTrackAnalyzerProgress);
 
     connect(m_pCueMenuPopup.get(), &WCueMenuPopup::aboutToHide, this, &WOverview::slotCueMenuPopupAboutToHide);
+
+    // Repaint bar markers immediately when this deck's downbeat offset is shifted.
+    connect(&crate::DownbeatStore::instance(),
+            &crate::DownbeatStore::offsetChanged,
+            this,
+            [this](TrackId trackId, int /*offset*/) {
+                if (m_pCurrentTrack && m_pCurrentTrack->getId() == trackId) {
+                    update();
+                }
+            });
 }
 
 void WOverview::setup(const QDomNode& node, const SkinContext& context) {
@@ -740,6 +753,7 @@ void WOverview::paintEvent(QPaintEvent* pEvent) {
             const auto gain = static_cast<CSAMPLE_GAIN>(length() - 2) /
                     static_cast<CSAMPLE_GAIN>(trackSamples);
 
+            drawBeats(&painter, offset, gain);
             drawRangeMarks(&painter, offset, gain);
             drawMarks(&painter, offset, gain);
             drawPickupPosition(&painter);
@@ -1010,6 +1024,52 @@ void WOverview::drawRangeMarks(QPainter* pPainter, const float& offset, const fl
         } else {
             pPainter->drawRect(QRectF(QPointF(-2.0, startPosition),
                     QPointF(width() + 1.0, endPosition)));
+        }
+    }
+}
+
+void WOverview::drawBeats(QPainter* pPainter, const float offset, const float gain) {
+    if (!m_pCurrentTrack) {
+        return;
+    }
+    const mixxx::BeatsPointer pBeats = m_pCurrentTrack->getBeats();
+    if (!pBeats) {
+        return;
+    }
+    const double trackSamples = getTrackSamples();
+    if (trackSamples <= 0) {
+        return;
+    }
+
+    // The overview strip is too compressed to show every beat, so only bar
+    // lines (downbeats) are drawn -- the same 4/4 grid as the scrolling
+    // waveform, anchored at the grid anchor plus the per-track downbeat offset.
+    const int downbeatOffset =
+            crate::DownbeatStore::instance().offset(m_pCurrentTrack->getId());
+    const auto endPosition =
+            mixxx::audio::FramePos::fromEngineSamplePos(trackSamples);
+    const auto startPosition = mixxx::audio::FramePos::fromEngineSamplePos(0.0);
+
+    auto it = pBeats->iteratorFrom(startPosition);
+    int beatIndex = it - pBeats->cfirstmarker();
+
+    PainterScope painterScope(pPainter);
+    QColor barColor = m_axesColor;
+    barColor.setAlphaF(0.5f);
+    pPainter->setPen(QPen(barColor, m_scaleFactor));
+
+    for (; it != pBeats->cend() && *it <= endPosition; ++it, ++beatIndex) {
+        if (!crate::isDownbeat(beatIndex, downbeatOffset)) {
+            continue;
+        }
+        const float pos = math_clamp(
+                offset + static_cast<float>(it->toEngineSamplePos()) * gain,
+                0.0f,
+                static_cast<float>(width()));
+        if (m_orientation == Qt::Horizontal) {
+            pPainter->drawLine(QLineF(pos, 0.0, pos, height()));
+        } else {
+            pPainter->drawLine(QLineF(0.0, pos, width(), pos));
         }
     }
 }

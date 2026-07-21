@@ -6,6 +6,7 @@
 
 #include "control/controlencoder.h"
 #include "control/controlobject.h"
+#include "crate/downbeat/downbeatstore.h"
 #include "engine/channels/enginedeck.h"
 #include "engine/controls/enginecontrol.h"
 #include "engine/defs_keylock.h"
@@ -312,6 +313,15 @@ BaseTrackPlayerImpl::BaseTrackPlayerImpl(
             &ControlObject::valueChanged,
             this,
             &BaseTrackPlayerImpl::slotShiftCuesMillis);
+
+    // Crate: push button that rotates the loaded track's downbeat offset +1
+    // (mod 4), moving where 4/4 bar markers land in the waveforms.
+    m_pCrateDownbeatShift = std::make_unique<ControlPushButton>(
+            ConfigKey(getGroup(), "crate_downbeat_shift"));
+    connect(m_pCrateDownbeatShift.get(),
+            &ControlObject::valueChanged,
+            this,
+            &BaseTrackPlayerImpl::slotCrateDownbeatShift);
 
     // BPM and key of the current song
     m_pFileBPM = std::make_unique<ControlObject>(ConfigKey(getGroup(), "file_bpm"));
@@ -1108,6 +1118,18 @@ void BaseTrackPlayerImpl::slotShiftCuesMillisButton(double value, double millise
         return;
     }
     slotShiftCuesMillis(milliseconds);
+}
+
+void BaseTrackPlayerImpl::slotCrateDownbeatShift(double pressed) {
+    if (pressed <= 0) {
+        return;
+    }
+    if (!m_pLoadedTrack) {
+        return;
+    }
+    // Rotate and persist; the store signals the overview and the scrolling
+    // waveform re-reads the offset on its next frame.
+    crate::DownbeatStore::instance().rotateDownbeat(m_pLoadedTrack->getId());
 }
 
 void BaseTrackPlayerImpl::slotUpdateReplayGainFromPregain(double pressed) {

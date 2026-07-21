@@ -2,6 +2,8 @@
 
 #include <QDomNode>
 
+#include "crate/downbeat/barphase.h"
+#include "crate/downbeat/downbeatstore.h"
 #include "moc_waveformrenderbeat.cpp"
 #include "rendergraph/geometry.h"
 #include "rendergraph/material/unicolormaterial.h"
@@ -110,9 +112,23 @@ bool WaveformRenderBeat::preprocessInner() {
 
     VertexUpdater vertexUpdater{geometry().vertexDataAs<Geometry::Point2D>()};
 
-    for (auto it = trackBeats->iteratorFrom(startPosition);
+    // Bars start every 4th beat (4/4) counted from the grid anchor plus the
+    // per-track downbeat offset. Bar lines are drawn heavier (wider) than beat
+    // lines; same color, no new palette entries. (Not available in the
+    // scenegraph/QML build, which has no Crate database seam.)
+#ifndef __SCENEGRAPH__
+    const int downbeatOffset =
+            crate::DownbeatStore::instance().offset(trackInfo->getId());
+    auto startIt = trackBeats->iteratorFrom(startPosition);
+    int beatIndex = startIt - trackBeats->cfirstmarker();
+#else
+    auto startIt = trackBeats->iteratorFrom(startPosition);
+    [[maybe_unused]] int beatIndex = 0;
+#endif
+
+    for (auto it = startIt;
             it != trackBeats->cend() && *it <= endPosition;
-            ++it) {
+            ++it, ++beatIndex) {
         double beatPosition = it->toEngineSamplePos();
         double xBeatPoint =
                 m_waveformRenderer->transformSamplePositionInRendererWorld(
@@ -121,7 +137,11 @@ bool WaveformRenderBeat::preprocessInner() {
         xBeatPoint = qRound(xBeatPoint * devicePixelRatio) / devicePixelRatio;
 
         const float x1 = static_cast<float>(xBeatPoint);
+#ifndef __SCENEGRAPH__
+        const float x2 = x1 + (crate::isDownbeat(beatIndex, downbeatOffset) ? 3.f : 1.f);
+#else
         const float x2 = x1 + 1.f;
+#endif
 
         vertexUpdater.addRectangle({x1, 0.f},
                 {x2, m_isSlipRenderer ? rendererBreadth / 2 : rendererBreadth});

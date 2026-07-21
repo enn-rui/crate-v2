@@ -11,6 +11,8 @@
 #include <cmath>
 #include <limits>
 
+#include "crate/downbeat/barphase.h"
+#include "track/beats.h"
 #include "track/keyutils.h"
 #include "track/track.h"
 
@@ -54,7 +56,7 @@ double seconds(audio::FramePos position, audio::SampleRate sampleRate) {
 }
 
 void writeTempo(QXmlStreamWriter* writer, const BeatsPointer& beats,
-        RekordboxXmlExport::Result* result) {
+        int downbeatOffset, RekordboxXmlExport::Result* result) {
     if (!beats || !beats->getSampleRate().isValid() || !beats->firstBeat().isValid()) {
         return;
     }
@@ -67,11 +69,15 @@ void writeTempo(QXmlStreamWriter* writer, const BeatsPointer& beats,
         while (start < 0.0) {
             start += interval;
         }
+        // Bar position (Battito 1..4) of this anchor beat, counted from the grid
+        // anchor plus the per-track downbeat offset.
+        const int beatIndex = beats->iteratorFrom(position) - beats->cfirstmarker();
+        const int battito = crate::barBattito(beatIndex, downbeatOffset);
         writer->writeEmptyElement(QStringLiteral("TEMPO"));
         writer->writeAttribute(QStringLiteral("Inizio"), QString::number(start, 'f', 3));
         writer->writeAttribute(QStringLiteral("Bpm"), QString::number(bpm.value(), 'f', 2));
         writer->writeAttribute(QStringLiteral("Metro"), QStringLiteral("4/4"));
-        writer->writeAttribute(QStringLiteral("Battito"), QStringLiteral("1"));
+        writer->writeAttribute(QStringLiteral("Battito"), QString::number(battito));
         ++result->tempoAnchorsWritten;
     };
     if (beats->hasConstantTempo()) {
@@ -146,7 +152,8 @@ void writeCues(QXmlStreamWriter* writer, const TrackPointer& track,
 } // namespace
 
 RekordboxXmlExport::Result RekordboxXmlExport::write(const QList<Playlist>& playlists,
-        const QString& outputPath, const QString& productVersion) {
+        const QString& outputPath, const QString& productVersion,
+        const DownbeatOffsetResolver& downbeatOffset) {
     Result result;
     QFile file(outputPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -206,7 +213,8 @@ RekordboxXmlExport::Result RekordboxXmlExport::write(const QList<Playlist>& play
         optionalAttribute(&writer, QStringLiteral("Tonality"), KeyUtils::keyToString(track->getKey(), KeyUtils::KeyNotation::Traditional));
         if (track->getColor()) writer.writeAttribute(QStringLiteral("Colour"), snappedColor(*track->getColor()));
         writer.writeAttribute(QStringLiteral("Location"), locationUri(track->getLocation()));
-        writeTempo(&writer, track->getBeats(), &result);
+        const int trackOffset = downbeatOffset ? downbeatOffset(track) : 0;
+        writeTempo(&writer, track->getBeats(), trackOffset, &result);
         const auto sampleRate = track->getSampleRate().isValid() ? track->getSampleRate() :
                 (track->getBeats() ? track->getBeats()->getSampleRate() : audio::SampleRate());
         writeCues(&writer, track, sampleRate, &result);

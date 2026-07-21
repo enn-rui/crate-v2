@@ -1,5 +1,6 @@
 #include "library/trackcollection.h"
 
+#include "crate/downbeat/downbeatstore.h"
 #include "library/basetrackcache.h"
 #include "library/trackset/crate/crate.h"
 #include "moc_trackcollection.cpp"
@@ -78,6 +79,7 @@ void TrackCollection::connectDatabase(const QSqlDatabase& database) {
     m_analysisDao.initialize(database);
     m_libraryHashDao.initialize(database);
     m_crates.connectDatabase(database);
+    crate::DownbeatStore::instance().connectDatabase(database);
 }
 
 void TrackCollection::disconnectDatabase() {
@@ -87,6 +89,7 @@ void TrackCollection::disconnectDatabase() {
     m_database = QSqlDatabase();
     m_trackDao.finish();
     m_crates.disconnectDatabase();
+    crate::DownbeatStore::instance().disconnectDatabase();
 }
 
 void TrackCollection::connectTrackSource(QSharedPointer<BaseTrackCache> pTrackSource) {
