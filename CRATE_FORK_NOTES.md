@@ -39,13 +39,22 @@ listed here. This list is the entire merge-conflict surface for future `upstream
 - Crate intelligence seam: CMakeLists.txt (SonicVectors/scores sources and golden test)
 - FX out-of-box default seam (2026-07-19): src/effects/effectsmanager.h (+decl
   loadCrateDefaultStandardEffects), src/effects/effectsmanager.cpp (+include
-  effectpreset.h; readEffectsXml now seeds a default effect into standard units 1 & 2
-  -- Echo, Reverb -- whenever NO effect is loaded in ANY standard unit slot. This
+  effectpreset.h; readEffectsXml now seeds a default effect into all four standard units
+  -- Echo, Reverb, Filter, Filter -- whenever NO effect is loaded in ANY standard unit slot. This
   covers both a virgin profile (empty preset list) AND a saved profile whose slots
   are all empty (FX never used). Any single loaded effect anywhere disables the seed,
   so a real setup is never clobbered; the fix self-heals on next launch. Routing
   (unit N -> deck N) is unchanged upstream behaviour from StandardEffectChain's ctor.
   Small, additive; low merge risk.
+- Missing-control polling seam (2026-07-20): src/control/control.cpp remembers missing
+  ConfigKeys already warned about, so controller polling logs each absent target once
+  instead of once per poll.
+- Track-menu warning seam (2026-07-20): src/widget/wtrackmenu.cpp creates the two Hotcue
+  sorting actions with Metadata (the menu that consumes them), not ResetPlayed. Triage
+  supports metadata without ResetPlayed and previously inserted two null actions at startup.
+- Galaxy search seam (2026-07-20): src/crate/galaxy/wcrategalaxy.cpp defers table-model
+  reset notifications until BaseSqlTableModel finishes replacing rows and resolves each
+  result through getTrack(), because getTrackLocation() is empty for uncached rows.
 - FX 4-deck routing fix (2026-07-20): CMakeLists.txt (+src/test/crate_fx_routing_test.cpp),
   src/engine/effects/engineeffect.h and .cpp, src/effects/effectslot.cpp. Bug: effects had
   no audible effect on decks 3/4 in 4-deck mode. EngineEffect's per-channel enable-state

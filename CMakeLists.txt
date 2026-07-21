@@ -2935,6 +2935,8 @@ if(BUILD_TESTING)
     src/test/cratestorage_test.cpp
     src/test/crate_rekordbox_xml_test.cpp
     src/test/crate_fx_routing_test.cpp
+    src/test/crate_fx_defaults_test.cpp
+    src/test/crate_control_polling_test.cpp
     src/test/crate_galaxy_ui_test.cpp
     src/test/crate_sidecars_test.cpp
     src/test/crate_suggestions_test.cpp

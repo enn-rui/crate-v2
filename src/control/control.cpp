@@ -37,6 +37,11 @@ QHash<ConfigKey, QWeakPointer<ControlDoublePrivate>> s_qCOHash
 QHash<ConfigKey, ConfigKey> s_qCOAliasHash
         GUARDED_BY(s_qCOHashMutex);
 
+/// Missing controls may be polled at controller refresh frequency. Keep the
+/// diagnostic useful without flooding the session log on every poll.
+QSet<ConfigKey> s_warnedMissingControls
+        GUARDED_BY(s_qCOHashMutex);
+
 /// is used instead of a nullptr, helps to omit null checks everywhere
 QWeakPointer<ControlDoublePrivate> s_pDefaultCO;
 } // namespace
@@ -190,7 +195,15 @@ QSharedPointer<ControlDoublePrivate> ControlDoublePrivate::getControl(
         return pControl;
     }
 
+    bool warnIfMissing = false;
     if (!flags.testFlag(ControlFlag::NoWarnIfMissing)) {
+        const MMutexLocker locker(&s_qCOHashMutex);
+        warnIfMissing = !s_warnedMissingControls.contains(key);
+        if (warnIfMissing) {
+            s_warnedMissingControls.insert(key);
+        }
+    }
+    if (warnIfMissing) {
         qWarning() << "ControlDoublePrivate::getControl returning NULL for ("
                    << key.group << "," << key.item << ")";
         DEBUG_ASSERT(flags.testFlag(ControlFlag::NoAssertIfMissing));

@@ -440,10 +440,11 @@ void WTrackMenu::createActions() {
                 this,
                 &WTrackMenu::slotExportMetadataIntoFileTags);
 
-        m_updateInExternalTrackCollections.reserve(
-                m_pLibrary->trackCollectionManager()->externalCollections().size());
-        for (auto* const pExternalTrackCollection :
-                m_pLibrary->trackCollectionManager()->externalCollections()) {
+        const auto externalCollections = m_pLibrary
+                ? m_pLibrary->trackCollectionManager()->externalCollections()
+                : QList<ExternalTrackCollection*>();
+        m_updateInExternalTrackCollections.reserve(externalCollections.size());
+        for (auto* const pExternalTrackCollection : externalCollections) {
             UpdateExternalTrackCollection updateInExternalTrackCollection;
             updateInExternalTrackCollection.pExternalTrackCollection = pExternalTrackCollection;
             updateInExternalTrackCollection.pAction = make_parented<QAction>(
@@ -501,6 +502,13 @@ void WTrackMenu::createActions() {
         m_pClearAllMetadataAction = make_parented<QAction>(tr("All"), m_pClearMetadataMenu);
         connect(m_pClearAllMetadataAction, &QAction::triggered, this, &WTrackMenu::slotClearAllMetadata);
 
+    }
+
+    // These actions belong to the metadata Hotcues menu. Some table models
+    // (notably TriageTableModel) support metadata editing but not ResetPlayed,
+    // so creating them under Feature::Reset left two null actions for
+    // setupActions() to insert whenever the triage view was constructed.
+    if (featureIsEnabled(Feature::Metadata)) {
         m_pSortHotcuesByPositionCompressAction = make_parented<QAction>(
                 tr("Sort hotcues by position (remove offsets)"), m_pHotcueMenu);
         connect(m_pSortHotcuesByPositionCompressAction,

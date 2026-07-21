@@ -320,7 +320,7 @@ void EffectsManager::loadCrateDefaultStandardEffects() {
     // Crate fork default. Called when no effect is loaded in any standard unit
     // (a virgin profile, or a saved profile that never used FX -- see readEffectsXml).
     qDebug() << "Crate: standard effect rack is empty, seeding default effects "
-                "(Echo -> unit 1, Reverb -> unit 2)";
+                "(Echo -> unit 1, Reverb -> unit 2, Filter -> units 3/4)";
     // Stock Mixxx already routes standard effect unit N to deck N (see
     // StandardEffectChain's constructor, which enables group_[ChannelN]_enable
     // for the matching deck) and the dry/wet (mix) knob works -- but no effect
@@ -338,6 +338,8 @@ void EffectsManager::loadCrateDefaultStandardEffects() {
     constexpr CrateDefaultEffect kDefaults[] = {
             {0, "org.mixxx.effects.echo"},
             {1, "org.mixxx.effects.reverb"},
+            {2, "org.mixxx.effects.filter"},
+            {3, "org.mixxx.effects.filter"},
     };
     for (const auto& def : kDefaults) {
         if (def.unitIndex >= m_standardEffectChains.size()) {
@@ -357,6 +359,10 @@ void EffectsManager::loadCrateDefaultStandardEffects() {
             continue;
         }
         pSlot->loadEffectWithDefaults(pManifest);
+        // The FLX4 derives its polled slot group from focused_effect. Empty
+        // saved racks restore this control as 0, which points at nonexistent
+        // Effect0. Select the first real (one-based) slot along with the seed.
+        ControlObject::set(ConfigKey(pChain->group(), "focused_effect"), 1.0);
     }
 }
 

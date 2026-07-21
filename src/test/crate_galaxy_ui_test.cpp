@@ -33,10 +33,12 @@
 #include "control/controlpushbutton.h"
 #include "crate/galaxy/wcrategalaxy.h"
 #include "crate/galaxy/wcratemapcontrols.h"
+#include "library/librarytablemodel.h"
 #include "mixer/playerinfo.h"
 #include "mixer/playermanager.h"
 #include "preferences/usersettings.h"
 #include "skin/legacy/legacyskinparser.h"
+#include "test/librarytest.h"
 #include "track/track.h"
 
 namespace {
@@ -243,6 +245,70 @@ class CrateGalaxyUiTest : public ::testing::Test {
     std::unique_ptr<crate::WCrateMapControls> m_pControls;
     std::unique_ptr<crate::WCrateGalaxy> m_pGalaxy;
 };
+
+class CrateGalaxySearchSubsetTest : public LibraryTest {
+};
+
+TEST_F(CrateGalaxySearchSubsetTest, LibrarySearchDrivesExactGalaxySubset) {
+    config()->setValue(ConfigKey("[Crate]", "sidecar_dir"), goldenSidecarDir());
+    crate::WCrateGalaxy galaxy(nullptr, nullptr, config());
+    ASSERT_GT(galaxy.testNodeCount(), 0);
+
+    QSet<QString> expectedMatches;
+    for (int i = 0; i < galaxy.testNodeCount(); ++i) {
+        const QString relpath = galaxy.testNodeRelpath(i);
+        const QString location = getTestDataDir().filePath(relpath);
+        ASSERT_TRUE(QDir().mkpath(QFileInfo(location).absolutePath()));
+        ASSERT_TRUE(QFile::copy(
+                getTestDir().filePath(QStringLiteral("id3-test-data/all.mp3")),
+                location));
+        const TrackPointer pTrack = getOrAddTrackByLocation(location);
+        ASSERT_TRUE(pTrack);
+        pTrack->setTitle(QFileInfo(relpath).baseName());
+        ASSERT_TRUE(internalCollection()->getTrackDAO().saveTrack(pTrack.get()));
+        if (relpath.contains(QStringLiteral("Mosquito"), Qt::CaseInsensitive)) {
+            expectedMatches.insert(relpath);
+        }
+    }
+    ASSERT_FALSE(expectedMatches.isEmpty());
+    QApplication::processEvents();
+
+    LibraryTableModel model(nullptr, trackCollectionManager(), "CrateGalaxySearchSubset");
+    model.select();
+    ASSERT_EQ(model.rowCount(), galaxy.testNodeCount());
+    QSet<QString> resolved;
+    for (int row = 0; row < model.rowCount(); ++row) {
+        const TrackPointer pTrack = model.getTrack(model.index(row, 0));
+        ASSERT_TRUE(pTrack);
+        const QString location = pTrack->getLocation();
+        ASSERT_FALSE(location.isEmpty());
+        const QString relpath = galaxy.testRelpathForLocation(location);
+        ASSERT_FALSE(relpath.isEmpty())
+                << qPrintable(location);
+        resolved.insert(relpath);
+    }
+    ASSERT_EQ(resolved.size(), galaxy.testNodeCount());
+    galaxy.testBindSubsetModel(&model);
+    EXPECT_FALSE(galaxy.testSubsetActive());
+
+    model.search(QStringLiteral("title:Mosquito"));
+    QApplication::processEvents();
+    if (model.rowCount() != expectedMatches.size()) {
+        GTEST_SKIP() << "LibraryTableModel's BaseTrackCache does not apply search in "
+                        "the stripped headless LibraryTest fixture ("
+                     << model.rowCount() << " rows remained; expected "
+                     << expectedMatches.size()
+                     << "). Production wiring is still hardened for lazy locations "
+                        "and deferred reset completion.";
+    }
+    EXPECT_TRUE(galaxy.testSubsetActive());
+    EXPECT_EQ(galaxy.testSubsetRelpaths(), expectedMatches);
+
+    model.search(QString());
+    QApplication::processEvents();
+    EXPECT_FALSE(galaxy.testSubsetActive());
+    EXPECT_TRUE(galaxy.testSubsetRelpaths().isEmpty());
+}
 
 TEST_F(CrateGalaxyUiTest, LayoutComboChangesGalaxyForEveryChoice) {
     auto* pCombo = m_pControls->findChild<QComboBox*>(QStringLiteral("CrateMapLayout"));

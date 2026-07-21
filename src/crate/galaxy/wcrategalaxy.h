@@ -178,7 +178,15 @@ class WCrateGalaxy : public QGraphicsView {
     // a live Library fixture.
     int testTableJumpRequests() const { return m_tableJumpRequests; }
     QString testLastTableJumpRelpath() const { return m_lastTableJumpRelpath; }
-
+    void testBindSubsetModel(QAbstractItemModel* pModel) { bindSubsetModel(pModel); }
+    QSet<QString> testSubsetRelpaths() const {
+        QSet<QString> relpaths;
+        for (int node : m_subsetNodes) {
+            relpaths.insert(m_nodes.at(node).relpath);
+        }
+        return relpaths;
+    }
+    bool testSubsetActive() const { return m_subsetActive; }
   protected:
     bool eventFilter(QObject* pObj, QEvent* pEvent) override;
     void contextMenuEvent(QContextMenuEvent* pEvent) override;

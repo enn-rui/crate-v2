@@ -756,7 +756,14 @@ void WCrateGalaxy::bindSubsetModel(QAbstractItemModel* pModel) {
         applySubset({}, false);
         return;
     }
-    const auto refresh = [this] { recomputeSubsetFromModel(); };
+    // BaseSqlTableModel emits reset/layout notifications while rebuilding its
+    // cache. Reading rows synchronously from those signals can observe the
+    // transient empty model and leave the map ghosting everything after a
+    // search. Defer until the model has finished the update; repeated signals
+    // are harmless because identical subsets are no-ops.
+    const auto refresh = [this] {
+        QTimer::singleShot(0, this, [this] { recomputeSubsetFromModel(); });
+    };
     connect(pModel, &QAbstractItemModel::modelReset, this, refresh);
     connect(pModel, &QAbstractItemModel::rowsInserted, this, refresh);
     connect(pModel, &QAbstractItemModel::rowsRemoved, this, refresh);
@@ -775,8 +782,15 @@ void WCrateGalaxy::recomputeSubsetFromModel() {
     QSet<QString> relpaths;
     relpaths.reserve(pModel->rowCount());
     for (int row = 0; row < pModel->rowCount(); ++row) {
-        const QString relpath = relpathForLocation(
-                pTrackModel->getTrackLocation(pModel->index(row, 0)));
+        const QModelIndex index = pModel->index(row, 0);
+        // BaseSqlTableModel::getTrackLocation may be empty for rows whose
+        // lazy cache has not been populated by the visible table yet. Loading
+        // the Track by ID is deterministic for every row in the result set.
+        const TrackPointer pTrack = pTrackModel->getTrack(index);
+        const QString location = pTrack
+                ? pTrack->getLocation()
+                : pTrackModel->getTrackLocation(index);
+        const QString relpath = relpathForLocation(location);
         if (!relpath.isEmpty()) {
             relpaths.insert(relpath);
         }

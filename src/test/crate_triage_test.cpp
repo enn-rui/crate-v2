@@ -4,6 +4,7 @@
 #include <QPushButton>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStringList>
 #include <QTemporaryDir>
 
 #include "crate/system/systemcrates.h"
@@ -15,8 +16,16 @@
 #include "test/librarytest.h"
 #include "track/track.h"
 #include "widget/wlibrary.h"
+#include "widget/wtrackmenu.h"
 
 namespace {
+
+QStringList s_triageMenuMessages;
+
+void captureTriageMenuMessages(
+        QtMsgType, const QMessageLogContext&, const QString& message) {
+    s_triageMenuMessages.append(message);
+}
 
 UserSettingsPointer makeConfig(QTemporaryDir& dir) {
     return UserSettingsPointer(
@@ -86,6 +95,30 @@ TEST_F(CrateTriageTest, ModelFiltersByEpochNewestFirstAndKeepRemoves) {
     model.refresh();
     ASSERT_EQ(model.rowCount(), 1);
     EXPECT_EQ(model.getTrackId(model.index(0, 0)), firstId);
+}
+
+TEST_F(CrateTriageTest, MetadataMenuConstructionDoesNotInsertNullActions) {
+    const QDateTime epoch = QDateTime::fromString(
+            QStringLiteral("2026-07-20T10:00:00Z"), Qt::ISODate);
+    crate::TriageTableModel model(nullptr, trackCollectionManager(), epoch);
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    auto pConfig = makeConfig(dir);
+
+    s_triageMenuMessages.clear();
+    const auto oldHandler = qInstallMessageHandler(captureTriageMenuMessages);
+    WTrackMenu menu(nullptr,
+            pConfig,
+            nullptr,
+            WTrackMenu::Feature::Metadata,
+            &model);
+    qInstallMessageHandler(oldHandler);
+
+    for (const QString& message : std::as_const(s_triageMenuMessages)) {
+        EXPECT_FALSE(message.contains(
+                QStringLiteral("insertAction: Attempt to insert null action")))
+                << qPrintable(message);
+    }
 }
 
 // Upstream WTrackTableView raises Windows SEH 0xc0000005 in this stripped
