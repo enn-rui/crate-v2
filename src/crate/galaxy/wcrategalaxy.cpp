@@ -794,6 +794,13 @@ void WCrateGalaxy::recomputeSubsetFromModel() {
             relpaths.insert(relpath);
         }
     }
+    if (relpaths.isEmpty() && pModel->rowCount() > 0) {
+        // Rows exist but no location resolved yet (lazy cache not populated).
+        // An empty-but-active subset would ghost the entire map; show
+        // everything until a later refresh resolves real locations.
+        applySubset({}, false);
+        return;
+    }
     applySubset(relpaths);
 }
 
