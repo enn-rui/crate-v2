@@ -35,6 +35,7 @@
 #include "control/controlproxy.h"
 #include "control/controlpushbutton.h"
 #include "crate/cull/cullclient.h"
+#include "crate/cull/culledtracks.h"
 #include "crate/grab/grabclient.h"
 #include "crate/intelligence/scores.h"
 #include "crate/intelligence/suggestions.h"
@@ -432,9 +433,6 @@ void WCrateGalaxy::populate() {
 
     if (!reloadSidecars()) {
         qWarning() << "galaxy sidecars unavailable in" << sidecarDir;
-        auto* pText = m_pScene->addSimpleText(
-                QStringLiteral("galaxy: sidecars unavailable"));
-        pText->setBrush(m_palette.ink);
         m_populateFailed = true;
         schedulePopulateRetry();
     }
@@ -455,12 +453,16 @@ bool WCrateGalaxy::reloadSidecars() {
     }
 
     CrateSidecars sidecars(sidecarDir);
-    if (!sidecars.load()) {
+    if (!sidecars.load() || !sidecars.freshSnapshotAdopted()) {
         qWarning() << "galaxy sidecar reload kept prior scene in" << sidecarDir
                    << ':' << sidecars.lastError();
+        showSidecarReloadFailure();
+        m_populateFailed = true;
+        schedulePopulateRetry();
         return false;
     }
     QVector<GalaxyNode> nodes = sidecars.nodes();
+    CulledTracks::excludeAndPrune(m_pConfig, &nodes);
     excludeDemotedNodes(&nodes);
     m_sidecarNodes = nodes;
     applyLibraryBpms(&nodes);
@@ -474,6 +476,16 @@ bool WCrateGalaxy::reloadSidecars() {
     }
     kLogger.info() << "galaxy populated with" << m_nodes.size() << "nodes from" << sidecarDir;
     return true;
+}
+
+void WCrateGalaxy::showSidecarReloadFailure() {
+    if (m_pReloadStatus == nullptr) {
+        m_pReloadStatus = m_pScene->addSimpleText(
+                QStringLiteral("galaxy: sidecars unavailable - retrying"));
+        m_pReloadStatus->setBrush(m_palette.ink);
+        m_pReloadStatus->setZValue(1000.0);
+    }
+    viewport()->update();
 }
 
 void WCrateGalaxy::excludeDemotedNodes(QVector<GalaxyNode>* pNodes) const {
@@ -544,6 +556,11 @@ void WCrateGalaxy::testSetDemotedRelpaths(const QSet<QString>& relpaths) {
     reloadSidecars();
 }
 
+void WCrateGalaxy::testRecordCulledRelpath(const QString& relpath) {
+    CulledTracks::record(m_pConfig, relpath);
+    reloadSidecars();
+}
+
 void WCrateGalaxy::applyLibraryBpms(QVector<GalaxyNode>* pNodes) const {
     if (pNodes->isEmpty() || m_pLibrary == nullptr ||
             m_pLibrary->trackCollectionManager() == nullptr) {
@@ -588,13 +605,32 @@ void WCrateGalaxy::scheduleLibraryBpmRefresh() {
 void WCrateGalaxy::refreshLibraryBpms() {
     QVector<GalaxyNode> nodes = m_sidecarNodes;
     applyLibraryBpms(&nodes);
-    bool changed = nodes.size() != m_nodes.size();
-    for (int i = 0; !changed && i < nodes.size(); ++i) {
-        changed = !qFuzzyCompare(nodes[i].bpm + 1.0, m_nodes[i].bpm + 1.0);
+    bool changed = false;
+    QVector<double> tempos;
+    for (int i = 0; i < qMin(nodes.size(), m_nodes.size()); ++i) {
+        if (!qFuzzyCompare(nodes[i].bpm + 1.0, m_nodes[i].bpm + 1.0)) {
+            m_nodes[i].bpm = nodes[i].bpm;
+            changed = true;
+        }
+        if (m_nodes[i].bpm > 0.0 && std::isfinite(m_nodes[i].bpm)) {
+            tempos.append(m_nodes[i].bpm);
+        }
     }
     if (changed) {
-        rebuildScene(nodes);
+        m_tempoRange = percentileRange(tempos);
+        updateColors();
+        if (!m_3dMode && m_layoutMode == LayoutMode::BpmSerpentine) {
+            applyPositions(layoutTarget(m_layoutMode));
+        }
     }
+}
+
+void WCrateGalaxy::testRefreshNodeBpm(int index, double bpm) {
+    if (index < 0 || index >= m_sidecarNodes.size()) {
+        return;
+    }
+    m_sidecarNodes[index].bpm = bpm;
+    refreshLibraryBpms();
 }
 
 bool WCrateGalaxy::testPopulateRetryScheduled() const {
@@ -640,6 +676,7 @@ void WCrateGalaxy::rebuildScene(const QVector<GalaxyNode>& nodes) {
     if (m_pLayoutAnimation->state() != QAbstractAnimation::Stopped) {
         m_pLayoutAnimation->stop();
     }
+    m_pReloadStatus = nullptr;
     for (QGraphicsItem* pItem : m_pScene->items()) {
         if (pItem != m_pCursorRing) {
             delete pItem;
@@ -1427,7 +1464,8 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
                         client->deleteLater();
                     });
             connect(client, &CullClient::cullSucceeded, this,
-                    [this, client, location](const QString&) {
+                    [this, client, location](const QString& culledRelpath) {
+                        CulledTracks::record(m_pConfig, culledRelpath);
                         auto* manager = m_pLibrary->trackCollectionManager();
                         const QList<TrackId> ids =
                                 manager->resolveTrackIdsFromLocations({location});

@@ -31,6 +31,7 @@ class QMenu;
 class QGraphicsScene;
 class QPainter;
 class QGraphicsEllipseItem;
+class QGraphicsSimpleTextItem;
 class QVariantAnimation;
 class QTimer;
 class QAbstractItemModel;
@@ -109,6 +110,11 @@ class WCrateGalaxy : public QGraphicsView {
     // Inject the set of demoted relpaths (no library fixture needed) and rebuild;
     // the injected tracks must then be absent from the scene entirely.
     void testSetDemotedRelpaths(const QSet<QString>& relpaths);
+    void testRecordCulledRelpath(const QString& relpath);
+    void testReloadSidecars() { reloadSidecars(); }
+    QDateTime testLastSidecarModified() const { return m_lastSidecarModified; }
+    double testNodeBpm(int index) const { return m_nodes.value(index).bpm; }
+    void testRefreshNodeBpm(int index, double bpm);
     QString testLayoutMode() const;
     QString testColorMode() const;
     GalaxyPalette testPalette() const { return m_palette; }
@@ -238,6 +244,7 @@ class WCrateGalaxy : public QGraphicsView {
     // scene is built, so they are absent from every layer (dots, labels, plexus,
     // halos, subset). Resolved from the library, or from a test-injected set.
     void excludeDemotedNodes(QVector<GalaxyNode>* pNodes) const;
+    void showSidecarReloadFailure();
     void applyLibraryBpms(QVector<GalaxyNode>* pNodes) const;
     void scheduleLibraryBpmRefresh();
     void refreshLibraryBpms();
@@ -354,6 +361,7 @@ class WCrateGalaxy : public QGraphicsView {
     QDateTime m_lastSidecarModified;
     QElapsedTimer m_lastSidecarReloadAttempt;
     QTimer* m_pPopulateRetryTimer = nullptr;
+    QGraphicsSimpleTextItem* m_pReloadStatus = nullptr;
     bool m_populateFailed = false;
     QString m_musicRoot;
     ColorMode m_colorMode = ColorMode::Cluster;

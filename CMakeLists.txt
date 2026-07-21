@@ -1770,6 +1770,7 @@ add_library(
   src/crate/data/cratesidecars.cpp
   src/crate/data/playlistmigration.cpp
   src/crate/cull/cullclient.cpp
+  src/crate/cull/culledtracks.cpp
   src/crate/cull/cullworkflow.cpp
   src/crate/system/systemcrates.cpp
   src/crate/suggestions/suggestfeature.cpp

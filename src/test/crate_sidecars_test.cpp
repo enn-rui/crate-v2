@@ -49,6 +49,7 @@ TEST(CrateSidecarsSnapshot, RefreshesAndFallsBackUntilSourceIsHealthy) {
     crate::CrateSidecars first(temp.path());
     ASSERT_TRUE(first.load()) << first.lastError().toStdString();
     EXPECT_EQ(first.nodes().size(), 2);
+    EXPECT_TRUE(first.freshSnapshotAdopted());
 
     writeCoords(source, 3);
     crate::CrateSidecars refreshed(temp.path());
@@ -66,11 +67,13 @@ TEST(CrateSidecarsSnapshot, RefreshesAndFallsBackUntilSourceIsHealthy) {
     crate::CrateSidecars fallback(temp.path());
     ASSERT_TRUE(fallback.load()) << fallback.lastError().toStdString();
     EXPECT_EQ(fallback.nodes().size(), 3);
+    EXPECT_FALSE(fallback.freshSnapshotAdopted());
 
     writeCoords(source, 4);
     crate::CrateSidecars recovered(temp.path());
     ASSERT_TRUE(recovered.load()) << recovered.lastError().toStdString();
     EXPECT_EQ(recovered.nodes().size(), 4);
+    EXPECT_TRUE(recovered.freshSnapshotAdopted());
 }
 
 } // namespace

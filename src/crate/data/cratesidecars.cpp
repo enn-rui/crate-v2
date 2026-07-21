@@ -86,6 +86,9 @@ QString CrateSidecars::snapshotPath(const QString& fileName, bool required) {
     }
     if (cachedInfo.exists() && cachedInfo.lastModified() == sourceInfo.lastModified() &&
             validateSqlite(cachedPath)) {
+        if (required) {
+            m_freshSnapshotAdopted = true;
+        }
         return cachedPath;
     }
 
@@ -137,6 +140,9 @@ QString CrateSidecars::snapshotPath(const QString& fileName, bool required) {
     cached.open(QIODevice::ReadWrite);
     cached.setFileTime(sourceInfo.lastModified(), QFileDevice::FileModificationTime);
     cached.close();
+    if (required) {
+        m_freshSnapshotAdopted = true;
+    }
     return cachedPath;
 }
 
@@ -176,6 +182,7 @@ void CrateSidecars::parseTrackName(
 
 bool CrateSidecars::load() {
     m_nodes.clear();
+    m_freshSnapshotAdopted = false;
 
     const QString umapPath = snapshotPath(QStringLiteral("umap.sqlite"), true);
     QSqlDatabase umap = openRo(umapPath);

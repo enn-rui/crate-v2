@@ -343,6 +343,7 @@ TEST_F(CrateGalaxyUiTest, ReloadControlRebuildsLiveWidgetAndKeepsSceneOnFailure)
     ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
     QApplication::processEvents();
     ASSERT_EQ(m_pGalaxy->testNodeCount(), 7);
+    const QDateTime adoptedMtime = m_pGalaxy->testLastSidecarModified();
 
     QFile umap(QDir(sidecarDir).filePath(QStringLiteral("umap.sqlite")));
     ASSERT_TRUE(umap.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -352,6 +353,43 @@ TEST_F(CrateGalaxyUiTest, ReloadControlRebuildsLiveWidgetAndKeepsSceneOnFailure)
     ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
     QApplication::processEvents();
     EXPECT_EQ(m_pGalaxy->testNodeCount(), 7);
+    EXPECT_EQ(m_pGalaxy->testLastSidecarModified(), adoptedMtime);
+    EXPECT_TRUE(m_pGalaxy->testPopulateRetryScheduled());
+    EXPECT_FALSE(m_pGalaxy->testStatusText().isEmpty());
+
+    ASSERT_TRUE(QFile::remove(umap.fileName()));
+    ASSERT_TRUE(QFile::copy(QDir(goldenSidecarDir()).filePath(
+                                    QStringLiteral("umap.sqlite")),
+            umap.fileName()));
+    writeReloadCoords(sidecarDir, 8);
+    m_pGalaxy->testFirePopulateRetry();
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), 8);
+    EXPECT_NE(m_pGalaxy->testLastSidecarModified(), adoptedMtime);
+    EXPECT_FALSE(m_pGalaxy->testPopulateRetryScheduled());
+}
+
+TEST_F(CrateGalaxyUiTest, CulledTrackStaysExcludedUntilSidecarDropsIt) {
+    const QString sidecarDir = makeReloadSidecars(3);
+    m_pConfig->setValue(ConfigKey("[Crate]", "sidecar_dir"), sidecarDir);
+    m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
+            nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
+    ASSERT_EQ(m_pGalaxy->testNodeCount(), 3);
+
+    // Store a root-agnostic suffix. Reloading an unchanged snapshot removes
+    // the dot immediately, and a fresh widget observes the persisted entry.
+    m_pGalaxy->testRecordCulledRelpath(
+            QStringLiteral("Reload Artist/Track 2.flac"));
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), 2);
+    m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
+            nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), 2);
+
+    // Once regeneration omits the track, the exclusion self-prunes.
+    writeReloadCoords(sidecarDir, 2);
+    m_pGalaxy->testReloadSidecars();
+    EXPECT_EQ(m_pGalaxy->testNodeCount(), 2);
+    EXPECT_FALSE(m_pConfig->exists(
+            ConfigKey("[Crate]", "galaxy_culled_relpaths")));
 }
 
 TEST_F(CrateGalaxyUiTest, UnchangedSidecarMtimeDoesNotRebuildOnRepeatedFocusChecks) {
@@ -413,7 +451,8 @@ TEST_F(CrateGalaxyUiTest, InitialPopulateFailureReportsAndRetries) {
             nullptr, /*pPlayerManager=*/nullptr, m_pConfig);
     EXPECT_TRUE(m_pGalaxy->testPopulateFailed());
     EXPECT_TRUE(m_pGalaxy->testPopulateRetryScheduled());
-    EXPECT_EQ(m_pGalaxy->testStatusText(), QStringLiteral("galaxy: sidecars unavailable"));
+    EXPECT_EQ(m_pGalaxy->testStatusText(),
+            QStringLiteral("galaxy: sidecars unavailable - retrying"));
 
     ASSERT_TRUE(QDir().mkpath(sidecarDir));
     const QDir source(goldenSidecarDir());
@@ -620,6 +659,25 @@ TEST_F(CrateGalaxyUiTest, TrailToggleClearsOnlyPaintCache) {
     EXPECT_FALSE(m_pGalaxy->testTrailEnabled());
     EXPECT_EQ(m_pGalaxy->testTrailSegmentCount(), 0);
     EXPECT_EQ(m_pGalaxy->testPlayTrail().size(), 2);
+}
+
+TEST_F(CrateGalaxyUiTest, BpmRefreshUpdatesInPlaceAndPreservesSessionState) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 2);
+    m_pGalaxy->testPlayingTrackChanged(m_pGalaxy->testNodeRelpath(0));
+    m_pGalaxy->testPlayingTrackChanged(m_pGalaxy->testNodeRelpath(1));
+    setKnobFocusMap();
+    pokeKnob(1.0);
+    const QVector<int> trail = m_pGalaxy->testPlayTrail();
+    const int cursor = m_pGalaxy->testCursorNode();
+    const int rebuilds = m_pGalaxy->testSidecarRebuildCount();
+    const double changedBpm = m_pGalaxy->testNodeBpm(0) + 17.0;
+
+    m_pGalaxy->testRefreshNodeBpm(0, changedBpm);
+
+    EXPECT_DOUBLE_EQ(m_pGalaxy->testNodeBpm(0), changedBpm);
+    EXPECT_EQ(m_pGalaxy->testPlayTrail(), trail);
+    EXPECT_EQ(m_pGalaxy->testCursorNode(), cursor);
+    EXPECT_EQ(m_pGalaxy->testSidecarRebuildCount(), rebuilds);
 }
 
 TEST_F(CrateGalaxyUiTest, PlexusGradesLoadedStoppedDeckAndClearsOnUnload) {

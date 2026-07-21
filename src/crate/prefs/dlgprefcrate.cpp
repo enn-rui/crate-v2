@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "control/controlobject.h"
 #include "library/trackcollection.h"
 #include "crate/cull/cullclient.h"
 #include "crate/grab/grabclient.h"
@@ -487,6 +488,12 @@ void DlgPrefCrate::slotApply() {
     }
     m_pConfig->setValue(kGalaxyTrail, m_pGalaxyTrail->isChecked() ? 1 : 0);
     m_pConfig->setValue(kGalaxyHalos, m_pGalaxyHalos->isChecked() ? 1 : 0);
+    if (ControlObject::exists(kGalaxyTrail)) {
+        ControlObject::set(kGalaxyTrail, m_pGalaxyTrail->isChecked() ? 1.0 : 0.0);
+    }
+    if (ControlObject::exists(kGalaxyHalos)) {
+        ControlObject::set(kGalaxyHalos, m_pGalaxyHalos->isChecked() ? 1.0 : 0.0);
+    }
 }
 
 void DlgPrefCrate::slotResetToDefaults() {

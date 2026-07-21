@@ -45,6 +45,9 @@ class CrateSidecars {
     QString lastError() const {
         return m_lastError;
     }
+    bool freshSnapshotAdopted() const {
+        return m_freshSnapshotAdopted;
+    }
 
   private:
     QString snapshotPath(const QString& fileName, bool required);
@@ -52,6 +55,7 @@ class CrateSidecars {
     QString m_dir;
     QString m_lastError;
     QVector<GalaxyNode> m_nodes;
+    bool m_freshSnapshotAdopted = false;
 };
 
 } // namespace crate

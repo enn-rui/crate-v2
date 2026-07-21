@@ -7,6 +7,7 @@
 #include <QSpinBox>
 
 #include "crate/prefs/dlgprefcrate.h"
+#include "control/controlobject.h"
 #include "crate/tempo/tempocheck.h"
 #include "test/mixxxtest.h"
 
@@ -65,6 +66,8 @@ TEST(CrateTempoCheckTest, ConsistentTempoIsIdempotentAndNoReferenceSkips) {
 }
 
 TEST_F(CratePrefsTest, ApplyAndReloadRoundTrip) {
+    ControlObject trailControl(ConfigKey("[Crate]", "galaxy_trail"));
+    ControlObject haloControl(ConfigKey("[Crate]", "galaxy_halos"));
     DlgPrefCrate page(nullptr, config());
     page.findChild<QLineEdit*>(QStringLiteral("sidecarDir"))->setText(QStringLiteral("D:/sidecars"));
     page.findChild<QLineEdit*>(QStringLiteral("musicRoot"))->setText(QStringLiteral("D:/music"));
@@ -84,6 +87,8 @@ TEST_F(CratePrefsTest, ApplyAndReloadRoundTrip) {
     EXPECT_EQ(config()->getValue(ConfigKey("[Crate]", "analyzer_threads"), 0), 7);
     EXPECT_EQ(config()->getValue(ConfigKey("[Crate]", "galaxy_trail"), 1), 0);
     EXPECT_EQ(config()->getValue(ConfigKey("[Crate]", "galaxy_halos"), 0), 1);
+    EXPECT_DOUBLE_EQ(trailControl.get(), 0.0);
+    EXPECT_DOUBLE_EQ(haloControl.get(), 1.0);
 
     saveAndReloadConfig();
     DlgPrefCrate reloadedPage(nullptr, config());

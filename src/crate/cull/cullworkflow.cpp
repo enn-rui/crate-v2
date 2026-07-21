@@ -5,6 +5,7 @@
 
 #include "control/controlobject.h"
 #include "crate/cull/cullclient.h"
+#include "crate/cull/culledtracks.h"
 #include "crate/grab/grabclient.h"
 #include "library/trackcollectionmanager.h"
 
@@ -50,9 +51,10 @@ void startCullWorkflow(QWidget* pParent,
     auto* pClient = new CullClient(
             baseUrl, GrabClient::configuredToken(pConfig), pParent);
     QObject::connect(pClient, &CullClient::cullSucceeded, pParent,
-            [pTrackCollectionManager, refByRelpath, changed](const QString& relpath) {
+            [pConfig, pTrackCollectionManager, refByRelpath, changed](const QString& relpath) {
                 const auto it = refByRelpath.constFind(relpath);
                 if (it != refByRelpath.constEnd()) {
+                    CulledTracks::record(pConfig, relpath);
                     pTrackCollectionManager->purgeTracks(QList<TrackRef>{it.value()});
                     ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 1.0);
                     ControlObject::set(ConfigKey("[Crate]", "galaxy_reload"), 0.0);
