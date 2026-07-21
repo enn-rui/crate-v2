@@ -10,7 +10,6 @@
 #include "crate/data/playlistmigration.h"
 #include "crate/grab/grabfeature.h"
 #include "crate/triage/triagefeature.h"
-#include "crate/suggestions/wcratesuggestionsview.h"
 #include "library/analysis/analysisfeature.h"
 #include "library/autodj/autodjfeature.h"
 #include "library/banshee/bansheefeature.h"
@@ -438,13 +437,15 @@ void Library::bindSidebarWidget(WLibrarySidebar* pSidebarWidget) {
 void Library::bindLibraryWidget(
         WLibrary* pLibraryWidget, KeyboardEventFilter* pKeyboard) {
     m_pLibraryWidget = pLibraryWidget;
-    auto* pCrateSuggestionsView = new crate::WCrateSuggestionsView(
-            m_pLibraryWidget, m_pConfig, this, pKeyboard);
-    WTrackTableView* pTrackTableView = pCrateSuggestionsView->trackTable();
+    WTrackTableView* pTrackTableView = new WTrackTableView(m_pLibraryWidget,
+            m_pConfig,
+            this,
+            m_pLibraryWidget->getTrackTableBackgroundColorOpacity());
+    pTrackTableView->installEventFilter(pKeyboard);
     connect(this,
             &Library::showTrackModel,
-            pCrateSuggestionsView,
-            &crate::WCrateSuggestionsView::loadTrackModel);
+            pTrackTableView,
+            &WTrackTableView::loadTrackModel);
     connect(this,
             &Library::pasteFromSidebar,
             m_pLibraryWidget,
@@ -457,7 +458,7 @@ void Library::bindLibraryWidget(
             &WTrackTableView::loadTrackToPlayer,
             this,
             &Library::slotLoadTrackToPlayer);
-    m_pLibraryWidget->registerView(m_sTrackViewName, pCrateSuggestionsView);
+    m_pLibraryWidget->registerView(m_sTrackViewName, pTrackTableView);
 
     connect(m_pLibraryWidget,
             &WLibrary::setLibraryFocus,
