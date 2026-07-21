@@ -10,6 +10,7 @@
 
 #include "analyzer/analyzerscheduledtrack.h"
 #include "crate/export/rekordboxxml.h"
+#include "crate/suggestions/suggestfeature.h"
 #include "crate/system/systemcrates.h"
 #include "library/export/trackexportwizard.h"
 #include "library/library.h"
@@ -111,6 +112,12 @@ void CrateFeature::initActions() {
             &QAction::triggered,
             this,
             &CrateFeature::slotAnalyzeCrate);
+
+    m_pSuggestAdditionsAction = make_parented<QAction>(tr("Suggest additions"), this);
+    connect(m_pSuggestAdditionsAction.get(),
+            &QAction::triggered,
+            this,
+            &CrateFeature::slotSuggestAdditions);
 
     m_pImportPlaylistAction = make_parented<QAction>(tr("Import Crate"), this);
     connect(m_pImportPlaylistAction.get(),
@@ -416,6 +423,9 @@ void CrateFeature::onRightClickChild(
     menu.addAction(m_pAutoDjTrackSourceAction.get());
     menu.addSeparator();
     menu.addAction(m_pAnalyzeCrateAction.get());
+    if (crate::SuggestFeature::isEnabled(m_pConfig)) {
+        menu.addAction(m_pSuggestAdditionsAction.get());
+    }
     menu.addSeparator();
     menu.addAction(m_pImportPlaylistAction.get());
     menu.addAction(m_pExportPlaylistAction.get());
@@ -789,6 +799,20 @@ void CrateFeature::slotAnalyzeCrate() {
             emit analyzeTracks(tracks);
         }
     }
+}
+
+void CrateFeature::slotSuggestAdditions() {
+    CrateId crateId = crateIdFromIndex(m_lastRightClickedIndex);
+    VERIFY_OR_DEBUG_ASSERT(crateId.isValid()) {
+        return;
+    }
+    // Point the SUGGEST view at this crate (it tracks the active CrateTableModel
+    // via Library::showTrackModel), then switch to it. This never touches the
+    // stock Tracks view wiring -- it only shows an already-registered view.
+    emit saveModelState();
+    m_crateTableModel.selectCrate(crateId);
+    emit showTrackModel(&m_crateTableModel);
+    emit switchToView(crate::SuggestFeature::viewName());
 }
 
 void CrateFeature::slotExportPlaylist() {

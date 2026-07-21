@@ -9,6 +9,7 @@
 #include "crate/autoanalysis.h"
 #include "crate/data/playlistmigration.h"
 #include "crate/grab/grabfeature.h"
+#include "crate/suggestions/suggestfeature.h"
 #include "crate/triage/triagefeature.h"
 #include "library/analysis/analysisfeature.h"
 #include "library/autodj/autodjfeature.h"
@@ -159,6 +160,13 @@ Library::Library(
     // epoch and not yet placed in the Reviewed system crate.
     if (crate::TriageFeature::isEnabled(m_pConfig)) {
         addFeature(make_parented<crate::TriageFeature>(this, m_pConfig));
+    }
+
+    // SUGGEST (crate v2, wave-11): a STANDALONE view proposing additions for the
+    // most recently activated crate. It registers only its own view and never
+    // touches the stock Tracks wiring -- the safe rebuild of the reverted panel.
+    if (crate::SuggestFeature::isEnabled(m_pConfig)) {
+        addFeature(make_parented<crate::SuggestFeature>(this, m_pConfig));
     }
 
     m_pBrowseFeature = make_parented<BrowseFeature>(

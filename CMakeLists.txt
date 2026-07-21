@@ -1772,7 +1772,8 @@ add_library(
   src/crate/cull/cullclient.cpp
   src/crate/cull/cullworkflow.cpp
   src/crate/system/systemcrates.cpp
-  src/crate/suggestions/wcratesuggestionsview.cpp
+  src/crate/suggestions/suggestfeature.cpp
+  src/crate/suggestions/wsuggestview.cpp
   src/crate/tempo/tempocheck.cpp
   src/crate/triage/triagefeature.cpp
   src/crate/triage/triagetablemodel.cpp
@@ -2940,6 +2941,7 @@ if(BUILD_TESTING)
     src/test/crate_galaxy_ui_test.cpp
     src/test/crate_sidecars_test.cpp
     src/test/crate_suggestions_test.cpp
+    src/test/crate_suggest_view_test.cpp
     src/test/crate_golden_test.cpp
     src/test/crate_grab_test.cpp
     src/test/crate_cull_test.cpp
