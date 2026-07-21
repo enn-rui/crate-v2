@@ -41,6 +41,7 @@ class WTriageView final : public QWidget, public LibraryView {
   private slots:
     void markSelectedReviewed();
     void updateEmptyState();
+    void updateKeepButton();
 
   private:
     WTrackTableView* m_pTable;

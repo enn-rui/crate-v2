@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <QDateTime>
+#include <QSqlQuery>
+#include <QTimeZone>
 
 #include "library/trackcollection.h"
 #include "library/trackcollectionmanager.h"
@@ -87,4 +89,42 @@ TEST_F(CrateSystemTest, TriageNewTracksUnreviewedKeepClearsExistingStayReviewed)
     // nothing is unreviewed, so there is no day-one backlog.
     const QDateTime laterEpoch = QDateTime::currentDateTimeUtc().addDays(1);
     EXPECT_TRUE(systemCrates.unreviewedTrackIds(laterEpoch).isEmpty());
+}
+
+TEST_F(CrateSystemTest, UnreviewedHandlesMixedDatetimeAddedFormats) {
+    // Real libraries hold BOTH datetime_added spellings: SQLite
+    // CURRENT_TIMESTAMP ("yyyy-MM-dd hh:mm:ss") and Qt ISO with 'T'/'Z'
+    // ("yyyy-MM-ddThh:mm:ss.zzzZ"). Raw string comparison made every ISO row
+    // look newer than any epoch ('T' > ' '), flooding TRIAGE with old tracks.
+    auto* pCollection = internalCollection();
+    crate::SystemCrates systemCrates(pCollection);
+
+    const TrackId oldIso = addTrack(QStringLiteral("one.mp3"));
+    const TrackId newIso = addTrack(QStringLiteral("two.mp3"));
+    ASSERT_TRUE(oldIso.isValid());
+    ASSERT_TRUE(newIso.isValid());
+
+    // Fixed SAME-DAY timestamps: the lexical bug only bites when the date
+    // digits match and the first differing character is 'T' vs ' ' (index 10).
+    // A different-day fixture passes even on broken code — do not "simplify".
+    const QDateTime epoch(
+            QDate(2026, 1, 15), QTime(12, 0, 0), QTimeZone::utc());
+    QSqlQuery query(pCollection->database());
+    // ISO-with-Z spelling, FOUR HOURS BEFORE the epoch, same date: must not
+    // be unreviewed (raw string compare says it is, because 'T' > ' ').
+    query.prepare(QStringLiteral(
+            "UPDATE library SET datetime_added=:added WHERE id=:id"));
+    query.bindValue(QStringLiteral(":added"),
+            QStringLiteral("2026-01-15T08:00:00.000Z"));
+    query.bindValue(QStringLiteral(":id"), oldIso.toVariant());
+    ASSERT_TRUE(query.exec());
+    // ISO-with-Z spelling, six hours AFTER the epoch: must be unreviewed.
+    query.bindValue(QStringLiteral(":added"),
+            QStringLiteral("2026-01-15T18:00:00.000Z"));
+    query.bindValue(QStringLiteral(":id"), newIso.toVariant());
+    ASSERT_TRUE(query.exec());
+
+    const QList<TrackId> unreviewed = systemCrates.unreviewedTrackIds(epoch);
+    EXPECT_FALSE(unreviewed.contains(oldIso));
+    EXPECT_TRUE(unreviewed.contains(newIso));
 }

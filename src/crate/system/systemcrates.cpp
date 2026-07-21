@@ -128,20 +128,24 @@ QList<TrackId> SystemCrates::unreviewedTrackIds(const QDateTime& since) const {
     if (m_pCollection == nullptr || !since.isValid()) {
         return ids;
     }
-    // datetime_added is a SQLite CURRENT_TIMESTAMP string in UTC; compare against
-    // the epoch spelled the same way so lexical ordering matches chronology.
+    // datetime_added holds MIXED spellings in real libraries: SQLite
+    // CURRENT_TIMESTAMP ("yyyy-MM-dd hh:mm:ss") AND Qt ISO strings
+    // ("yyyy-MM-ddThh:mm:ss.zzzZ"). Raw string comparison breaks across the
+    // formats ('T' > ' ' makes every ISO row look newer than any epoch), so
+    // normalize both sides with SQLite's datetime() before comparing/sorting.
     const QString sinceText =
             since.toUTC().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
     const CrateId reviewedId = reviewedCrateId(false);
     QString sql = QStringLiteral(
             "SELECT id FROM library "
-            "WHERE datetime_added >= :since AND mixxx_deleted = 0");
+            "WHERE datetime(datetime_added) >= datetime(:since) "
+            "AND mixxx_deleted = 0");
     if (reviewedId.isValid()) {
         sql += QStringLiteral(" AND id NOT IN (%1)")
                        .arg(CrateStorage::formatSubselectQueryForCrateTrackIds(
                                reviewedId));
     }
-    sql += QStringLiteral(" ORDER BY datetime_added DESC, id DESC");
+    sql += QStringLiteral(" ORDER BY datetime(datetime_added) DESC, id DESC");
 
     QSqlQuery query(m_pCollection->database());
     query.prepare(sql);

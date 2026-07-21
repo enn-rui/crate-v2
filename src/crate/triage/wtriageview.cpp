@@ -53,7 +53,7 @@ WTriageView::WTriageView(WLibrary* pParent,
     connect(m_pKeep, &QPushButton::clicked,
             this, &WTriageView::markSelectedReviewed);
     connect(m_pTable->selectionModel(), &QItemSelectionModel::selectionChanged,
-            this, [this] { m_pKeep->setEnabled(!m_pTable->getSelectedTrackIds().isEmpty()); });
+            this, &WTriageView::updateKeepButton);
     connect(m_pModel, &QAbstractItemModel::modelReset,
             this, &WTriageView::updateEmptyState);
     if (pLibrary) {
@@ -110,7 +110,21 @@ void WTriageView::updateEmptyState() {
     const bool empty = m_pModel->rowCount() == 0;
     m_pEmpty->setVisible(empty);
     m_pTable->setVisible(!empty);
-    m_pKeep->setEnabled(!empty && !m_pTable->getSelectedTrackIds().isEmpty());
+    updateKeepButton();
+}
+
+void WTriageView::updateKeepButton() {
+    // The button acts on the whole selection; say so, with the live count, so
+    // multi-select KEEP is discoverable ("KEEP 12 SELECTED" beats a mystery).
+    const int count = m_pModel->rowCount() == 0
+            ? 0
+            : m_pTable->getSelectedTrackIds().size();
+    m_pKeep->setEnabled(count > 0);
+    if (count > 1) {
+        m_pKeep->setText(tr("KEEP %1 SELECTED").arg(count));
+    } else {
+        m_pKeep->setText(tr("KEEP (MARK REVIEWED)"));
+    }
 }
 
 } // namespace crate
