@@ -16,13 +16,13 @@
                 BROWSER Section START
             -->
             <control>
-                <description>BROWSE - rotate - Scroll tracklist/tree view</description>
+                <description>BROWSE - rotate - Navigate the active Crate MAP/TABLE knob mode</description>
                 <group>[Library]</group>
-                <key>MoveVertical</key>
+                <key>PioneerDDJFLX4Crate.crateBrowseRotated</key>
                 <status>0xB6</status>
                 <midino>0x40</midino>
                 <options>
-                    <SelectKnob/>
+                    <Script-Binding/>
                 </options>
             </control>
             <control>

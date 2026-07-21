@@ -66,11 +66,6 @@ class CrateGalaxyUiTest : public ::testing::Test {
         m_pConfig = UserSettingsPointer(
                 new UserSettings(m_tmp.filePath(QStringLiteral("test.cfg"))));
         m_pConfig->setValue(ConfigKey("[Crate]", "sidecar_dir"), goldenSidecarDir());
-        // The browse knob drives the stock [Library],MoveVertical encoder
-        // (ignoreNops=false, exactly like LibraryControl), so repeated +1 ticks
-        // each emit. Create it BEFORE the galaxy so its ControlProxy binds.
-        m_pMoveVertical = std::make_unique<ControlEncoder>(
-                ConfigKey("[Library]", "MoveVertical"), false);
         m_pControls = std::make_unique<crate::WCrateMapControls>(nullptr, m_pConfig);
         m_pControls->show();
         m_pGalaxy = std::make_unique<crate::WCrateGalaxy>(
@@ -101,7 +96,7 @@ class CrateGalaxyUiTest : public ::testing::Test {
     }
 
     void pokeKnob(double delta) {
-        ControlObject::set(ConfigKey("[Library]", "MoveVertical"), delta);
+        ControlObject::set(ConfigKey("[Crate]", "galaxy_move"), delta);
         QApplication::processEvents();
     }
 
@@ -241,7 +236,6 @@ class CrateGalaxyUiTest : public ::testing::Test {
 
     QTemporaryDir m_tmp;
     UserSettingsPointer m_pConfig;
-    std::unique_ptr<ControlEncoder> m_pMoveVertical;
     std::unique_ptr<crate::WCrateMapControls> m_pControls;
     std::unique_ptr<crate::WCrateGalaxy> m_pGalaxy;
 };
@@ -1223,6 +1217,60 @@ TEST_F(CrateGalaxyUiTest, TableFocusIgnoresKnob) {
     EXPECT_EQ(m_pGalaxy->testCursorNode(), seeded);
 }
 
+TEST_F(CrateGalaxyUiTest, LoadButtonsUseSideRuleWithoutStealing) {
+    ControlObject numDecks(ConfigKey("[App]", "num_decks"));
+    ControlObject deck1Play(ConfigKey("[Channel1]", "play"));
+    ControlObject deck2Play(ConfigKey("[Channel2]", "play"));
+    ControlObject deck3Play(ConfigKey("[Channel3]", "play"));
+    ControlObject deck4Play(ConfigKey("[Channel4]", "play"));
+    ControlPushButton deck1Load(ConfigKey("[Channel1]", "LoadSelectedTrack"));
+    ControlPushButton deck2Load(ConfigKey("[Channel2]", "LoadSelectedTrack"));
+    ControlPushButton deck3Load(ConfigKey("[Channel3]", "LoadSelectedTrack"));
+    ControlPushButton deck4Load(ConfigKey("[Channel4]", "LoadSelectedTrack"));
+    numDecks.set(4.0);
+
+    // TABLE mode loads the table selection: primary side decks first.
+    ControlObject::set(ConfigKey("[Crate]", "load_left"), 1.0);
+    EXPECT_EQ(deck1Load.get(), 1.0);
+    ControlObject::set(ConfigKey("[Crate]", "load_left"), 0.0);
+    deck1Load.set(0.0);
+
+    // A playing primary falls back to the same-side secondary.
+    deck1Play.set(1.0);
+    ControlObject::set(ConfigKey("[Crate]", "load_left"), 1.0);
+    EXPECT_EQ(deck3Load.get(), 1.0);
+    ControlObject::set(ConfigKey("[Crate]", "load_left"), 0.0);
+    deck3Load.set(0.0);
+
+    // Both playing is a strict no-op.
+    deck3Play.set(1.0);
+    ControlObject::set(ConfigKey("[Crate]", "load_left"), 1.0);
+    EXPECT_EQ(deck1Load.get(), 0.0);
+    EXPECT_EQ(deck3Load.get(), 0.0);
+    ControlObject::set(ConfigKey("[Crate]", "load_left"), 0.0);
+
+    // Mirror the fallback on the right side.
+    deck2Play.set(1.0);
+    ControlObject::set(ConfigKey("[Crate]", "load_right"), 1.0);
+    EXPECT_EQ(deck4Load.get(), 1.0);
+    EXPECT_EQ(deck2Load.get(), 0.0);
+    ControlObject::set(ConfigKey("[Crate]", "load_right"), 0.0);
+
+    // MAP mode keeps the same deck rule but sources the cursor track and jumps
+    // the table selection to that exact track.
+    setKnobFocusMap();
+    pokeKnob(1.0);
+    ASSERT_GE(m_pGalaxy->testCursorNode(), 0);
+    deck2Play.set(0.0);
+    deck2Load.set(0.0);
+    const int jumpsBefore = m_pGalaxy->testTableJumpRequests();
+    ControlObject::set(ConfigKey("[Crate]", "load_right"), 1.0);
+    EXPECT_EQ(deck2Load.get(), 1.0);
+    EXPECT_EQ(m_pGalaxy->testTableJumpRequests(), jumpsBefore + 1);
+    EXPECT_EQ(m_pGalaxy->testLastTableJumpRelpath(),
+            m_pGalaxy->testNodeRelpath(m_pGalaxy->testCursorNode()));
+}
+
 TEST_F(CrateGalaxyUiTest, SubsetGhostsOnlyExcludedNodesWithoutMovingOrRebuilding) {
     const int count = m_pGalaxy->testNodeCount();
     ASSERT_GT(count, 4);
@@ -1557,6 +1605,28 @@ TEST(CrateGalaxyPickDeck, NextPrepDeckFillsEmptyDecksFirst) {
     EXPECT_EQ(pick({true, true, true, true}, {true, true, true, true}), 0);
     // Empty / no decks -> sentinel.
     EXPECT_EQ(pick({}, {}), 0);
+}
+
+TEST(CrateGalaxyPickDeck, SideRuleIsNumDecksAwareAndNeverSteals) {
+    using crate::WCrateGalaxy;
+    const auto left = [](std::initializer_list<bool> playing) {
+        return WCrateGalaxy::pickSidePrepDeck(QVector<bool>(playing), true);
+    };
+    const auto right = [](std::initializer_list<bool> playing) {
+        return WCrateGalaxy::pickSidePrepDeck(QVector<bool>(playing), false);
+    };
+
+    EXPECT_EQ(left({false, false, false, false}), 1);
+    EXPECT_EQ(left({true, false, false, false}), 3);
+    EXPECT_EQ(left({true, false, true, false}), 0);
+    EXPECT_EQ(right({false, false, false, false}), 2);
+    EXPECT_EQ(right({false, true, false, false}), 4);
+    EXPECT_EQ(right({false, true, false, true}), 0);
+
+    EXPECT_EQ(left({false, false}), 1);
+    EXPECT_EQ(left({true, false}), 0);
+    EXPECT_EQ(right({false, false}), 2);
+    EXPECT_EQ(right({false, true}), 0);
 }
 
 TEST(CrateGalaxyOrbitSensitivity, ScreenMotionConstantAcrossZoom) {

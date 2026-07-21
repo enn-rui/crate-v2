@@ -1009,6 +1009,10 @@ ControlPickerMenu::ControlPickerMenu(QWidget* pParent)
             tr("Browse knob: map / table"),
             tr("Switch the browse knob between the map and the track table"),
             pCrateMenu);
+    addCrateControl("galaxy_move",
+            tr("Move galaxy cursor"),
+            tr("Move the galaxy cursor backward or forward"),
+            pCrateMenu);
     addCrateControl("galaxy_load",
             tr("Load map cursor to prep deck"),
             tr("Load the selected map track into the next available prep deck"),

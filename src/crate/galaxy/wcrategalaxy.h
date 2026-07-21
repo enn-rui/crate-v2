@@ -24,6 +24,7 @@
 class Library;
 class PlayerManager;
 class ControlObject;
+class ControlEncoder;
 class ControlProxy;
 class ControlPushButton;
 class QContextMenuEvent;
@@ -70,6 +71,7 @@ class WCrateGalaxy : public QGraphicsView {
     // stopped deck anywhere.
     static int pickNextPrepDeck(
             const QVector<bool>& playing, const QVector<bool>& loaded);
+    static int pickSidePrepDeck(const QVector<bool>& playing, bool leftSide);
 
     // Pure, engine-free sensitivity mapping for the 3D orbit (spec wave-5 S4).
     // Returns the orbit angle change in DEGREES for a mouse motion of
@@ -308,6 +310,7 @@ class WCrateGalaxy : public QGraphicsView {
     void syncSelectionToCursor();
     void requestTableJumpToCursor();
     void loadCursorToNextPrepDeck();
+    void loadFromSide(bool leftSide);
     void loadCursorIntoDeck(int deckIndex);
     QVector<bool> deckPlayingStates() const;
     QVector<bool> deckLoadedStates() const;
@@ -427,10 +430,12 @@ class WCrateGalaxy : public QGraphicsView {
     QSet<int> m_walkVisited;    // nodes visited this walk (skip on forward)
     QGraphicsEllipseItem* m_pCursorRing = nullptr;
 
-    // Controls. knob_focus + galaxy_load are owned here (new [Crate] controls);
-    // MoveVertical is a proxy onto the stock [Library] encoder the browse knob
-    // already drives.
+    // Crate-owned controls keep controller routing independent of stock library
+    // internals. galaxy_move is intentionally MIDI-learnable.
     std::unique_ptr<ControlPushButton> m_pGalaxyLoadCO;
+    std::unique_ptr<ControlPushButton> m_pLoadLeftCO;
+    std::unique_ptr<ControlPushButton> m_pLoadRightCO;
+    std::unique_ptr<ControlEncoder> m_pGalaxyMoveCO;
     ControlProxy* m_pLayoutProxy = nullptr;
     ControlProxy* m_pLayoutDegradedProxy = nullptr;
     ControlProxy* m_pColorProxy = nullptr;
@@ -439,7 +444,6 @@ class WCrateGalaxy : public QGraphicsView {
     ControlProxy* m_pTrailProxy = nullptr;
     ControlProxy* m_pKnobFocusProxy = nullptr;
     ControlProxy* m_pReloadProxy = nullptr;
-    ControlProxy* m_pMoveVerticalProxy = nullptr;
 };
 
 } // namespace crate

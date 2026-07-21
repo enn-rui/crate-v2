@@ -772,14 +772,31 @@ PioneerDDJFLX4Crate.crateBrowseShiftPressed = function(
     }
 };
 
+PioneerDDJFLX4Crate.crateBrowseRotated = function(
+        _channel, _control, value, _status, _group) {
+    // FLX4 sends a 7-bit two's-complement relative value (1 / 127 for a
+    // normal detent). Route it at the mapping seam so MAP and TABLE are truly
+    // exclusive; a passive observer on MoveVertical cannot prevent scrolling.
+    const delta = value < 64 ? value : value - 128;
+    const key = engine.getValue("[Crate]", "knob_focus") === 0
+            ? "MoveVertical"
+            : "galaxy_move";
+    const group = key === "MoveVertical" ? "[Library]" : "[Crate]";
+    engine.setValue(group, key, delta);
+};
+
 PioneerDDJFLX4Crate.crateLoadPressed = function(
         _channel, _control, value, _status, group) {
-    engine.setValue(group, "LoadSelectedTrack", value === 0 ? 0 : 1);
-
     const deck = group === "[Channel1]" ? 0 : 1;
     if (!PioneerDDJFLX4Crate.shiftButtonDown[deck]) {
+        engine.setValue("[Crate]", deck === 0 ? "load_left" : "load_right",
+                value === 0 ? 0 : 1);
         return;
     }
+
+    // SHIFT+LOAD stays byte-for-byte equivalent in behavior: the stock deck
+    // load is still fired and the existing Crate action is layered on top.
+    engine.setValue(group, "LoadSelectedTrack", value === 0 ? 0 : 1);
     const crateKey = deck === 0 ? "galaxy_load" : "galaxy_reload";
     engine.setValue("[Crate]", crateKey, value === 0 ? 0 : 1);
 };

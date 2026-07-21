@@ -32,6 +32,7 @@
 #include <utility>
 
 #include "control/controlobject.h"
+#include "control/controlencoder.h"
 #include "control/controlproxy.h"
 #include "control/controlpushbutton.h"
 #include "crate/cull/cullclient.h"
@@ -394,6 +395,27 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
                 }
             });
 
+    m_pLoadLeftCO = std::make_unique<ControlPushButton>(
+            ConfigKey("[Crate]", "load_left"));
+    m_pLoadRightCO = std::make_unique<ControlPushButton>(
+            ConfigKey("[Crate]", "load_right"));
+    connect(m_pLoadLeftCO.get(),
+            &ControlObject::valueChanged,
+            this,
+            [this](double value) {
+                if (value != 0.0) {
+                    loadFromSide(true);
+                }
+            });
+    connect(m_pLoadRightCO.get(),
+            &ControlObject::valueChanged,
+            this,
+            [this](double value) {
+                if (value != 0.0) {
+                    loadFromSide(false);
+                }
+            });
+
     m_pReloadProxy = new ControlProxy(ConfigKey("[Crate]", "galaxy_reload"), this);
     m_pReloadProxy->connectValueChanged(this, [this](double value) {
         if (value != 0.0) {
@@ -401,15 +423,12 @@ WCrateGalaxy::WCrateGalaxy(QWidget* pParent,
         }
     });
 
-    // Browse knob -> [Library],MoveVertical (stock encoder the FLX4 already
-    // drives). When knob focus is MAP we step the galaxy cursor; TABLE leaves
-    // the stock library scroll untouched.
-    m_pMoveVerticalProxy = new ControlProxy(
-            ConfigKey("[Library]", "MoveVertical"), this);
-    if (m_pMoveVerticalProxy->valid()) {
-        m_pMoveVerticalProxy->connectValueChanged(
-                this, &WCrateGalaxy::onKnobMove);
-    }
+    m_pGalaxyMoveCO = std::make_unique<ControlEncoder>(
+            ConfigKey("[Crate]", "galaxy_move"), false);
+    connect(m_pGalaxyMoveCO.get(),
+            &ControlObject::valueChanged,
+            this,
+            &WCrateGalaxy::onKnobMove);
 
 }
 
@@ -2519,9 +2538,8 @@ void WCrateGalaxy::setKnobFocusMap(bool mapFocus) {
 }
 
 void WCrateGalaxy::onKnobMove(double delta) {
-    // Consume the browse encoder only when knob focus is MAP; TABLE leaves the
-    // stock library scroll untouched. Each tick is a relative step; interpret
-    // its sign/magnitude (encoders normally send +/-1 per detent).
+    // The controller mapping gates this control to MAP. Retain the mode check
+    // for MIDI-learned mappings and programmatic callers.
     if (!m_knobFocusMap || m_nodes.isEmpty()) {
         return;
     }
@@ -2702,9 +2720,16 @@ QVector<bool> WCrateGalaxy::deckPlayingStates() const {
     // which play controls exist (works with or without a PlayerManager, so the
     // rule stays unit-testable). Index i (0-based) -> deck i+1.
     QVector<bool> states;
-    const int maxDecks = m_pPlayerManager != nullptr
+    const ConfigKey numDecksKey("[App]", "num_decks");
+    const int configuredDecks = ControlObject::exists(numDecksKey)
+            ? qRound(ControlObject::get(numDecksKey))
+            : 0;
+    const int availableDecks = m_pPlayerManager != nullptr
             ? static_cast<int>(m_pPlayerManager->numberOfDecks())
             : 8;
+    const int maxDecks = configuredDecks > 0
+            ? qMin(configuredDecks, availableDecks)
+            : availableDecks;
     for (int i = 0; i < maxDecks; ++i) {
         const ConfigKey playKey(PlayerManager::groupForDeck(i), "play");
         if (!ControlObject::exists(playKey)) {
@@ -2719,9 +2744,16 @@ QVector<bool> WCrateGalaxy::deckLoadedStates() const {
     // Mirrors deckPlayingStates: [ChannelN],track_loaded is owned by each
     // deck's EngineBuffer.
     QVector<bool> states;
-    const int maxDecks = m_pPlayerManager != nullptr
+    const ConfigKey numDecksKey("[App]", "num_decks");
+    const int configuredDecks = ControlObject::exists(numDecksKey)
+            ? qRound(ControlObject::get(numDecksKey))
+            : 0;
+    const int availableDecks = m_pPlayerManager != nullptr
             ? static_cast<int>(m_pPlayerManager->numberOfDecks())
             : 8;
+    const int maxDecks = configuredDecks > 0
+            ? qMin(configuredDecks, availableDecks)
+            : availableDecks;
     for (int i = 0; i < maxDecks; ++i) {
         const ConfigKey loadedKey(PlayerManager::groupForDeck(i), "track_loaded");
         if (!ControlObject::exists(loadedKey)) {
@@ -2765,6 +2797,21 @@ int WCrateGalaxy::pickNextPrepDeck(
         }
     }
     return 0; // every deck playing: never steal
+}
+
+int WCrateGalaxy::pickSidePrepDeck(const QVector<bool>& playing, bool leftSide) {
+    // Preserve the established never-steal rule, restricted to the physical
+    // side: left = decks 1/3, right = decks 2/4. The primary deck wins whenever
+    // it is idle; the secondary is only a playing-primary fallback.
+    const int primary = leftSide ? 0 : 1;
+    const int secondary = leftSide ? 2 : 3;
+    if (primary < playing.size() && !playing[primary]) {
+        return primary + 1;
+    }
+    if (secondary < playing.size() && !playing[secondary]) {
+        return secondary + 1;
+    }
+    return 0;
 }
 
 int WCrateGalaxy::nextPrepDeck() const {
@@ -2915,6 +2962,28 @@ void WCrateGalaxy::loadCursorToNextPrepDeck() {
     }
     // No PlayerManager (controller-only / widget tests): trigger the stock
     // LoadSelectedTrack on the chosen deck, relying on the selection-sync above.
+    const ConfigKey loadKey(PlayerManager::groupForDeck(deck - 1), "LoadSelectedTrack");
+    if (ControlObject::exists(loadKey)) {
+        ControlObject::set(loadKey, 1.0);
+    }
+}
+
+void WCrateGalaxy::loadFromSide(bool leftSide) {
+    const int deck = pickSidePrepDeck(deckPlayingStates(), leftSide);
+    if (deck < 1) {
+        kLogger.info() << "both decks on requested side playing; not loading";
+        return;
+    }
+    if (m_knobFocusMap) {
+        if (m_cursorNode < 0 || m_cursorNode >= m_nodes.size()) {
+            return;
+        }
+        requestTableJumpToCursor();
+        if (m_pPlayerManager != nullptr) {
+            loadCursorIntoDeck(deck);
+            return;
+        }
+    }
     const ConfigKey loadKey(PlayerManager::groupForDeck(deck - 1), "LoadSelectedTrack");
     if (ControlObject::exists(loadKey)) {
         ControlObject::set(loadKey, 1.0);

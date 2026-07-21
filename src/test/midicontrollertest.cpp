@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QScopedPointer>
 
+#include "control/controlencoder.h"
 #include "control/controlobject.h"
 #include "control/controlpotmeter.h"
 #include "control/controlpushbutton.h"
@@ -135,6 +136,39 @@ TEST_F(MidiControllerTest, CrateFlx4ShiftBrowsePressTogglesKnobFocus) {
     receivedShortMessage(0x96, 0x42, 0x7F); // SHIFT + browse encoder press.
     EXPECT_DOUBLE_EQ(1.0, knobFocus.get());
     EXPECT_DOUBLE_EQ(1.0, moveFocusBackward.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4BrowseRotationRoutesExclusivelyByKnobFocus) {
+    ControlPushButton knobFocus(ConfigKey("[Crate]", "knob_focus"));
+    ControlEncoder tableMove(ConfigKey("[Library]", "MoveVertical"), false);
+    ControlEncoder galaxyMove(ConfigKey("[Crate]", "galaxy_move"), false);
+    loadCrateFlx4Mapping();
+
+    knobFocus.set(0.0);
+    receivedShortMessage(0xB6, 0x40, 0x01);
+    EXPECT_DOUBLE_EQ(1.0, tableMove.get());
+    EXPECT_DOUBLE_EQ(0.0, galaxyMove.get());
+
+    tableMove.set(0.0);
+    knobFocus.set(1.0);
+    receivedShortMessage(0xB6, 0x40, 0x7F);
+    EXPECT_DOUBLE_EQ(0.0, tableMove.get());
+    EXPECT_DOUBLE_EQ(-1.0, galaxyMove.get());
+}
+
+TEST_F(MidiControllerTest, CrateFlx4UnshiftedLoadRoutesByPhysicalSide) {
+    ControlPushButton loadLeft(ConfigKey("[Crate]", "load_left"));
+    ControlPushButton loadRight(ConfigKey("[Crate]", "load_right"));
+    ControlPushButton deck1Load(ConfigKey("[Channel1]", "LoadSelectedTrack"));
+    ControlPushButton deck2Load(ConfigKey("[Channel2]", "LoadSelectedTrack"));
+    loadCrateFlx4Mapping();
+
+    receivedShortMessage(0x96, 0x46, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, loadLeft.get());
+    EXPECT_DOUBLE_EQ(0.0, deck1Load.get());
+    receivedShortMessage(0x96, 0x47, 0x7F);
+    EXPECT_DOUBLE_EQ(1.0, loadRight.get());
+    EXPECT_DOUBLE_EQ(0.0, deck2Load.get());
 }
 
 TEST_F(MidiControllerTest, CrateFlx4ShiftDeck2LoadStrobesGalaxyReload) {
