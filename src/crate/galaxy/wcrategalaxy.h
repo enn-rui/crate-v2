@@ -18,6 +18,7 @@
 
 #include "crate/data/cratesidecars.h"
 #include "crate/intelligence/sonicvectors.h"
+#include "crate/intelligence/suggestions.h"
 #include "preferences/usersettings.h"
 
 class Library;
@@ -99,6 +100,8 @@ class WCrateGalaxy : public QGraphicsView {
     bool testNodeVisible(int index) const;
     bool testNodeGhosted(int index) const;
     bool testNodeHasHalo(int index) const;
+    bool testNodeSuggested(int index) const { return m_suggestionNodes.contains(index); }
+    int testSuggestionHaloCount() const { return m_suggestionDeviceRings.size(); }
     quintptr testDotItemIdentity(int index) const;
     int testProjectedNodeAt(const QPoint& viewportPos) const;
     void testApplySubsetByRelpaths(const QSet<QString>& relpaths);
@@ -255,6 +258,8 @@ class WCrateGalaxy : public QGraphicsView {
     void playingTrackChanged(const TrackPointer& pTrack);
     void appendTrailRelpath(const QString& relpath);
     void rebuildOverlayCache();
+    void scheduleSuggestions();
+    void updateSuggestions();
     QString relpathForLocation(const QString& location) const;
     void bindSubsetModel(QAbstractItemModel* pModel);
     void recomputeSubsetFromModel();
@@ -368,6 +373,9 @@ class WCrateGalaxy : public QGraphicsView {
     QVector<QLineF> m_plexusDeviceLines;
     QVector<QColor> m_plexusDeviceColors;
     QVector<qreal> m_plexusDeviceWidths;
+    QSet<int> m_suggestionNodes;
+    QVector<QRectF> m_suggestionDeviceRings;
+    int m_suggestionGeneration = 0;
     QHash<int, QHash<int, double>> m_deckPlexusScores;
     QHash<int, int> m_deckPlayingNodes;
     QHash<int, bool> m_deckIsPlaying;

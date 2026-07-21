@@ -6,6 +6,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QString>
+#include <QStringList>
 
 namespace crate {
 
@@ -19,6 +20,9 @@ class SonicVectors {
     std::optional<double> cosine(const QString& relA, const QString& relB) const;
     std::optional<double> transition(const QString& relA, const QString& relB) const;
     const Vector* centered(const QString& relpath) const;
+    QStringList relpaths() const {
+        return m_whole.keys();
+    }
     QString lastError() const {
         return m_lastError;
     }

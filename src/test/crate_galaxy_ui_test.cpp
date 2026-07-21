@@ -311,6 +311,23 @@ TEST_F(CrateGalaxyUiTest, IdenticalSubsetDoesNotRebuildLabels) {
     EXPECT_EQ(m_pGalaxy->testLabelRebuildCount(), rebuilds);
 }
 
+TEST_F(CrateGalaxyUiTest, SuggestionHalosExistOnlyForActiveCrateSubset) {
+    ASSERT_GT(m_pGalaxy->testNodeCount(), 2);
+    m_pGalaxy->testApplySubsetByRelpaths(
+            {m_pGalaxy->testNodeRelpath(0), m_pGalaxy->testNodeRelpath(1)});
+    QApplication::processEvents();
+    EXPECT_GT(m_pGalaxy->testSuggestionHaloCount(), 0);
+    for (int i = 0; i < m_pGalaxy->testNodeCount(); ++i) {
+        if (m_pGalaxy->testNodeSuggested(i)) {
+            EXPECT_NE(i, 0);
+            EXPECT_NE(i, 1);
+        }
+    }
+    m_pGalaxy->testClearSubset();
+    QApplication::processEvents();
+    EXPECT_EQ(m_pGalaxy->testSuggestionHaloCount(), 0);
+}
+
 TEST_F(CrateGalaxyUiTest, ChangedSubsetBurstDebouncesToOneLabelRebuild) {
     settleLabelRebuilds();
     const int rebuilds = m_pGalaxy->testLabelRebuildCount();

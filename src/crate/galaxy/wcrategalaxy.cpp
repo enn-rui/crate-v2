@@ -37,11 +37,14 @@
 #include "crate/cull/cullclient.h"
 #include "crate/grab/grabclient.h"
 #include "crate/intelligence/scores.h"
+#include "crate/intelligence/suggestions.h"
 #include "crate/system/systemcrates.h"
 #include "library/dao/trackdao.h"
 #include "library/library.h"
 #include "library/trackcollection.h"
 #include "library/trackcollectionmanager.h"
+#include "library/trackset/crate/cratetablemodel.h"
+#include "library/trackset/crate/crate.h"
 #include "library/trackmodel.h"
 #include "mixer/playerinfo.h"
 #include "mixer/playermanager.h"
@@ -798,6 +801,7 @@ void WCrateGalaxy::applySubset(const QSet<QString>& relpaths, bool active) {
     }
     m_subsetActive = subsetActive;
     m_subsetNodes = subsetNodes;
+    scheduleSuggestions();
     if (m_hoveredNode >= 0 && !nodeInSubset(m_hoveredNode)) {
         setHoveredNode(-1);
     }
@@ -812,6 +816,70 @@ void WCrateGalaxy::applySubset(const QSet<QString>& relpaths, bool active) {
         scheduleLabelCacheRebuild();
         updateCursorVisual();
     }
+}
+
+void WCrateGalaxy::scheduleSuggestions() {
+    const int generation = ++m_suggestionGeneration;
+    if (!m_subsetActive) {
+        m_suggestionNodes.clear();
+        rebuildOverlayCache();
+        return;
+    }
+    // Defer the bounded rank pass until after the crate table has painted. The
+    // vectors matrix is cached by this widget for the session, so crate-open
+    // never rereads or recomputes embeddings.
+    QTimer::singleShot(0, this, [this, generation] {
+        if (generation == m_suggestionGeneration) {
+            updateSuggestions();
+        }
+    });
+}
+
+void WCrateGalaxy::updateSuggestions() {
+    if (!m_subsetActive) {
+        return;
+    }
+    if (!m_vectorsLoadAttempted) {
+        m_vectorsLoadAttempted = true;
+        const QString sidecarDir = m_pConfig->getValue(
+                ConfigKey("[Crate]", "sidecar_dir"), QString());
+        m_sonicVectors.load(QDir(sidecarDir).filePath(
+                QStringLiteral("music_vectors.sqlite")));
+    }
+    QVector<SuggestTrack> members;
+    QVector<SuggestTrack> universe;
+    universe.reserve(m_nodes.size());
+    for (int i = 0; i < m_nodes.size(); ++i) {
+        const auto* vector = m_sonicVectors.centered(m_nodes[i].relpath);
+        if (!vector) {
+            continue;
+        }
+        SuggestTrack value;
+        value.relpath = m_nodes[i].relpath;
+        value.vector = *vector;
+        value.keyCamelot = m_nodes[i].keyCamelot;
+        value.bpm = m_nodes[i].bpm;
+        universe.append(value);
+        if (m_subsetNodes.contains(i)) {
+            members.append(value);
+        }
+    }
+    const QString configured = m_pConfig->getValue(
+            ConfigKey("[Crate]", "suggest_mode"), QStringLiteral("SOUND"));
+    const SuggestMode mode = configured.compare(
+                                     QStringLiteral("MIX"), Qt::CaseInsensitive) == 0
+            ? SuggestMode::Mix
+            : configured.compare(QStringLiteral("GAP"), Qt::CaseInsensitive) == 0
+            ? SuggestMode::Gap
+            : SuggestMode::Sound;
+    m_suggestionNodes.clear();
+    for (const auto& suggestion : Suggestions::rank(members, universe, mode)) {
+        const auto it = m_nodeByRelpath.constFind(suggestion.relpath.toCaseFolded());
+        if (it != m_nodeByRelpath.constEnd()) {
+            m_suggestionNodes.insert(*it);
+        }
+    }
+    rebuildOverlayCache();
 }
 
 bool WCrateGalaxy::nodeInSubset(int index) const {
@@ -1276,6 +1344,28 @@ void WCrateGalaxy::contextMenuEvent(QContextMenuEvent* pEvent) {
     m_lastContextMenuNode = node;
     if (node >= 0) {
         addDeckLoadActions(&menu, node);
+        auto* pCrateModel = qobject_cast<CrateTableModel*>(m_pSubsetModel.data());
+        if (m_suggestionNodes.contains(node) && pCrateModel != nullptr &&
+                pCrateModel->selectedCrate().isValid() && m_pLibrary != nullptr) {
+            Crate selectedCrate;
+            auto* collection = m_pLibrary->trackCollectionManager()->internalCollection();
+            if (collection->crates().readCrateById(
+                        pCrateModel->selectedCrate(), &selectedCrate)) {
+                QAction* pAdd = menu.addAction(
+                        tr("Add to %1").arg(selectedCrate.getName()));
+                connect(pAdd, &QAction::triggered, this, [this, node, pCrateModel] {
+                    const QString location = resolveMusicPath(m_nodes[node].relpath);
+                    const QList<TrackId> ids = m_pLibrary->trackCollectionManager()
+                                                         ->resolveTrackIdsFromLocations({location});
+                    if (!ids.isEmpty()) {
+                        m_pLibrary->trackCollectionManager()->internalCollection()
+                                ->addCrateTracks(pCrateModel->selectedCrate(), {ids.first()});
+                        m_suggestionNodes.remove(node);
+                        rebuildOverlayCache();
+                    }
+                });
+            }
+        }
         QAction* pCull = menu.addAction(tr("Cull to trash"));
         pCull->setEnabled(m_pLibrary != nullptr);
         connect(pCull, &QAction::triggered, this, [this, node] {
@@ -1413,6 +1503,13 @@ void WCrateGalaxy::drawForeground(QPainter* pPainter, const QRectF& rect) {
         pPainter->setPen(QPen(m_plexusDeviceColors[i], m_plexusDeviceWidths[i],
                 Qt::SolidLine, Qt::RoundCap));
         pPainter->drawLine(m_plexusDeviceLines[i]);
+    }
+    QColor suggestionInk(m_palette.ink);
+    suggestionInk.setAlpha(105);
+    pPainter->setPen(QPen(suggestionInk, 1.0, Qt::DashLine, Qt::RoundCap));
+    pPainter->setBrush(Qt::NoBrush);
+    for (const QRectF& ring : std::as_const(m_suggestionDeviceRings)) {
+        pPainter->drawEllipse(ring);
     }
     // Leader geometry is intentionally derived from the live transform. The
     // device-space label offset is cached, but pan/zoom can move its scene
@@ -1683,6 +1780,7 @@ void WCrateGalaxy::rebuildOverlayCache() {
     m_plexusDeviceLines.clear();
     m_plexusDeviceColors.clear();
     m_plexusDeviceWidths.clear();
+    m_suggestionDeviceRings.clear();
     if (m_trailEnabled && m_playTrail.size() > 1) {
         const int segments = m_playTrail.size() - 1;
         m_trailDeviceLines.reserve(segments);
@@ -1713,6 +1811,15 @@ void WCrateGalaxy::rebuildOverlayCache() {
             m_plexusDeviceColors.append(color);
             m_plexusDeviceWidths.append(0.65 + 1.45 * strength);
         }
+    }
+    m_suggestionDeviceRings.reserve(m_suggestionNodes.size());
+    for (int node : std::as_const(m_suggestionNodes)) {
+        if (node < 0 || node >= m_dots.size() || !m_dots[node]->isVisible()) {
+            continue;
+        }
+        const QPointF center = mapFromScene(m_dots[node]->pos());
+        m_suggestionDeviceRings.append(QRectF(center.x() - 6.5,
+                center.y() - 6.5, 13.0, 13.0));
     }
     viewport()->update();
 }
